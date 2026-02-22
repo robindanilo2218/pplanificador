@@ -182,20 +182,7 @@
             </div>
         </div>
 
-        <!-- VISTA LÍDERES (NUEVA) -->
-        <div id="leaders-view" class="view-section" style="padding:20px;">
-            <div class="assign-form">
-                <div style="flex:1; min-width: 120px;">
-                    <label style="display:block; font-size:0.8em; color:#888; margin-bottom:5px;">ID de Tarea</label>
-                    <input type="text" id="assignTaskId" class="input-dark" placeholder="Ej: T-001">
-                </div>
-                <div style="flex:2; min-width: 200px;">
-                    <label style="display:block; font-size:0.8em; color:#888; margin-bottom:5px;">Asignar a Líder / Técnico</label>
-                    <input type="text" id="assignLeaderName" class="input-dark" placeholder="Nombre de la persona..." list="leadersList">
-                    <datalist id="leadersList"></datalist>
-                </div>
-                <div style="display:flex; align-items:flex-end;">
-        <!-- VISTA LÍDERES (MODIFICADA) -->
+        <!-- VISTA LÍDERES -->
         <div id="leaders-view" class="view-section" style="padding:20px;">
             <p style="color:#888; font-size:0.9em; margin-top:0;">Asigna rápidamente tareas sin dueño o revisa la carga de cada líder.</p>
             
@@ -229,12 +216,30 @@
                 </div>
 
                 <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
+                    <h4 style="margin-bottom:8px;">Procesos / Departamentos</h4>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <input type="text" id="newDefaultProcess" class="input-dark" placeholder="Nuevo proceso...">
+                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;" onclick="addDefault('processes', 'newDefaultProcess')">Añadir</button>
+                    </div>
+                    <div id="listDefaultProcesses" style="display:flex; flex-direction:column; gap:5px;"></div>
+                </div>
+
+                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
                     <h4 style="margin-bottom:8px;">Líderes / Técnicos</h4>
                     <div style="display:flex; gap:10px; margin-bottom:10px;">
                         <input type="text" id="newDefaultLeader" class="input-dark" placeholder="Nuevo líder...">
                         <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;" onclick="addDefault('leaders', 'newDefaultLeader')">Añadir</button>
                     </div>
                     <div id="listDefaultLeaders" style="display:flex; flex-direction:column; gap:5px;"></div>
+                </div>
+
+                <!-- BOTONES DE IMPORTACIÓN MASIVA -->
+                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
+                    <h4 style="margin-bottom:8px;">Importación Masiva</h4>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button class="btn btn-save" style="flex:1; min-width:150px;" onclick="openCSVImporter()">📂 Importar CSV</button>
+                        <button class="btn btn-save" style="flex:1; min-width:150px;" onclick="openTextImporter()">📝 Pegar Texto</button>
+                    </div>
                 </div>
 
                 <!-- NUEVO: CONFIGURACIÓN DE TURNOS -->
@@ -319,9 +324,14 @@
 
             <div class="form-row">
                 <label>Subcategoría</label>
-                <!-- Vinculamos la lista de subcategorías -->
                 <input type="text" id="inpSub" class="input-dark" list="subListRef" placeholder="Ej: Twin">
                 <datalist id="subListRef"></datalist>
+            </div>
+
+            <div class="form-row">
+                <label>Proceso/Departamento</label>
+                <input type="text" id="inpProcess" class="input-dark" list="processListRef" placeholder="Ej: ELECTRICO">
+                <datalist id="processListRef"></datalist>
             </div>
 
             <div class="form-row">
@@ -426,6 +436,86 @@
         </div>
     </div>
 
+    <!-- MODAL IMPORTAR CSV -->
+    <div id="modalCSV" class="modal">
+        <div class="modal-content" style="max-width:600px;">
+            <h3>📂 Importar desde CSV</h3>
+            <p style="color:#888; font-size:0.85em;">Importa categorías, técnicos y más desde un archivo CSV.</p>
+
+            <div class="form-row">
+                <label>Paso 1: Nombre del Gerente de Mantenimiento</label>
+                <input type="text" id="csvManagerName" class="input-dark" placeholder="Ej: Jorge Pérez">
+                <p style="font-size:0.75em; color:#888; margin-top:5px;">Solo se importarán filas donde "Encargado" coincida con este nombre.</p>
+            </div>
+
+            <div class="form-row">
+                <label>Paso 2: Seleccionar archivo CSV</label>
+                <input type="file" id="csvFileInput" accept=".csv" class="input-dark" style="padding:8px;" onchange="previewCSV()">
+                <div id="csvPreview" style="margin-top:10px; padding:10px; background:#1a1a1a; border-radius:5px; display:none;">
+                    <p style="margin:0; font-size:0.9em;"><b>📊 Vista previa:</b></p>
+                    <p id="csvStats" style="margin:5px 0; font-size:0.85em; color:#888;"></p>
+                </div>
+            </div>
+
+            <div class="form-row" id="csvTypeSection" style="display:none;">
+                <label>Paso 3: Tipo de Importación</label>
+                <div style="background:#1a1a1a; padding:15px; border-radius:5px; border:1px solid #333;">
+                    <label style="display:block; padding:10px; background:#222; border-radius:5px; margin-bottom:8px; cursor:pointer; border:2px solid transparent;" onclick="selectImportType('A')">
+                        <input type="radio" name="importType" value="A" checked> <b>Opción A: Solo listas maestras</b>
+                        <div style="font-size:0.8em; color:#aaa; margin-left:20px; margin-top:5px;">Importa categorías, subcategorías, procesos y técnicos. No crea tareas.</div>
+                    </label>
+                    <label style="display:block; padding:10px; background:#222; border-radius:5px; margin-bottom:8px; cursor:pointer; border:2px solid transparent;" onclick="selectImportType('B')">
+                        <input type="radio" name="importType" value="B"> <b>Opción B: Historial (tareas completadas)</b>
+                        <div style="font-size:0.8em; color:#aaa; margin-left:20px; margin-top:5px;">Crea tareas con fechas originales del CSV, marcadas como completadas ✅</div>
+                    </label>
+                    <label style="display:block; padding:10px; background:#222; border-radius:5px; cursor:pointer; border:2px solid transparent;" onclick="selectImportType('C')">
+                        <input type="radio" name="importType" value="C"> <b>Opción C: Plantillas (tareas futuras)</b>
+                        <div style="font-size:0.8em; color:#aaa; margin-left:20px; margin-top:5px;">Crea tareas programadas desde HOY en adelante 📅</div>
+                    </label>
+                </div>
+            </div>
+
+            <div id="csvResults" style="display:none; margin-top:15px; padding:15px; background:#1a3320; border:1px solid #00ff0050; border-radius:5px;">
+                <h4 style="margin-top:0; color:#00ff00;">✅ Importación Exitosa</h4>
+                <div id="csvResultsContent" style="font-size:0.9em;"></div>
+            </div>
+
+            <div class="btn-row">
+                <button class="btn btn-cancel" onclick="closeCSVModal()">Cancelar</button>
+                <button class="btn btn-save" id="btnImportCSV" onclick="executeCSVImport()" disabled>Importar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL IMPORTAR TEXTO -->
+    <div id="modalText" class="modal">
+        <div class="modal-content">
+            <h3>📝 Pegar Lista de Texto</h3>
+            
+            <div class="form-row">
+                <label>Tipo de datos</label>
+                <select id="textImportType" class="input-dark">
+                    <option value="categories">Categorías (Máquinas)</option>
+                    <option value="subcategories">Subcategorías (Secciones)</option>
+                    <option value="processes">Procesos/Departamentos</option>
+                    <option value="leaders">Líderes/Técnicos</option>
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label>Pegar texto (una entrada por línea)</label>
+                <textarea id="textImportArea" class="input-dark" rows="10" placeholder="Corrugadora Fosber 1&#10;Corrugadora Fosber 2&#10;Impresora Ward 14&#10;..." oninput="previewTextImport()"></textarea>
+            </div>
+
+            <div id="textPreview" style="margin-top:10px; padding:10px; background:#1a1a1a; border-radius:5px; font-size:0.85em; color:#888;"></div>
+
+            <div class="btn-row">
+                <button class="btn btn-cancel" onclick="closeTextModal()">Cancelar</button>
+                <button class="btn btn-save" onclick="executeTextImport()">Importar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL OPCIONES -->
     <div id="modalOptions" class="modal">
         <div class="modal-content">
@@ -460,8 +550,9 @@
             defaultCategories: JSON.parse(localStorage.getItem('defaultCategories')) || [],
             defaultSubcategories: JSON.parse(localStorage.getItem('defaultSubcategories')) || [],
             defaultLeaders: JSON.parse(localStorage.getItem('defaultLeaders')) || [],
-            // NUEVO: Almacenamiento de turnos
-            shifts: JSON.parse(localStorage.getItem('shifts')) || {0:[], 1:[], 2:[], 3:[], 4:[], 5:[], 6:[]}
+            defaultProcesses: JSON.parse(localStorage.getItem('defaultProcesses')) || [], // NUEVO
+            shifts: JSON.parse(localStorage.getItem('shifts')) || {0:[], 1:[], 2:[], 3:[], 4:[], 5:[], 6:[]},
+            managerName: localStorage.getItem('managerName') || '' // NUEVO: Para filtro CSV
         };
 
         // Migración de datos viejos (assignee string -> assignees array)
@@ -552,6 +643,14 @@
                         div.className = `slot ${isWeekend ? 'weekend-col' : ''}`;
                     }
 
+                    // MODIFICADO: Asignar el evento de clic primero
+                    div.onclick = (e) => {
+                        // Si el clic es directamente en el div (no en una tarjeta), abrir modal
+                        if(e.target === div || e.target.closest('.slot') === div && !e.target.closest('.task-card')) {
+                            openModalNew(dateStr, h);
+                        }
+                    };
+                    
                     // NUEVA LÓGICA: Filtrar para permitir múltiples tareas en la misma hora
                     const slotTasks = state.tasks.filter(t => t.date === dateStr && t.hour === h);
                     
@@ -561,17 +660,12 @@
                             cardWrapper.innerHTML = renderCard(task);
                             const cardEl = cardWrapper.firstElementChild;
                             cardEl.onclick = (e) => {
-                                e.stopPropagation(); // Evita que el clic se pase al fondo del cajón
+                                e.stopPropagation();
                                 openOptions(task);
                             };
                             div.appendChild(cardEl);
                         });
                     }
-                    
-                    // MODIFICADO: Ahora el clic en el fondo permite crear tareas en fines de semana y almuerzos
-                    div.onclick = (e) => {
-                        if(e.target === div) openModalNew(dateStr, h);
-                    };
                     
                     grid.appendChild(div);
                 }
@@ -697,6 +791,7 @@
             
             document.getElementById('inpCat').value = "";
             document.getElementById('inpSub').value = "";
+            document.getElementById('inpProcess').value = "";
             document.getElementById('inpDetail').value = "";
             document.getElementById('inpMaintType').value = "preventivo";
             document.getElementById('inpPriority').value = "medium";
@@ -741,6 +836,7 @@
         function saveTaskRange() {
             const cat = document.getElementById('inpCat').value.trim();
             const sub = document.getElementById('inpSub').value.trim();
+            const process = document.getElementById('inpProcess').value.trim();
             const detail = document.getElementById('inpDetail').value.trim();
             const maintType = document.getElementById('inpMaintType').value;
             const priority = document.getElementById('inpPriority').value;
@@ -776,6 +872,7 @@
                 executedTasks.forEach(t => {
                     t.category = cat;
                     t.subcategory = sub;
+                    t.process = process;
                     t.detail = detail;
                     t.maintenanceType = maintType;
                     t.priority = priority;
@@ -866,6 +963,7 @@
                     hour: slot.hour,
                     category: cat,
                     subcategory: sub,
+                    process: process,
                     detail: detail,
                     maintenanceType: maintType,
                     priority: priority,
@@ -909,6 +1007,7 @@
 
             document.getElementById('inpCat').value = first.category || first.title.split(' ')[0];
             document.getElementById('inpSub').value = first.subcategory || '';
+            document.getElementById('inpProcess').value = first.process || '';
             document.getElementById('inpDetail').value = first.detail || '';
             document.getElementById('inpMaintType').value = first.maintenanceType || 'preventivo';
             document.getElementById('inpPriority').value = first.priority || 'medium';
@@ -1360,7 +1459,9 @@
             localStorage.setItem('defaultCategories', JSON.stringify(state.defaultCategories));
             localStorage.setItem('defaultSubcategories', JSON.stringify(state.defaultSubcategories));
             localStorage.setItem('defaultLeaders', JSON.stringify(state.defaultLeaders));
+            localStorage.setItem('defaultProcesses', JSON.stringify(state.defaultProcesses));
             localStorage.setItem('shifts', JSON.stringify(state.shifts));
+            localStorage.setItem('managerName', state.managerName);
         }
         
         function closeModal() { document.getElementById('modalTask').style.display = 'none'; }
@@ -1433,6 +1534,10 @@
         // --- FUNCIONES DE CONFIGURACIÓN ---
         function renderConfigLists() {
             const renderList = (arr, containerId, type) => {
+                if(!arr || arr.length === 0) {
+                    document.getElementById(containerId).innerHTML = '<span style="color:#888; font-style:italic; padding:10px; display:block;">No hay elementos. Agrega uno arriba.</span>';
+                    return;
+                }
                 const html = arr.map((item, index) => `
                     <div class="cost-row" style="background:#222; padding:8px 10px; border-radius:4px; margin-bottom:5px;">
                         <span style="flex:1;">${item}</span>
@@ -1444,6 +1549,7 @@
             
             renderList(state.defaultCategories, 'listDefaultCats', 'categories');
             renderList(state.defaultSubcategories, 'listDefaultSubs', 'subcategories');
+            renderList(state.defaultProcesses, 'listDefaultProcesses', 'processes');
             renderList(state.defaultLeaders, 'listDefaultLeaders', 'leaders');
 
             // NUEVO: Renderizar lista de turnos
@@ -1489,6 +1595,7 @@
             
             if(type === 'categories' && !state.defaultCategories.includes(val)) state.defaultCategories.push(val);
             if(type === 'subcategories' && !state.defaultSubcategories.includes(val)) state.defaultSubcategories.push(val);
+            if(type === 'processes' && !state.defaultProcesses.includes(val)) state.defaultProcesses.push(val);
             if(type === 'leaders' && !state.defaultLeaders.includes(val)) state.defaultLeaders.push(val);
             
             document.getElementById(inputId).value = ''; // Limpiar input
@@ -1500,11 +1607,261 @@
         function removeDefault(type, index) {
             if(type === 'categories') state.defaultCategories.splice(index, 1);
             if(type === 'subcategories') state.defaultSubcategories.splice(index, 1);
+            if(type === 'processes') state.defaultProcesses.splice(index, 1);
             if(type === 'leaders') state.defaultLeaders.splice(index, 1);
             
             saveLocal();
             renderConfigLists();
             updateDatalists();
+        }
+
+        // --- FUNCIONES DE IMPORTACIÓN CSV ---
+        let csvData = null;
+
+        function openCSVImporter() {
+            document.getElementById('modalCSV').style.display = 'flex';
+            document.getElementById('csvManagerName').value = state.managerName;
+            document.getElementById('csvFileInput').value = '';
+            document.getElementById('csvPreview').style.display = 'none';
+            document.getElementById('csvTypeSection').style.display = 'none';
+            document.getElementById('csvResults').style.display = 'none';
+            document.getElementById('btnImportCSV').disabled = true;
+        }
+
+        function closeCSVModal() {
+            document.getElementById('modalCSV').style.display = 'none';
+            csvData = null;
+        }
+
+        function previewCSV() {
+            const fileInput = document.getElementById('csvFileInput');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                
+                if (lines.length < 2) {
+                    alert('El archivo CSV debe tener al menos un encabezado y una fila de datos.');
+                    return;
+                }
+
+                // Parsear CSV simple (asume delimitador de coma)
+                const rows = lines.map(line => {
+                    const cells = [];
+                    let current = '';
+                    let inQuotes = false;
+                    for (let i = 0; i < line.length; i++) {
+                        const char = line[i];
+                        if (char === '"') {
+                            inQuotes = !inQuotes;
+                        } else if (char === ',' && !inQuotes) {
+                            cells.push(current.trim());
+                            current = '';
+                        } else {
+                            current += char;
+                        }
+                    }
+                    cells.push(current.trim());
+                    return cells;
+                });
+
+                const headers = rows[0].map(h => h.replace(/"/g, '').trim());
+                const data = rows.slice(1).map(row => {
+                    const obj = {};
+                    headers.forEach((h, i) => {
+                        obj[h] = row[i] ? row[i].replace(/"/g, '').trim() : '';
+                    });
+                    return obj;
+                });
+
+                csvData = { headers, data };
+
+                // Filtrar por gerente
+                const managerName = document.getElementById('csvManagerName').value.trim();
+                const encargadoCol = headers.find(h => h.toLowerCase().includes('encargado'));
+                
+                let filteredData = data;
+                if (managerName && encargadoCol) {
+                    filteredData = data.filter(row => row[encargadoCol] === managerName);
+                }
+
+                // Mostrar estadísticas
+                document.getElementById('csvStats').innerHTML = `
+                    📊 <b>Total de filas:</b> ${data.length}<br>
+                    ${managerName ? `✅ <b>Filas del gerente "${managerName}":</b> ${filteredData.length}<br>` : ''}
+                    ${managerName && filteredData.length < data.length ? `❌ <b>Filas descartadas:</b> ${data.length - filteredData.length}` : ''}
+                `;
+                
+                document.getElementById('csvPreview').style.display = 'block';
+                document.getElementById('csvTypeSection').style.display = 'block';
+                document.getElementById('btnImportCSV').disabled = false;
+
+                // Guardar datos filtrados
+                csvData.filteredData = filteredData;
+            };
+            reader.readAsText(file);
+        }
+
+        function selectImportType(type) {
+            document.querySelectorAll('input[name="importType"]').forEach(r => {
+                r.checked = (r.value === type);
+                r.parentElement.style.border = r.checked ? '2px solid var(--accent)' : '2px solid transparent';
+            });
+        }
+
+        function executeCSVImport() {
+            if (!csvData || !csvData.filteredData) return;
+
+            const managerName = document.getElementById('csvManagerName').value.trim();
+            const importType = document.querySelector('input[name="importType"]:checked').value;
+            const data = csvData.filteredData;
+
+            // Guardar nombre del gerente
+            if (managerName) {
+                state.managerName = managerName;
+            }
+
+            // Extraer valores únicos
+            const categories = new Set();
+            const subcategories = new Set();
+            const processes = new Set();
+            const leaders = new Set();
+
+            const maqCol = csvData.headers.find(h => h.toLowerCase().includes('maquina'));
+            const secCol = csvData.headers.find(h => h.toLowerCase().includes('seccion'));
+            const depCol = csvData.headers.find(h => h.toLowerCase().includes('departamento'));
+            const autCol = csvData.headers.find(h => h.toLowerCase().includes('autorizador'));
+
+            data.forEach(row => {
+                if (maqCol && row[maqCol]) categories.add(row[maqCol]);
+                if (secCol && row[secCol]) subcategories.add(row[secCol]);
+                if (depCol && row[depCol]) processes.add(row[depCol]);
+                if (autCol && row[autCol]) leaders.add(row[autCol]);
+            });
+
+            // Fusionar con listas existentes
+            const newCats = [...categories].filter(c => !state.defaultCategories.includes(c));
+            const newSubs = [...subcategories].filter(s => !state.defaultSubcategories.includes(s));
+            const newProcs = [...processes].filter(p => !state.defaultProcesses.includes(p));
+            const newLeaders = [...leaders].filter(l => !state.defaultLeaders.includes(l));
+
+            state.defaultCategories.push(...newCats);
+            state.defaultSubcategories.push(...newSubs);
+            state.defaultProcesses.push(...newProcs);
+            state.defaultLeaders.push(...newLeaders);
+
+            // Mostrar resultados
+            let resultsHTML = `
+                <p><b>📊 Resultados de la importación:</b></p>
+                <ul style="margin:5px 0; padding-left:20px; font-size:0.9em;">
+                    <li>${categories.size} categorías encontradas (${newCats.length} nuevas)</li>
+                    <li>${subcategories.size} subcategorías encontradas (${newSubs.length} nuevas)</li>
+                    <li>${processes.size} procesos encontrados (${newProcs.length} nuevos)</li>
+                    <li>${leaders.size} técnicos encontrados (${newLeaders.length} nuevos)</li>
+                    <li>${data.length} filas procesadas</li>
+                </ul>
+            `;
+
+            // Si es opción B o C, crear tareas (simplificado por ahora)
+            if (importType === 'B' || importType === 'C') {
+                resultsHTML += `<p style="color:#ffb74d;">⚠️ Importación de tareas B/C estará disponible próximamente.</p>`;
+            }
+
+            document.getElementById('csvResultsContent').innerHTML = resultsHTML;
+            document.getElementById('csvResults').style.display = 'block';
+
+            saveLocal();
+            renderConfigLists();
+            updateDatalists();
+        }
+
+        // --- FUNCIONES DE IMPORTACIÓN DE TEXTO ---
+        function openTextImporter() {
+            document.getElementById('modalText').style.display = 'flex';
+            document.getElementById('textImportArea').value = '';
+            document.getElementById('textPreview').innerHTML = '';
+        }
+
+        function closeTextModal() {
+            document.getElementById('modalText').style.display = 'none';
+        }
+
+        function previewTextImport() {
+            const text = document.getElementById('textImportArea').value;
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            const unique = [...new Set(lines)];
+            
+            const preview = document.getElementById('textPreview');
+            if (lines.length === 0) {
+                preview.innerHTML = '';
+                return;
+            }
+
+            preview.innerHTML = `
+                📊 <b>${lines.length}</b> líneas detectadas<br>
+                ✓ <b>${unique.length}</b> elementos únicos<br>
+                ${lines.length !== unique.length ? `<span style="color:#ffb74d;">⚠️ ${lines.length - unique.length} duplicados eliminados</span>` : ''}
+            `;
+        }
+
+        function executeTextImport() {
+            const type = document.getElementById('textImportType').value;
+            const text = document.getElementById('textImportArea').value;
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            const unique = [...new Set(lines)];
+
+            if (unique.length === 0) {
+                return alert('No hay datos para importar.');
+            }
+
+            let targetArray, added = 0;
+            if (type === 'categories') targetArray = state.defaultCategories;
+            else if (type === 'subcategories') targetArray = state.defaultSubcategories;
+            else if (type === 'processes') targetArray = state.defaultProcesses;
+            else if (type === 'leaders') targetArray = state.defaultLeaders;
+
+            unique.forEach(item => {
+                if (!targetArray.includes(item)) {
+                    targetArray.push(item);
+                    added++;
+                }
+            });
+
+            saveLocal();
+            renderConfigLists();
+            updateDatalists();
+            closeTextModal();
+            
+            alert(`✅ Importación exitosa!\n\n${added} elementos nuevos agregados a ${type === 'categories' ? 'Categorías' : type === 'subcategories' ? 'Subcategorías' : type === 'processes' ? 'Procesos' : 'Líderes'}.`);
+        }
+
+        // Actualizar datalist de procesos
+        function updateDatalists() { 
+            const dynCats = state.tasks.map(t => t.category || t.title.split(' ')[0]);
+            const cats = [...new Set([...dynCats, ...state.defaultCategories])].filter(Boolean);
+            const optsCats = cats.map(c => `<option value="${c}">`).join(''); 
+            document.getElementById('catList').innerHTML = optsCats; 
+            document.getElementById('catListRef').innerHTML = optsCats; 
+            
+            const dynSubs = state.tasks.map(t => t.subcategory);
+            const subs = [...new Set([...dynSubs, ...state.defaultSubcategories])].filter(Boolean);
+            const optsSubs = subs.map(c => `<option value="${c}">`).join('');
+            if(document.getElementById('subListRef')) document.getElementById('subListRef').innerHTML = optsSubs;
+
+            const dynProcs = state.tasks.map(t => t.process);
+            const procs = [...new Set([...dynProcs, ...state.defaultProcesses])].filter(Boolean);
+            const optsProcs = procs.map(p => `<option value="${p}">`).join('');
+            if(document.getElementById('processListRef')) document.getElementById('processListRef').innerHTML = optsProcs;
+
+            // Extraer líderes de los arrays assignees
+            const dynLeaders = [];
+            state.tasks.forEach(t => { if(t.assignees) dynLeaders.push(...t.assignees); });
+            const leaders = [...new Set([...dynLeaders, ...state.defaultLeaders])].filter(Boolean);
+            const optsLeaders = leaders.map(l => `<option value="${l}">`).join('');
+            if(document.getElementById('leadersList')) document.getElementById('leadersList').innerHTML = optsLeaders;
         }
 
         function exportCSV() { /* Export logic */ }
