@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Planificador Mantenimiento Pro</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#1e1e1e">
+    <link rel="icon" type="image/png" href="./logo.png">
+
+    <!-- Estilos -->
+    <style>
+        :root { --bg-color: #121212; --card-color: #1e1e1e; --text-color: #e0e0e0; --accent: #00bcd4; --border: #333; --slot-height: 70px; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* HEADER */
+        header { padding: 10px; background: var(--card-color); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; z-index: 100; flex-wrap: wrap; gap: 10px; }
+        .nav-group { display: flex; align-items: center; gap: 8px; }
+        .nav-btn { background: #333; border: 1px solid #444; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .date-display { display: flex; flex-direction: column; align-items: center; min-width: 120px; }
+        .week-title { font-weight: bold; font-size: 0.9em; color: var(--accent); }
+        .month-sub { font-size: 0.75em; color: #888; }
+        .lunch-selector { background: #222; color: #aaa; border: 1px solid #444; padding: 4px; border-radius: 4px; font-size: 0.8em; }
+
+        /* TABS */
+        .tab-bar { background:#181818; padding:5px; display:flex; gap:5px; border-bottom:1px solid var(--border); }
+        .tab-btn { flex:1; border:none; background:transparent; color:#888; padding:8px; cursor:pointer; border-bottom:2px solid transparent; transition:0.2s; }
+        .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#222; }
+
+        /* VIEWS CONTAINER */
+        .view-container { flex: 1; overflow: hidden; position: relative; display:flex; flex-direction:column; }
+        .view-section { display:none; height:100%; overflow:auto; }
+        .view-section.active-view { display:block; }
+
+        /* CALENDAR GRID */
+        .calendar-grid { display: grid; position: relative; }
+        .header-corner { position: sticky; top: 0; left: 0; z-index: 30; background: var(--card-color); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+        .day-header { position: sticky; top: 0; z-index: 20; background: var(--card-color); padding: 5px; text-align: center; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-size: 0.85em; }
+        .day-header.today { border-bottom: 3px solid var(--accent); color: var(--accent); }
+        .time-col { position: sticky; left: 0; z-index: 10; background: var(--card-color); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75em; color: #777; height: var(--slot-height); }
+        
+        /* MODIFICADO: Slots ahora usan flex para permitir múltiples tareas */
+        .slot { height: var(--slot-height); border-right: 1px solid #2a2a2a; border-bottom: 1px solid #2a2a2a; padding: 2px; position: relative; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; }
+        .lunch-row { background: repeating-linear-gradient(45deg, #181818, #181818 10px, #202020 10px, #202020 20px); }
+        .weekend-col { background: rgba(255, 255, 255, 0.02); }
+
+        /* MODIFICADO: Las tarjetas ahora son flexibles para apilarse si hay varias */
+        .task-card { flex: 1; min-height: 42px; width: 100%; background: #2d2d2d; border-left: 4px solid #555; border-radius: 4px; padding: 4px; font-size: 0.8em; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; flex-shrink: 0; z-index: 2; position: relative; }
+        .task-card.running { background: #1a3320; border-left-color: #00ff00 !important; animation: pulse 2s infinite; }
+        .task-card.done { opacity: 0.5; text-decoration: line-through; filter: grayscale(1); }
+        
+        /* TABLE VIEW */
+        .table-controls { padding: 15px; background: var(--card-color); display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+        .filter-input { background: #333; color: white; border: 1px solid #444; padding: 8px; border-radius: 4px; flex: 1; min-width: 150px; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .data-table th { background: #252525; padding: 10px; text-align: left; position: sticky; top: 0; }
+        .data-table td { border-bottom: 1px solid #333; padding: 10px; }
+        .data-table tr:hover { background: #2a2a2a; }
+
+        /* MODALS */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 2000; }
+        .modal-content { background: #252525; padding: 20px; border-radius: 12px; width: 95%; max-width: 450px; border: 1px solid #444; max-height: 90vh; overflow-y: auto; }
+        .form-row { margin-bottom: 12px; }
+        .form-row label { display: block; color: #888; font-size: 0.8em; margin-bottom: 5px; }
+        .input-dark { width: 100%; padding: 10px; background: #151515; border: 1px solid #444; color: white; border-radius: 5px; font-family: inherit; }
+        .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+        .btn { flex: 1; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-save { background: var(--accent); color: black; }
+        .btn-cancel { background: #333; color: white; }
+        .btn-delete { background: #d32f2f; color: white; }
+        .btn-play { background: #388e3c; color: white; }
+
+        /* COST BREAKDOWN STYLES */
+        .cost-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .cost-name { flex: 2; }
+        .cost-val { flex: 1; text-align: right; }
+        .btn-sm { padding: 5px 10px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer; }
+        .btn-add { background: #2e7d32; color: white; width: 100%; margin-top: 5px; }
+        .btn-remove { background: #c62828; color: white; }
+        .total-display { text-align: right; font-size: 1.1em; font-weight: bold; color: #4caf50; margin-top: 10px; border-top: 1px solid #444; padding-top: 5px; }
+
+        /* LEADERS VIEW */
+        .leader-card { background: var(--card-color); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+        .leader-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px; }
+        
+        /* ELIMINADA .assign-form antigua */
+        
+        .task-id-badge { background: #444; color: #fff; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.85em; font-weight: bold; border: 1px solid #555; }
+
+        /* NUEVO: ESTILOS PARA ASIGNACIONES EN EL MODAL */
+        .assign-row { background: #222; padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #444; }
+        .assign-day-chk { margin-right: 2px; }
+
+        /* ESTILOS GRÁFICO PRIORIDADES */
+        .chart-row { display: flex; align-items: center; margin-bottom: 12px; gap: 10px; }
+        .chart-label { width: 60px; font-size: 0.8em; text-align: right; color: #aaa; font-weight: bold; }
+        .chart-bar-bg { flex: 1; background: #222; height: 14px; border-radius: 7px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); }
+        .chart-bar-fill { height: 100%; border-radius: 7px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); width: 0%; }
+        .chart-count { width: 25px; font-size: 0.9em; font-weight: bold; text-align: left; }
+
+        .neon-red { background: #ff003c; box-shadow: 0 0 10px #ff003c; }
+        .neon-yellow { background: #fffb00; box-shadow: 0 0 10px #fffb00; }
+        .neon-blue { background: #00e5ff; box-shadow: 0 0 10px #00e5ff; }
+        .soft-green { background: #81c784; box-shadow: 0 0 8px #81c784; }
+
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.2); } 70% { box-shadow: 0 0 0 4px rgba(0, 255, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0); } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="nav-group">
+            <img src="./logo.png" style="height:30px; display:none;" onerror="this.style.display='none'">
+            <!-- Botón HOY agregado aquí -->
+            <button class="nav-btn" onclick="goToToday()" style="background: var(--accent); color: black; font-weight: bold;">Hoy</button>
+            <button class="nav-btn" onclick="changeDate(-1)">❮</button>
+            <div class="date-display">
+                <span id="weekLabel" class="week-title">Semana --</span>
+                <span id="monthLabel" class="month-sub">...</span>
+            </div>
+            <button class="nav-btn" onclick="changeDate(1)">❯</button>
+        </div>
+        
+        <div class="nav-group">
+            <span style="font-size:0.8em; color:#888;">Vista:</span>
+            <select id="viewSelector" class="lunch-selector" onchange="changeViewMode()">
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+            </select>
+
+            <span style="font-size:0.8em; color:#888; margin-left:5px;">Almuerzo:</span>
+            <select id="lunchSelector" class="lunch-selector" onchange="updateLunchTime()">
+                <option value="12">12-13</option>
+                <option value="13">13-14</option>
+                <option value="14">14-15</option>
+            </select>
+            <button class="nav-btn" id="authBtn" onclick="handleAuth()" style="background:#4285F4; border:none;">G</button>
+        </div>
+    </header>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchView('calendar', this)">📅 Calendario</button>
+        <button class="tab-btn" onclick="switchView('table', this)">📋 Reporte</button>
+        <button class="tab-btn" onclick="switchView('dashboard', this)">📊 Dashboard</button>
+        <button class="tab-btn" onclick="switchView('leaders', this)">👥 Líderes</button>
+        <button class="tab-btn" onclick="switchView('config', this)">⚙️ Config</button>
+    </div>
+
+    <div class="view-container">
+        <!-- VISTA CALENDARIO -->
+        <div id="calendar-view" class="view-section active-view">
+            <div class="calendar-grid" id="grid"></div>
+        </div>
+
+        <!-- VISTA TABLA (NUEVA) -->
+        <div id="table-view" class="view-section">
+            <div class="table-controls">
+                <input type="text" id="filterCat" class="filter-input" list="catList" placeholder="Filtrar Categoría..." oninput="renderTable()">
+                <input type="text" id="filterSub" class="filter-input" placeholder="Filtrar Subcategoría..." oninput="renderTable()">
+                <datalist id="catList"></datalist>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tipo</th>
+                            <th>Inicio</th>
+                            <th>Fin</th>
+                            <th>Categoría</th>
+                            <th>Subcategoría</th>
+                            <th>Líder</th>
+                            <th>Detalle</th>
+                            <th>Costo Total</th>
+                            <th>Tiempo</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VISTA LÍDERES (NUEVA) -->
+        <div id="leaders-view" class="view-section" style="padding:20px;">
+            <div class="assign-form">
+                <div style="flex:1; min-width: 120px;">
+                    <label style="display:block; font-size:0.8em; color:#888; margin-bottom:5px;">ID de Tarea</label>
+                    <input type="text" id="assignTaskId" class="input-dark" placeholder="Ej: T-001">
+                </div>
+                <div style="flex:2; min-width: 200px;">
+                    <label style="display:block; font-size:0.8em; color:#888; margin-bottom:5px;">Asignar a Líder / Técnico</label>
+                    <input type="text" id="assignLeaderName" class="input-dark" placeholder="Nombre de la persona..." list="leadersList">
+                    <datalist id="leadersList"></datalist>
+                </div>
+                <div style="display:flex; align-items:flex-end;">
+        <!-- VISTA LÍDERES (MODIFICADA) -->
+        <div id="leaders-view" class="view-section" style="padding:20px;">
+            <p style="color:#888; font-size:0.9em; margin-top:0;">Asigna rápidamente tareas sin dueño o revisa la carga de cada líder.</p>
+            
+            <div id="leadersContainer">
+                <!-- Se llena con JS (Tareas sin asignar + Tareas por líder) -->
+            </div>
+        </div>
+
+        <!-- VISTA CONFIGURACIÓN (NUEVA) -->
+        <div id="config-view" class="view-section" style="padding:20px;">
+            <div class="stat-box" style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
+                <h3>Configuración de Listas Predeterminadas</h3>
+                <p style="color:#888; font-size:0.85em;">Agrega elementos para que aparezcan como sugerencias al planificar o asignar tareas.</p>
+
+                <div style="margin-top:20px;">
+                    <h4 style="margin-bottom:8px;">Categorías</h4>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <input type="text" id="newDefaultCat" class="input-dark" placeholder="Nueva categoría...">
+                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;" onclick="addDefault('categories', 'newDefaultCat')">Añadir</button>
+                    </div>
+                    <div id="listDefaultCats" style="display:flex; flex-direction:column; gap:5px;"></div>
+                </div>
+
+                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
+                    <h4 style="margin-bottom:8px;">Subcategorías</h4>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <input type="text" id="newDefaultSub" class="input-dark" placeholder="Nueva subcategoría...">
+                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;" onclick="addDefault('subcategories', 'newDefaultSub')">Añadir</button>
+                    </div>
+                    <div id="listDefaultSubs" style="display:flex; flex-direction:column; gap:5px;"></div>
+                </div>
+
+                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
+                    <h4 style="margin-bottom:8px;">Líderes / Técnicos</h4>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <input type="text" id="newDefaultLeader" class="input-dark" placeholder="Nuevo líder...">
+                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;" onclick="addDefault('leaders', 'newDefaultLeader')">Añadir</button>
+                    </div>
+                    <div id="listDefaultLeaders" style="display:flex; flex-direction:column; gap:5px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA DASHBOARD -->
+        <div id="dashboard-view" class="view-section" style="padding:20px;">
+            <div class="stat-box" style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
+                <h3>Resumen Financiero (Semana Visible)</h3>
+                <h1 id="dashCost" style="color:#4caf50; margin:5px 0;">Q0.00</h1>
+                <p style="color:#888; font-size:0.8em;">Calculado proporcionalmente según las horas en pantalla.</p>
+                <div id="dashBreakdown" style="margin-top:10px; padding-top:10px; border-top:1px solid #333; font-size:0.9em;">
+                    <!-- Breakdown JS -->
+                </div>
+            </div>
+
+            <!-- NUEVO: GRÁFICO DE PRIORIDADES -->
+            <div class="stat-box" style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
+                <h3>Tareas Pendientes por Prioridad</h3>
+                <p style="color:#888; font-size:0.8em; margin-top:-10px; margin-bottom:15px;">Incluye tareas 'Por hacer' y 'En progreso'.</p>
+                
+                <div class="chart-row">
+                    <div class="chart-label">Urgente</div>
+                    <div class="chart-bar-bg"><div id="bar-urgent" class="chart-bar-fill neon-red"></div></div>
+                    <div id="count-urgent" class="chart-count">0</div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-label">Alta</div>
+                    <div class="chart-bar-bg"><div id="bar-high" class="chart-bar-fill neon-yellow"></div></div>
+                    <div id="count-high" class="chart-count">0</div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-label">Media</div>
+                    <div class="chart-bar-bg"><div id="bar-medium" class="chart-bar-fill neon-blue"></div></div>
+                    <div id="count-medium" class="chart-count">0</div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-label">Baja</div>
+                    <div class="chart-bar-bg"><div id="bar-low" class="chart-bar-fill soft-green"></div></div>
+                    <div id="count-low" class="chart-count">0</div>
+                </div>
+            </div>
+
+            <button class="btn btn-save" onclick="exportCSV()">📥 Exportar Excel Completo</button>
+        </div>
+    </div>
+
+    <!-- MODAL NUEVA/EDITAR TAREA -->
+    <div id="modalTask" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Planificar Tarea</h3>
+            
+            <div class="form-row">
+                <label>Categoría</label>
+                <input type="text" id="inpCat" class="input-dark" list="catListRef" placeholder="Ej: Corrugadora Fosber 2">
+                <datalist id="catListRef"></datalist>
+            </div>
+
+            <div class="form-row">
+                <label>Subcategoría</label>
+                <!-- Vinculamos la lista de subcategorías -->
+                <input type="text" id="inpSub" class="input-dark" list="subListRef" placeholder="Ej: Twin">
+                <datalist id="subListRef"></datalist>
+            </div>
+
+            <div class="form-row">
+                <label>Detalle</label>
+                <input type="text" id="inpDetail" class="input-dark" placeholder="Ej: Mantenimiento Preventivo">
+            </div>
+
+            <div class="form-row" style="display:flex; gap:10px;">
+                <div style="flex:1">
+                    <label>Tipo</label>
+                    <select id="inpMaintType" class="input-dark">
+                        <option value="preventivo" selected>🛡️ Preventivo</option>
+                        <option value="correctivo">🔧 Correctivo</option>
+                        <option value="proyecto">🏗️ Proyecto</option>
+                    </select>
+                </div>
+                <div style="flex:1">
+                    <label>Prioridad</label>
+                    <select id="inpPriority" class="input-dark">
+                        <option value="urgent">Urgente (Rojo)</option>
+                        <option value="high">Alta (Amarillo)</option>
+                        <option value="medium" selected>Media (Celeste)</option>
+                        <option value="low">Baja (Verde)</option>
+                    </select>
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+
+            <div class="form-row" style="display:flex; gap:10px;">
+                <div style="flex:1"><label>Hora Inicio</label><select id="inpStartHour" class="input-dark"></select></div>
+                <div style="flex:1"><label>Hora Fin</label><select id="inpEndHour" class="input-dark"></select></div>
+            </div>
+
+            <div class="form-row" style="display:flex; gap:10px;">
+                <div style="flex:1"><label>Desde</label><input type="date" id="inpDateStart" class="input-dark"></div>
+                <div style="flex:1"><label>Hasta</label><input type="date" id="inpDateEnd" class="input-dark"></div>
+            </div>
+            
+            <div class="form-row">
+                <label>Días a incluir en el rango base</label>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:0.9em; padding: 5px 0; background: #222; border-radius: 5px; padding: 10px; border: 1px solid #444;">
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-1" checked> Lun</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-2" checked> Mar</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-3" checked> Mié</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-4" checked> Jue</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-5" checked> Vie</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input type="checkbox" id="day-6"> Sáb</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input type="checkbox" id="day-0"> Dom</label>
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+
+            <!-- NUEVO: SECCIÓN DE ASIGNACIÓN DE PERSONAL EN EL MODAL -->
+            <div class="form-row">
+                <label>Asignación de Personal y Días</label>
+                <p style="font-size:0.75em; color:#888; margin-top:-5px;">Agrega a los técnicos y marca qué días trabajarán en esta tarea.</p>
+                <div id="assignList">
+                    <!-- Filas dinámicas aquí -->
+                </div>
+                <button class="btn btn-sm btn-add" style="background:#00bcd4; color:black; font-weight:bold;" onclick="addAssignRow()">+ Agregar Técnico/Líder</button>
+            </div>
+
+            <!-- Sección de Tareas Recurrentes -->
+            <div class="form-row" style="margin-top:20px;">
+                <label style="display:flex; align-items:center; gap:5px; color:#fff; cursor:pointer; background:#1a1a1a; padding:10px; border-radius:5px; border:1px solid #333;">
+                    <input type="checkbox" id="inpRepeatCheck" onchange="toggleRepeatUI()"> 🔁 Repetir esta tarea (Recurrente)
+                </label>
+                <div id="repeatUI" style="display:none; gap:10px; margin-top:5px; background:#222; padding:10px; border-radius:5px; border:1px solid #444;">
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        Cada <input type="number" id="inpRepeatNum" class="input-dark" style="width:60px; padding:5px;" value="1" min="1">
+                        <select id="inpRepeatUnit" class="input-dark" style="width:110px; padding:5px;">
+                            <option value="weeks">Semana(s)</option>
+                            <option value="months">Mes(es)</option>
+                            <option value="years">Año(s)</option>
+                        </select>
+                    </div>
+                    <div style="margin-top:8px;">
+                        Hasta la fecha <input type="date" id="inpRepeatUntil" class="input-dark" style="padding:5px;">
+                    </div>
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+
+            <div class="form-row">
+                <label>Desglose de Costos (Global para todo el rango)</label>
+                <div id="costList">
+                    <!-- Filas dinámicas aquí -->
+                </div>
+                <button class="btn btn-sm btn-add" onclick="addCostRow()">+ Agregar Costo</button>
+                <div class="total-display" id="totalCostDisplay">Q0.00</div>
+            </div>
+
+            <input type="hidden" id="editingGroupId">
+
+            <div class="btn-row">
+                <button class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
+                <button class="btn btn-save" onclick="saveTaskRange()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL OPCIONES -->
+    <div id="modalOptions" class="modal">
+        <div class="modal-content">
+            <h3 id="optTitle">Opciones</h3>
+            <p id="optSub" style="color:#888; font-size:0.9em; margin-bottom:20px;"></p>
+            
+            <div class="btn-row" style="flex-direction:column;">
+                <button class="btn btn-play" onclick="actionStartTimer()">⏱️ Cronómetro (Start/Stop)</button>
+                <button class="btn" style="background:#555; color:white;" onclick="actionEditTask()">✏️ Editar Serie</button>
+                <button class="btn" style="background:#00bcd4; color:black;" onclick="actionDuplicateTask()">📋 Duplicar Serie</button>
+                <button class="btn btn-delete" onclick="actionDeleteTask()">🗑️ Eliminar Serie</button>
+                <button class="btn btn-cancel" onclick="document.getElementById('modalOptions').style.display='none'">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Scripts -->
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+
+    <script>
+        const CLIENT_ID = 'TU_CLIENT_ID';
+        const API_KEY = 'TU_API_KEY';
+        
+        let state = {
+            currentDate: new Date(),
+            viewMode: localStorage.getItem('viewMode') || 'week',
+            lunchHour: parseInt(localStorage.getItem('lunchHour')) || 12,
+            tasks: JSON.parse(localStorage.getItem('tasks')) || [], 
+            activeTaskId: null,
+            timer: null,
+            defaultCategories: JSON.parse(localStorage.getItem('defaultCategories')) || [],
+            defaultSubcategories: JSON.parse(localStorage.getItem('defaultSubcategories')) || [],
+            defaultLeaders: JSON.parse(localStorage.getItem('defaultLeaders')) || []
+        };
+
+        // Migración de datos viejos (assignee string -> assignees array)
+        state.tasks.forEach(t => {
+            if (t.assignee && !t.assignees) t.assignees = [t.assignee];
+            if (!t.assignees) t.assignees = [];
+            delete t.assignee;
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            populateHourSelects();
+            document.getElementById('lunchSelector').value = state.lunchHour;
+            document.getElementById('viewSelector').value = state.viewMode;
+            renderApp();
+            restoreTimer();
+            
+            // Auto-scroll a las 7:00 AM para no ver la medianoche de entrada
+            setTimeout(() => {
+                const startHourEl = document.getElementById('hour-7');
+                if(startHourEl) startHourEl.scrollIntoView({behavior: "smooth", block: "start"});
+            }, 300);
+        });
+
+        // --- RENDERIZADO GLOBAL ---
+        function renderApp() {
+            renderHeader();
+            renderGrid();
+            renderTable(); 
+            updateDashboard();
+            updateDatalists();
+            renderLeaders();
+            renderConfigLists(); // Inicializar listas de configuración
+        }
+
+        // --- CALENDARIO ---
+        function renderGrid() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            
+            let daysCount = 7;
+            let startDate = getStartOfWeek(state.currentDate);
+
+            if (state.viewMode === 'month') {
+                const year = state.currentDate.getFullYear();
+                const month = state.currentDate.getMonth();
+                daysCount = new Date(year, month + 1, 0).getDate();
+                startDate = new Date(year, month, 1);
+            }
+
+            grid.style.gridTemplateColumns = `50px repeat(${daysCount}, minmax(130px, 1fr))`;
+
+            grid.appendChild(createDiv('header-corner', ''));
+            const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            
+            for(let i=0; i<daysCount; i++) {
+                const d = new Date(startDate); d.setDate(d.getDate() + i);
+                const isToday = isSameDay(d, new Date());
+                const dayName = dayNames[d.getDay()];
+                grid.appendChild(createDiv(`day-header ${isToday?'today':''}`, `<div>${dayName}</div><div>${d.getDate()}</div>`));
+            }
+
+            for(let h=0; h<=23; h++) {
+                const timeCol = createDiv('time-col', `${h}:00`);
+                timeCol.id = `hour-${h}`;
+                grid.appendChild(timeCol);
+
+                for(let i=0; i<daysCount; i++) {
+                    const d = new Date(startDate); d.setDate(d.getDate() + i);
+                    const dateStr = formatDate(d);
+                    const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+                    const div = document.createElement('div');
+                    
+                    if (h === state.lunchHour) {
+                        div.className = 'slot lunch-row';
+                        if(i === 3 || (state.viewMode === 'month' && i % 7 === 3)) {
+                            // Cambiado a posición absoluta para no estorbar a las tareas apiladas
+                            const lbl = document.createElement('span');
+                            lbl.style.cssText = "position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:0.7em; color:#555; pointer-events:none; z-index:1;";
+                            lbl.textContent = "ALMUERZO";
+                            div.appendChild(lbl);
+                        }
+                    } else {
+                        div.className = `slot ${isWeekend ? 'weekend-col' : ''}`;
+                    }
+
+                    // NUEVA LÓGICA: Filtrar para permitir múltiples tareas en la misma hora
+                    const slotTasks = state.tasks.filter(t => t.date === dateStr && t.hour === h);
+                    
+                    if (slotTasks.length > 0) {
+                        slotTasks.forEach(task => {
+                            const cardWrapper = document.createElement('div');
+                            cardWrapper.innerHTML = renderCard(task);
+                            const cardEl = cardWrapper.firstElementChild;
+                            cardEl.onclick = (e) => {
+                                e.stopPropagation(); // Evita que el clic se pase al fondo del cajón
+                                openOptions(task);
+                            };
+                            div.appendChild(cardEl);
+                        });
+                    }
+                    
+                    // Clic en el fondo del cajón para crear nueva (solo si no es finde ni almuerzo)
+                    if(!isWeekend && h !== state.lunchHour) {
+                        div.onclick = (e) => {
+                            if(e.target === div) openModalNew(dateStr, h);
+                        };
+                    }
+                    
+                    grid.appendChild(div);
+                }
+            }
+        }
+
+        function renderCard(task) {
+            const cat = task.category || task.title.split(' ')[0];
+            const sub = task.subcategory || '';
+            const color = stringToColor(cat);
+            
+            let typeIcon = '';
+            if(task.maintenanceType === 'preventivo') typeIcon = '🛡️';
+            else if(task.maintenanceType === 'correctivo') typeIcon = '🔧';
+            else if(task.maintenanceType === 'proyecto') typeIcon = '🏗️';
+
+            const assigneesStr = (task.assignees && task.assignees.length > 0) ? task.assignees.join(', ') : '';
+
+            return `
+                <div class="task-card ${task.status}" style="border-left-color:${color}">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div style="font-weight:bold; color:${color}; white-space:nowrap; overflow:hidden; padding-right:5px;">${cat}</div>
+                        <div style="display:flex; gap:4px; align-items:center;">
+                            ${typeIcon ? `<span style="font-size:0.9em;" title="${task.maintenanceType}">${typeIcon}</span>` : ''}
+                            <div class="task-id-badge">${task.taskCode || ''}</div>
+                        </div>
+                    </div>
+                    <div style="color:#aaa;">${sub}</div>
+                    ${assigneesStr ? `<div style="font-size:0.75em; color:#88d8b0; margin-top:2px;">👤 ${assigneesStr}</div>` : ''}
+                    ${task.seconds > 0 ? `<div style="text-align:right; font-family:monospace; font-size:0.9em;">${formatTime(task.seconds)}</div>` : ''}
+                </div>
+            `;
+        }
+
+        // --- GESTIÓN DE PERSONAL (MODAL) ---
+        function addAssignRow(name = '', days = [1,2,3,4,5]) {
+            const container = document.getElementById('assignList');
+            const div = document.createElement('div');
+            div.className = 'assign-row';
+
+            let daysHtml = '';
+            const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            [1,2,3,4,5,6,0].forEach(d => {
+                const checked = days.includes(d) ? 'checked' : '';
+                const color = (d===0 || d===6) ? '#f0ad4e' : '#fff';
+                daysHtml += `<label style="margin-right:8px; font-size:0.8em; color:${color};"><input type="checkbox" value="${d}" class="assign-day-chk" ${checked}> ${dayNames[d]}</label>`;
+            });
+
+            div.innerHTML = `
+                <div style="display:flex; gap:10px; margin-bottom:8px;">
+                    <input type="text" class="input-dark assign-name" list="leadersList" placeholder="Líder o Técnico..." value="${name}" style="flex:1;">
+                    <button class="btn-sm btn-remove" onclick="this.parentElement.parentElement.remove()">X</button>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; padding-left:5px;">
+                    ${daysHtml}
+                </div>
+            `;
+            container.appendChild(div);
+        }
+
+        function getAssignmentsFromUI() {
+            const assignments = [];
+            document.querySelectorAll('.assign-row').forEach(row => {
+                const nameStr = row.querySelector('.assign-name').value.trim();
+                const days = Array.from(row.querySelectorAll('.assign-day-chk:checked')).map(chk => parseInt(chk.value));
+                if (nameStr && days.length > 0) {
+                    // Si el usuario escribe varios separados por coma (ej: "Juan, Pedro")
+                    nameStr.split(',').forEach(n => {
+                        const cleanName = n.trim();
+                        if (cleanName) assignments.push({ name: cleanName, days });
+                    });
+                }
+            });
+            return assignments;
+        }
+
+        // --- GESTIÓN DE COSTOS DINÁMICOS ---
+        function addCostRow(name = '', val = '') {
+            const container = document.getElementById('costList');
+            const div = document.createElement('div');
+            div.className = 'cost-row';
+            div.innerHTML = `
+                <input type="text" class="input-dark cost-name" placeholder="Concepto (ej: Mano de obra)" value="${name}">
+                <input type="number" class="input-dark cost-val" placeholder="0.00" value="${val}" oninput="updateTotalCostDisplay()">
+                <button class="btn-sm btn-remove" onclick="this.parentElement.remove(); updateTotalCostDisplay()">X</button>
+            `;
+            container.appendChild(div);
+            updateTotalCostDisplay();
+        }
+
+        function updateTotalCostDisplay() {
+            let total = 0;
+            document.querySelectorAll('.cost-val').forEach(inp => {
+                total += parseFloat(inp.value) || 0;
+            });
+            document.getElementById('totalCostDisplay').textContent = `Q${total.toFixed(2)}`;
+            return total;
+        }
+
+        function getCostBreakdownFromUI() {
+            const breakdown = [];
+            let total = 0;
+            document.querySelectorAll('.cost-row').forEach(row => {
+                const name = row.querySelector('.cost-name').value.trim();
+                const val = parseFloat(row.querySelector('.cost-val').value) || 0;
+                if(name) {
+                    breakdown.push({ name, value: val });
+                    total += val;
+                }
+            });
+            return { breakdown, total };
+        }
+
+        // --- GESTIÓN DE TAREAS ---
+        function openModalNew(dateStr, hour) {
+            document.getElementById('modalTitle').textContent = "Nueva Planificación";
+            document.getElementById('editingGroupId').value = "";
+            
+            document.getElementById('inpCat').value = "";
+            document.getElementById('inpSub').value = "";
+            document.getElementById('inpDetail').value = "";
+            document.getElementById('inpMaintType').value = "preventivo";
+            document.getElementById('inpPriority').value = "medium";
+
+            // Resetear días
+            [1, 2, 3, 4, 5].forEach(d => document.getElementById(`day-${d}`).checked = true);
+            [0, 6].forEach(d => document.getElementById(`day-${d}`).checked = false);
+            
+            // Resetear Asignaciones
+            document.getElementById('assignList').innerHTML = '';
+            addAssignRow(); // Agrega una fila vacía por defecto
+            
+            // Resetear Recurrencia
+            document.getElementById('inpRepeatCheck').checked = false;
+            document.getElementById('inpRepeatNum').value = 1;
+            document.getElementById('inpRepeatUnit').value = "weeks";
+            document.getElementById('inpRepeatUntil').value = "";
+            toggleRepeatUI();
+            
+            // Limpiar y resetear costos
+            document.getElementById('costList').innerHTML = '';
+            addCostRow('Mano de Obra', '');
+            addCostRow('Repuestos', '');
+            
+            document.getElementById('inpDateStart').value = dateStr;
+            document.getElementById('inpDateEnd').value = dateStr;
+            document.getElementById('inpStartHour').value = hour;
+            document.getElementById('inpEndHour').value = hour + 1;
+
+            document.getElementById('modalTask').style.display = 'flex';
+        }
+
+        function saveTaskRange() {
+            const cat = document.getElementById('inpCat').value.trim();
+            const sub = document.getElementById('inpSub').value.trim();
+            const detail = document.getElementById('inpDetail').value.trim();
+            const maintType = document.getElementById('inpMaintType').value;
+            const priority = document.getElementById('inpPriority').value;
+            
+            const assignments = getAssignmentsFromUI();
+            
+            // Recurrencia
+            const repeatCheck = document.getElementById('inpRepeatCheck').checked;
+            const repeatNum = Math.max(1, parseInt(document.getElementById('inpRepeatNum').value) || 1);
+            const repeatUnit = document.getElementById('inpRepeatUnit').value;
+            const repeatUntil = document.getElementById('inpRepeatUntil').value;
+            const recurrenceData = repeatCheck ? { checked: true, num: repeatNum, unit: repeatUnit, until: repeatUntil } : null;
+
+            const selectedDays = [0, 1, 2, 3, 4, 5, 6].filter(d => document.getElementById(`day-${d}`).checked);
+            if (selectedDays.length === 0) return alert("Debe seleccionar al menos un día de la semana.");
+
+            const { breakdown, total } = getCostBreakdownFromUI();
+
+            const dateStart = new Date(document.getElementById('inpDateStart').value);
+            const dateEnd = new Date(document.getElementById('inpDateEnd').value);
+            const hStart = parseInt(document.getElementById('inpStartHour').value);
+            const hEnd = parseInt(document.getElementById('inpEndHour').value);
+            const editId = document.getElementById('editingGroupId').value;
+
+            if(!cat || hEnd <= hStart || dateEnd < dateStart) return alert("Verifique datos de fechas y horas.");
+
+            // --- LÓGICA DE PRESERVACIÓN HISTÓRICA ---
+            let executedTasks = [];
+            if(editId) {
+                executedTasks = state.tasks.filter(t => t.groupId === editId && (t.seconds > 0 || t.status === 'done' || t.status === 'running'));
+                state.tasks = state.tasks.filter(t => !(t.groupId === editId && t.seconds === 0 && t.status === 'planned'));
+                
+                executedTasks.forEach(t => {
+                    t.category = cat;
+                    t.subcategory = sub;
+                    t.detail = detail;
+                    t.maintenanceType = maintType;
+                    t.priority = priority;
+                    t.title = `${cat} ${sub}`;
+                    t.recurrence = recurrenceData;
+                    t.selectedDays = selectedDays;
+                    t.baseStartDate = document.getElementById('inpDateStart').value;
+                    t.baseEndDate = document.getElementById('inpDateEnd').value;
+                    // No sobreescribimos los assignees de las tareas ejecutadas para preservar la historia de quién la hizo.
+                });
+            }
+
+            const newGroupId = editId || ('GRP_' + Date.now());
+            
+            let currentTaskCode = "";
+            if (editId && executedTasks.length > 0) {
+                currentTaskCode = executedTasks[0].taskCode;
+            } else if (editId) {
+                const existing = state.tasks.find(t => t.groupId === editId);
+                if(existing) currentTaskCode = existing.taskCode;
+            }
+            
+            if(!currentTaskCode) {
+                const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
+                currentTaskCode = `T-${((codes.length > 0 ? Math.max(...codes) : 0) + 1).toString().padStart(3, '0')}`;
+            }
+
+            // --- CÁLCULO DE INTERVALOS RECURRENTES ---
+            let intervals = [];
+            let currS = new Date(dateStart); currS.setHours(0,0,0,0);
+            let currE = new Date(dateEnd); currE.setHours(0,0,0,0);
+            let limitD = repeatCheck && repeatUntil ? new Date(repeatUntil) : new Date(currE);
+            limitD.setHours(23,59,59,999);
+
+            let maxLoops = 500; // Límite de seguridad
+            while(currS <= limitD && maxLoops-- > 0) {
+                intervals.push({ s: new Date(currS), e: new Date(currE) });
+                
+                if(!repeatCheck) break; // Si no repite, solo hace el primero
+                
+                if(repeatUnit === 'weeks') { currS.setDate(currS.getDate() + repeatNum*7); currE.setDate(currE.getDate() + repeatNum*7); }
+                else if(repeatUnit === 'months') { currS.setMonth(currS.getMonth() + repeatNum); currE.setMonth(currE.getMonth() + repeatNum); }
+                else if(repeatUnit === 'years') { currS.setFullYear(currS.getFullYear() + repeatNum); currE.setFullYear(currE.getFullYear() + repeatNum); }
+            }
+
+            // --- GENERACIÓN DE NUEVOS SLOTS ---
+            let potentialSlots = [];
+            intervals.forEach(inv => {
+                let cursor = new Date(inv.s);
+                while(cursor <= inv.e) {
+                    let day = cursor.getDay();
+                    if(selectedDays.includes(day)) {
+                        for(let h = hStart; h < hEnd; h++) {
+                            if(h !== state.lunchHour) potentialSlots.push({ date: formatDate(cursor), hour: h });
+                        }
+                    }
+                    cursor.setDate(cursor.getDate() + 1);
+                }
+            });
+
+            // Evitar duplicar un slot planeado justo donde ya hay uno ejecutado
+            let finalNewSlots = potentialSlots.filter(ps => !executedTasks.some(et => et.date === ps.date && et.hour === ps.hour));
+
+            let totalSlots = executedTasks.length + finalNewSlots.length;
+            if(totalSlots === 0) return alert("El rango y días seleccionados no generan ninguna hora laborable.");
+
+            const costPerSlot = total / totalSlots;
+
+            // Actualizar costos de las tareas ejecutadas (históricas)
+            executedTasks.forEach(t => {
+                t.cost = costPerSlot;
+                t.originalTotal = total;
+                t.breakdown = breakdown;
+            });
+
+            // Crear las tareas planeadas
+            finalNewSlots.forEach(slot => {
+                const slotDateObj = new Date(slot.date + "T00:00:00");
+                const dayOfWeek = slotDateObj.getDay();
+                
+                // Determinar quién trabaja este día según la configuración del modal
+                const slotAssignees = assignments.filter(a => a.days.includes(dayOfWeek)).map(a => a.name);
+
+                state.tasks.push({
+                    id: Date.now() + Math.random(),
+                    groupId: newGroupId,
+                    date: slot.date,
+                    hour: slot.hour,
+                    category: cat,
+                    subcategory: sub,
+                    detail: detail,
+                    maintenanceType: maintType,
+                    priority: priority,
+                    title: `${cat} ${sub}`,
+                    taskCode: currentTaskCode,
+                    assignees: slotAssignees, // Array de técnicos para este día
+                    cost: costPerSlot, 
+                    originalTotal: total, 
+                    breakdown: breakdown, 
+                    selectedDays: selectedDays, 
+                    recurrence: recurrenceData,
+                    baseStartDate: document.getElementById('inpDateStart').value,
+                    baseEndDate: document.getElementById('inpDateEnd').value,
+                    status: 'planned',
+                    seconds: 0
+                });
+            });
+            
+            saveLocal();
+            closeModal();
+            renderApp();
+        }
+
+        function toggleRepeatUI() {
+            const isChecked = document.getElementById('inpRepeatCheck').checked;
+            document.getElementById('repeatUI').style.display = isChecked ? 'block' : 'none';
+        }
+
+        function actionEditTask() {
+            const task = state.tasks.find(t => t.id === state.activeOptionsId);
+            if(!task) return;
+            
+            const group = state.tasks.filter(t => t.groupId === task.groupId);
+            group.sort((a,b) => (a.date + a.hour).localeCompare(b.date + b.hour));
+            const first = group[0];
+
+            document.getElementById('modalOptions').style.display = 'none';
+            document.getElementById('modalTask').style.display = 'flex';
+            document.getElementById('modalTitle').textContent = "Editar Serie";
+            document.getElementById('editingGroupId').value = first.groupId;
+
+            document.getElementById('inpCat').value = first.category || first.title.split(' ')[0];
+            document.getElementById('inpSub').value = first.subcategory || '';
+            document.getElementById('inpDetail').value = first.detail || '';
+            document.getElementById('inpMaintType').value = first.maintenanceType || 'preventivo';
+            document.getElementById('inpPriority').value = first.priority || 'medium';
+
+            // Cargar Asignaciones leyendo los días de cada persona en la serie
+            document.getElementById('assignList').innerHTML = '';
+            const assignmentsMap = {};
+            group.forEach(t => {
+                const [y, m, d] = t.date.split('-');
+                const dayOfWeek = new Date(y, m - 1, d).getDay();
+                (t.assignees || []).forEach(name => {
+                    if (!assignmentsMap[name]) assignmentsMap[name] = new Set();
+                    assignmentsMap[name].add(dayOfWeek);
+                });
+            });
+
+            const names = Object.keys(assignmentsMap);
+            if (names.length > 0) {
+                names.forEach(name => addAssignRow(name, Array.from(assignmentsMap[name])));
+            } else {
+                addAssignRow(); // Fila vacía si no había nadie
+            }
+
+            // Cargar Recurrencia
+            if (first.recurrence) {
+                document.getElementById('inpRepeatCheck').checked = first.recurrence.checked;
+                document.getElementById('inpRepeatNum').value = first.recurrence.num;
+                document.getElementById('inpRepeatUnit').value = first.recurrence.unit;
+                document.getElementById('inpRepeatUntil').value = first.recurrence.until;
+            } else {
+                document.getElementById('inpRepeatCheck').checked = false;
+            }
+            toggleRepeatUI();
+
+            // Cargar días seleccionados
+            if (first.selectedDays) {
+                [0, 1, 2, 3, 4, 5, 6].forEach(d => document.getElementById(`day-${d}`).checked = first.selectedDays.includes(d));
+            }
+
+            // Cargar Costos
+            document.getElementById('costList').innerHTML = '';
+            if (first.breakdown && Array.isArray(first.breakdown)) {
+                first.breakdown.forEach(item => addCostRow(item.name, item.value));
+            } else if (first.originalTotal) { addCostRow('Costo General', first.originalTotal); } 
+            else { addCostRow('Mano de Obra', ''); addCostRow('Repuestos', ''); }
+            updateTotalCostDisplay();
+
+            // Cargar Fechas y Horas Originales Base
+            document.getElementById('inpDateStart').value = first.baseStartDate || first.date;
+            document.getElementById('inpDateEnd').value = first.baseEndDate || group[group.length-1].date;
+            
+            const dayTasks = group.filter(t => t.date === (first.baseStartDate || first.date));
+            if(dayTasks.length > 0) {
+                document.getElementById('inpStartHour').value = Math.min(...dayTasks.map(t=>t.hour));
+                document.getElementById('inpEndHour').value = Math.max(...dayTasks.map(t=>t.hour)) + 1;
+            }
+        }
+
+        function actionDuplicateTask() {
+            actionEditTask(); // Carga todos los datos en el modal
+            
+            document.getElementById('modalTitle').textContent = "Duplicar Serie";
+            document.getElementById('editingGroupId').value = ""; // Al limpiar esto, se crea un nuevo ID y Grupo
+            
+            // Ajustar fechas para que empiecen HOY
+            const today = new Date();
+            const startInput = document.getElementById('inpDateStart');
+            const endInput = document.getElementById('inpDateEnd');
+            
+            const oldStart = new Date(startInput.value);
+            const oldEnd = new Date(endInput.value);
+            const diffTime = Math.abs(oldEnd - oldStart);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            
+            startInput.value = formatDate(today);
+            
+            const newEnd = new Date(today);
+            newEnd.setDate(newEnd.getDate() + diffDays);
+            endInput.value = formatDate(newEnd);
+            
+            // Ajustar la fecha "Hasta" de recurrencia si existe
+            const repeatUntilInput = document.getElementById('inpRepeatUntil');
+            if(repeatUntilInput.value) {
+                const oldUntil = new Date(repeatUntilInput.value);
+                const diffUntilTime = Math.abs(oldUntil - oldStart);
+                const diffUntilDays = Math.ceil(diffUntilTime / (1000 * 60 * 60 * 24));
+                const newUntil = new Date(today);
+                newUntil.setDate(newUntil.getDate() + diffUntilDays);
+                repeatUntilInput.value = formatDate(newUntil);
+            }
+        }
+
+        // --- DASHBOARD & UTILS ---
+        function updateDashboard() { 
+            // Filtrar solo tareas de la semana actual para mostrar costos reales de la semana
+            const s = getStartOfWeek(state.currentDate);
+            const e = new Date(s); e.setDate(e.getDate() + 7);
+            
+            const visibleTasks = state.tasks.filter(t => {
+                const d = new Date(t.date);
+                return d >= s && d < e;
+            });
+
+            const total = visibleTasks.reduce((a,b)=>a+(b.cost||0),0); 
+            document.getElementById('dashCost').textContent = `Q${total.toFixed(2)}`; 
+            
+            // Calcular desglose proporcional visual
+            // Como el cost per slot ya está dividido, podemos intentar reconstruir categorías
+            // Nota: Esto es aproximado si los slots tienen costos parciales.
+            let breakdownStats = {};
+            visibleTasks.forEach(t => {
+                if(t.breakdown) {
+                    // La tarea tiene un desglose global. Su costo de slot es una fracción.
+                    // Calculamos la fracción que representa este slot del total original
+                    // t.cost = costo de este slot. t.originalTotal = costo total.
+                    const ratio = t.cost / (t.originalTotal || 1); // Cuánto pesa este slot
+                    
+                    t.breakdown.forEach(b => {
+                        if(!breakdownStats[b.name]) breakdownStats[b.name] = 0;
+                        // Sumamos la parte proporcional de este concepto para esta hora
+                        if (t.originalTotal > 0) {
+                             breakdownStats[b.name] += (b.value * (t.cost / t.originalTotal));
+                        }
+                    });
+                } else {
+                    if(!breakdownStats['General']) breakdownStats['General'] = 0;
+                    breakdownStats['General'] += t.cost;
+                }
+            });
+
+            let html = '<ul style="padding-left:15px; margin:0;">';
+            for (const [key, val] of Object.entries(breakdownStats)) {
+                html += `<li><b>${key}:</b> Q${val.toFixed(2)}</li>`;
+            }
+            html += '</ul>';
+            document.getElementById('dashBreakdown').innerHTML = html;
+
+            // --- LÓGICA DEL GRÁFICO DE PRIORIDADES ---
+            // Filtrar tareas que no estén terminadas
+            const activeTasks = state.tasks.filter(t => t.status === 'planned' || t.status === 'running');
+            
+            // Agrupar por groupId para contar el proyecto/serie como 1 sola tarea
+            const uniqueTasks = new Map();
+            activeTasks.forEach(t => {
+                if (!uniqueTasks.has(t.groupId)) {
+                    uniqueTasks.set(t.groupId, t);
+                }
+            });
+
+            // Contar prioridades
+            const priorityCounts = { urgent: 0, high: 0, medium: 0, low: 0 };
+            uniqueTasks.forEach(t => {
+                const p = t.priority || 'medium';
+                if(priorityCounts[p] !== undefined) priorityCounts[p]++;
+            });
+
+            // Encontrar el valor máximo para escalar las barras (mínimo 1 para no dividir por 0)
+            const maxCount = Math.max(...Object.values(priorityCounts), 1);
+
+            // Actualizar barras en el DOM
+            ['urgent', 'high', 'medium', 'low'].forEach(p => {
+                const count = priorityCounts[p];
+                const percentage = (count / maxCount) * 100;
+                document.getElementById(`bar-${p}`).style.width = `${percentage}%`;
+                document.getElementById(`count-${p}`).textContent = count;
+            });
+        }
+
+        // --- VISTA TABLA ---
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            const fCat = document.getElementById('filterCat').value.toLowerCase();
+            const fSub = document.getElementById('filterSub').value.toLowerCase();
+            
+            const groupedTasks = new Map();
+            
+            state.tasks.forEach(t => {
+                if (!groupedTasks.has(t.groupId)) {
+                    groupedTasks.set(t.groupId, {
+                        ...t,
+                        slots: [t],
+                        totalCost: t.cost || 0,
+                        totalSeconds: t.seconds || 0,
+                        allAssignees: new Set(t.assignees || [])
+                    });
+                } else {
+                    const group = groupedTasks.get(t.groupId);
+                    group.slots.push(t);
+                    group.totalCost += (t.cost || 0);
+                    group.totalSeconds += (t.seconds || 0);
+                    (t.assignees || []).forEach(a => group.allAssignees.add(a));
+                    if (t.status === 'running') group.status = 'running';
+                }
+            });
+
+            const summaryTasks = Array.from(groupedTasks.values()).map(group => {
+                // Ordenar los bloques cronológicamente
+                group.slots.sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour);
+                
+                const firstSlot = group.slots[0];
+                const lastSlot = group.slots[group.slots.length - 1];
+
+                group.startStr = `${firstSlot.date} ${firstSlot.hour}:00`;
+                group.endStr = `${lastSlot.date} ${lastSlot.hour + 1}:00`;
+                
+                // Llave para ordenar la tabla (por fecha de inicio)
+                group.sortKey = firstSlot.date + firstSlot.hour.toString().padStart(2, '0');
+                
+                // Si TODOS los bloques están terminados, marcar el grupo como terminado
+                if (group.slots.every(s => s.status === 'done')) {
+                    group.status = 'done';
+                }
+                
+                return group;
+            });
+
+            // 3. Ordenar por fecha de inicio (descendente, lo más nuevo arriba)
+            summaryTasks.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+
+            // 4. Aplicar filtros y pintar la tabla
+            summaryTasks.forEach(t => {
+                const cat = (t.category || t.title.split(' ')[0]).toLowerCase();
+                const sub = (t.subcategory || '').toLowerCase();
+                
+                if(fCat && !cat.includes(fCat)) return;
+                if(fSub && !sub.includes(fSub)) return;
+
+                let typeLabel = '-';
+                if(t.maintenanceType) {
+                    typeLabel = (t.maintenanceType === 'preventivo' ? '🛡️ ' : (t.maintenanceType === 'correctivo' ? '🔧 ' : '🏗️ ')) + 
+                                t.maintenanceType.charAt(0).toUpperCase() + t.maintenanceType.slice(1);
+                }
+
+                const tr = document.createElement('tr');
+                const assigneesArr = Array.from(t.allAssignees);
+                const assignStr = assigneesArr.length > 0 ? assigneesArr.join(', ') : '<span style="color:#888; font-style:italic;">Sin asignar</span>';
+
+                tr.innerHTML = `
+                    <td><span class="task-id-badge">${t.taskCode || 'N/A'}</span></td>
+                    <td>${typeLabel}</td>
+                    <td>${t.startStr}</td>
+                    <td>${t.endStr}</td>
+                    <td style="color:${stringToColor(t.category||cat)}; font-weight:bold;">${t.category || cat.toUpperCase()}</td>
+                    <td>${t.subcategory || ''}</td>
+                    <td>${assignStr}</td>
+                    <td>${t.detail || t.title}</td>
+                    <td>Q${t.totalCost.toFixed(2)}</td>
+                    <td style="font-family:monospace;">${formatTime(t.totalSeconds)}</td>
+                    <td>${t.status === 'done' ? '✅' : (t.status === 'running' ? '▶️' : '📅')}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- VISTA LÍDERES ---
+        function renderLeaders() {
+            const container = document.getElementById('leadersContainer');
+            container.innerHTML = '';
+            
+            // Agrupar tareas únicas por groupId
+            const uniqueGroups = new Map();
+            state.tasks.forEach(t => {
+                if (!uniqueGroups.has(t.groupId)) {
+                    uniqueGroups.set(t.groupId, { 
+                        ...t, 
+                        totalSecs: 0, 
+                        allAssignees: new Set(t.assignees || []) 
+                    });
+                } else {
+                    const g = uniqueGroups.get(t.groupId);
+                    g.totalSecs += (t.seconds || 0);
+                    (t.assignees || []).forEach(a => g.allAssignees.add(a));
+                }
+            });
+
+            const unassignedGroups = [];
+            const leadersMap = new Map();
+
+            uniqueGroups.forEach(g => {
+                if (g.allAssignees.size === 0) {
+                    unassignedGroups.push(g);
+                } else {
+                    g.allAssignees.forEach(leader => {
+                        if (!leadersMap.has(leader)) leadersMap.set(leader, []);
+                        leadersMap.get(leader).push(g);
+                    });
+                }
+            });
+
+            // 1. RENDERIZAR BANDEJA DE TAREAS SIN ASIGNAR
+            let html = '';
+            if (unassignedGroups.length > 0) {
+                html += `
+                    <div class="leader-card" style="border: 1px solid #f44336; background: rgba(244, 67, 54, 0.05);">
+                        <h3 style="color:#f44336; margin-top:0; border-bottom:1px solid #f44336; padding-bottom:10px;">⚠️ Tareas Sin Asignación</h3>
+                `;
+
+                unassignedGroups.forEach(g => {
+                    const typeIcon = g.maintenanceType === 'preventivo' ? '🛡️' : (g.maintenanceType === 'correctivo' ? '🔧' : (g.maintenanceType === 'proyecto' ? '🏗️' : ''));
+                    html += `
+                        <div style="background:#1e1e1e; padding:12px; border-radius:6px; margin-bottom:10px; border:1px solid #444;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <div>
+                                    <span style="font-size:1.2em;" title="${g.maintenanceType}">${typeIcon}</span>
+                                    <span class="task-id-badge" style="margin: 0 5px;">${g.taskCode || '-'}</span>
+                                    <b style="color:${stringToColor(g.category)}">${g.category}</b>
+                                </div>
+                                <span style="font-size:0.8em; color:#aaa; background:#333; padding:2px 6px; border-radius:4px;">${g.date}</span>
+                            </div>
+                            <div style="font-size:0.85em; color:#aaa; margin:5px 0 10px 0;">${g.detail || g.subcategory || 'Sin detalles adicionales'}</div>
+                            
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="quickAssign_${g.groupId}" list="leadersList" placeholder="Técnico(s) separados por coma..." class="input-dark" style="padding:8px; flex:1;">
+                                <button class="btn btn-save" style="padding:8px 15px; flex:0 0 auto;" onclick="quickAssign('${g.groupId}')">Asignar</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            }
+
+            // 2. RENDERIZAR TAREAS ASIGNADAS POR LÍDER
+            const sortedLeaders = Array.from(leadersMap.keys()).sort((a, b) => a.localeCompare(b));
+
+            sortedLeaders.forEach(leader => {
+                const tasks = leadersMap.get(leader);
+                html += `
+                    <div class="leader-card">
+                        <div class="leader-header">
+                            <h3 style="margin:0; color:var(--accent);">👤 ${leader}</h3>
+                            <span style="background:#333; padding:4px 10px; border-radius:12px; font-size:0.8em; font-weight:bold;">${tasks.length} proyectos</span>
+                        </div>
+                        <table class="data-table" style="font-size:0.85em; margin-top:10px;">
+                            <thead><tr><th>ID</th><th>Tipo/Prio</th><th>Tarea</th><th>Estado / Tiempo</th></tr></thead>
+                            <tbody>
+                `;
+                
+                tasks.forEach(t => {
+                    const prioColor = t.priority === 'urgent' ? '#ff003c' : (t.priority === 'high' ? '#fffb00' : (t.priority === 'medium' ? '#00e5ff' : '#81c784'));
+                    const typeIcon = t.maintenanceType === 'preventivo' ? '🛡️' : (t.maintenanceType === 'correctivo' ? '🔧' : (t.maintenanceType === 'proyecto' ? '🏗️' : ''));
+                    
+                    html += `
+                        <tr>
+                            <td><span class="task-id-badge">${t.taskCode || '-'}</span></td>
+                            <td style="text-align:center;">
+                                <div style="font-size:1.2em; margin-bottom:4px;" title="${t.maintenanceType || ''}">${typeIcon}</div>
+                                <div style="width:12px; height:12px; border-radius:50%; background:${prioColor}; box-shadow: 0 0 5px ${prioColor}; margin:auto;"></div>
+                            </td>
+                            <td><b>${t.category}</b><br><span style="color:#aaa">${t.detail || t.subcategory}</span></td>
+                            <td>
+                                ${t.status === 'done' ? '✅ Finalizada' : (t.status === 'running' ? '▶️ En Progreso' : '📅 Pendiente')}
+                                ${t.totalSecs > 0 ? `<br><span style="font-family:monospace; color:#888;">⏱️ ${formatTime(t.totalSecs)}</span>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table></div>`;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // NUEVA FUNCIÓN: Asignación rápida desde la bandeja de "Sin asignar"
+        function quickAssign(groupId) {
+            const input = document.getElementById(`quickAssign_${groupId}`);
+            const val = input.value.trim();
+            if (!val) return alert("Escriba al menos un nombre.");
+
+            const names = val.split(',').map(n => n.trim()).filter(Boolean);
+
+            let found = false;
+            state.tasks.forEach(t => {
+                if (t.groupId === groupId) {
+                    // Reemplaza o agrega a todos los bloques de la serie
+                    t.assignees = names;
+                    found = true;
+                }
+            });
+
+            if(found) {
+                saveLocal();
+                renderApp();
+            }
+        }
+
+        // --- HELPERS ---
+        function openOptions(task) {
+            state.activeOptionsId = task.id;
+            document.getElementById('optTitle').textContent = task.category || task.title;
+            document.getElementById('optSub').textContent = `${task.subcategory || ''} - ${task.detail || ''}`;
+            document.getElementById('modalOptions').style.display = 'flex';
+        }
+
+        function actionStartTimer() {
+            const task = state.tasks.find(t => t.id === state.activeOptionsId);
+            document.getElementById('modalOptions').style.display='none';
+            
+            if(task.status === 'running') { 
+                // Detener tarea
+                task.status = 'done'; 
+                stopTimer(); 
+                saveLocal(); 
+                renderApp();
+            } else { 
+                if(state.activeTaskId) stopTimer(); 
+                
+                // --- MAGIA: Mover tarea al día y hora actuales ---
+                const now = new Date();
+                task.date = formatDate(now);
+                task.hour = now.getHours();
+
+                task.status = 'running'; 
+                state.activeTaskId = task.id; 
+                
+                // Forzar la vista a la semana/mes actual para ver la tarea moverse
+                state.currentDate = new Date();
+                
+                startTimer(); 
+                saveLocal(); 
+                renderApp();
+
+                // Scroll automático para centrar la pantalla en la tarea en progreso
+                setTimeout(() => {
+                    const hourEl = document.getElementById(`hour-${task.hour}`);
+                    if(hourEl) hourEl.scrollIntoView({behavior: "smooth", block: "center"});
+                }, 300);
+            }
+        }
+        function actionDeleteTask() {
+            const task = state.tasks.find(t => t.id === state.activeOptionsId);
+            if(confirm("¿Eliminar toda la serie?")) {
+                state.tasks = state.tasks.filter(t => t.groupId !== task.groupId);
+                saveLocal(); renderApp();
+                document.getElementById('modalOptions').style.display='none';
+            }
+        }
+        function startTimer() { if(state.timer) clearInterval(state.timer); state.timer = setInterval(() => { const t = state.tasks.find(x => x.id === state.activeTaskId); if(t) { t.seconds++; renderApp(); saveLocal(); } }, 1000); }
+        function stopTimer() { clearInterval(state.timer); state.activeTaskId = null; }
+        function restoreTimer() { const r = state.tasks.find(t => t.status==='running'); if(r){ state.activeTaskId=r.id; startTimer(); } }
+        function switchView(viewName, btn) { document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active-view')); document.getElementById(viewName + '-view').classList.add('active-view'); document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active')); if(btn) btn.classList.add('active'); }
+        function updateLunchTime() { state.lunchHour = parseInt(document.getElementById('lunchSelector').value); localStorage.setItem('lunchHour', state.lunchHour); renderApp(); }
+        function changeViewMode() { state.viewMode = document.getElementById('viewSelector').value; localStorage.setItem('viewMode', state.viewMode); renderApp(); }
+        
+        // Actualizamos saveLocal para guardar configuraciones
+        function saveLocal() { 
+            localStorage.setItem('tasks', JSON.stringify(state.tasks)); 
+            localStorage.setItem('defaultCategories', JSON.stringify(state.defaultCategories));
+            localStorage.setItem('defaultSubcategories', JSON.stringify(state.defaultSubcategories));
+            localStorage.setItem('defaultLeaders', JSON.stringify(state.defaultLeaders));
+        }
+        
+        function closeModal() { document.getElementById('modalTask').style.display = 'none'; }
+        function populateHourSelects() { let html = ''; for(let i=0; i<=23; i++) html+=`<option value="${i}">${i}:00</option>`; document.getElementById('inpStartHour').innerHTML = html; document.getElementById('inpEndHour').innerHTML = html; }
+        function getStartOfWeek(d) { const date = new Date(d); const day = date.getDay(); const diff = date.getDate() - day + (day === 0 ? -6 : 1); return new Date(date.setDate(diff)); }
+        function formatDate(d) { return d.toISOString().split('T')[0]; }
+        function isSameDay(d1, d2) { return formatDate(d1) === formatDate(d2); }
+        function createDiv(cls, html) { const d=document.createElement('div'); d.className=cls; d.innerHTML=html; return d; }
+        
+        // Nueva función para el botón Hoy
+        function goToToday() {
+            state.currentDate = new Date();
+            renderApp();
+            
+            // Forzar vista de calendario si estaba en otra pestaña
+            switchView('calendar', document.querySelector('.tab-btn'));
+            
+            // Auto-scroll a las 7:00 AM
+            setTimeout(() => {
+                const startHourEl = document.getElementById('hour-7');
+                if(startHourEl) startHourEl.scrollIntoView({behavior: "smooth", block: "start"});
+            }, 300);
+        }
+
+        function changeDate(n) { 
+            if (state.viewMode === 'week') {
+                state.currentDate.setDate(state.currentDate.getDate() + (n*7)); 
+            } else {
+                state.currentDate.setMonth(state.currentDate.getMonth() + n);
+            }
+            renderApp(); 
+        }
+
+        function stringToColor(str) { let hash=0; for(let i=0;i<str.length;i++) hash=str.charCodeAt(i)+((hash<<5)-hash); return `hsl(${hash%360}, 60%, 45%)`; }
+        function formatTime(s) { return new Date(s * 1000).toISOString().substr(11, 8); }
+        function getWeekNumber(d) { d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7)); var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1)); return Math.ceil((((d - yearStart) / 86400000) + 1)/7); }
+        
+        function renderHeader() { 
+            if (state.viewMode === 'week') {
+                const s = getStartOfWeek(state.currentDate); const e = new Date(s); e.setDate(e.getDate()+6); 
+                document.getElementById('weekLabel').textContent = `Semana ${getWeekNumber(s)}`; 
+                document.getElementById('monthLabel').textContent = `${s.getDate()} ${s.toLocaleDateString('es',{month:'short'})} - ${e.getDate()} ${e.toLocaleDateString('es',{month:'short'})}`; 
+            } else {
+                document.getElementById('weekLabel').textContent = state.currentDate.toLocaleDateString('es', {month: 'long', year: 'numeric'}).toUpperCase();
+                document.getElementById('monthLabel').textContent = 'Vista Mensual';
+            }
+        }
+        
+        // Modificado para fusionar tareas actuales con configuraciones por defecto
+        function updateDatalists() { 
+            const dynCats = state.tasks.map(t => t.category || t.title.split(' ')[0]);
+            const cats = [...new Set([...dynCats, ...state.defaultCategories])].filter(Boolean);
+            const optsCats = cats.map(c => `<option value="${c}">`).join(''); 
+            document.getElementById('catList').innerHTML = optsCats; 
+            document.getElementById('catListRef').innerHTML = optsCats; 
+            
+            const dynSubs = state.tasks.map(t => t.subcategory);
+            const subs = [...new Set([...dynSubs, ...state.defaultSubcategories])].filter(Boolean);
+            const optsSubs = subs.map(c => `<option value="${c}">`).join('');
+            if(document.getElementById('subListRef')) document.getElementById('subListRef').innerHTML = optsSubs;
+
+            // Extraer líderes de los arrays assignees
+            const dynLeaders = [];
+            state.tasks.forEach(t => { if(t.assignees) dynLeaders.push(...t.assignees); });
+            const leaders = [...new Set([...dynLeaders, ...state.defaultLeaders])].filter(Boolean);
+            const optsLeaders = leaders.map(l => `<option value="${l}">`).join('');
+            if(document.getElementById('leadersList')) document.getElementById('leadersList').innerHTML = optsLeaders;
+        }
+
+        // --- FUNCIONES DE CONFIGURACIÓN ---
+        function renderConfigLists() {
+            const renderList = (arr, containerId, type) => {
+                const html = arr.map((item, index) => `
+                    <div class="cost-row" style="background:#222; padding:8px 10px; border-radius:4px; margin-bottom:5px;">
+                        <span style="flex:1;">${item}</span>
+                        <button class="btn-sm btn-remove" onclick="removeDefault('${type}', ${index})">X</button>
+                    </div>
+                `).join('');
+                document.getElementById(containerId).innerHTML = html;
+            };
+            
+            renderList(state.defaultCategories, 'listDefaultCats', 'categories');
+            renderList(state.defaultSubcategories, 'listDefaultSubs', 'subcategories');
+            renderList(state.defaultLeaders, 'listDefaultLeaders', 'leaders');
+        }
+
+        function addDefault(type, inputId) {
+            const val = document.getElementById(inputId).value.trim();
+            if(!val) return;
+            
+            if(type === 'categories' && !state.defaultCategories.includes(val)) state.defaultCategories.push(val);
+            if(type === 'subcategories' && !state.defaultSubcategories.includes(val)) state.defaultSubcategories.push(val);
+            if(type === 'leaders' && !state.defaultLeaders.includes(val)) state.defaultLeaders.push(val);
+            
+            document.getElementById(inputId).value = ''; // Limpiar input
+            saveLocal();
+            renderConfigLists();
+            updateDatalists(); // Refrescar los selectores/datalists globalmente
+        }
+
+        function removeDefault(type, index) {
+            if(type === 'categories') state.defaultCategories.splice(index, 1);
+            if(type === 'subcategories') state.defaultSubcategories.splice(index, 1);
+            if(type === 'leaders') state.defaultLeaders.splice(index, 1);
+            
+            saveLocal();
+            renderConfigLists();
+            updateDatalists();
+        }
+
+        function exportCSV() { /* Export logic */ }
+        function handleAuth() { alert("Configurar API Google"); }
+        function gapiLoaded() {} function gisLoaded() {}
+    </script>
+</body>
+</html>
