@@ -141,22 +141,22 @@
                         <th>Código</th>
                         <th>Descripción</th>
                         <th>Cant.</th>
-                        <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Stock Min (Q0)</th>
-                        <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Lím. Inf (Q1)</th>
-                        <th class="q-col" title="Stock Mediano (Q2 Consumo)">Mediano (Q2)</th>
-                        <th class="q-col" title="Stock Límite Superior (Q3 Consumo)">Lím. Sup (Q3)</th>
-                        <th class="q-col" title="Stock Máximo (Q4 Consumo)">Stock Max (Q4)</th>
+                        <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Q0</th>
+                        <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Q1</th>
+                        <th class="q-col" title="Stock Mediano (Q2 Consumo)">Q2</th>
+                        <th class="q-col" title="Stock Límite Superior (Q3 Consumo)">Q3</th>
+                        <th class="q-col" title="Stock Máximo (Q4 Consumo)">Q4</th>
                         <th>Destinos / Máquinas</th>
                         <th>Última Compra</th>
                         <th class="text-center">Estado (Rotación)</th>
                         <th>Veces Usado</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas">Q0 Días</th>
-                        <th class="q-col">Q1 Días</th>
-                        <th class="q-col">Q2 Días (Med)</th>
-                        <th class="q-col">Q3 Días</th>
-                        <th class="q-col">Q4 Días</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q1)">Q1</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mediana)">Q2</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q3)">Q3</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Máximo)">Q4</th>
                         <th class="proj-col sortable-header no-print" id="thSortProyeccion" title="Clic para ordenar cronológicamente">
                             Proyección Sig. Compra <span id="sortIcon">↕️</span>
                         </th>
@@ -439,7 +439,8 @@
 
                     let descKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
-                        return kl.includes('desc') || kl.includes('nomb') || kl.includes('art');
+                        // Se eliminó 'art' de la búsqueda para evitar capturar la columna "Artículo" que tiene el código
+                        return kl.includes('desc') || kl.includes('nomb') || kl.includes('detalle');
                     });
                     let desc = descKey ? row[descKey] : "Sin descripción";
 
