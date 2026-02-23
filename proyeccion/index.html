@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Análisis Estadístico de Inventario y Bodega</title>
+    
+    <!-- Enlaces PWA -->
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg">
+    <meta name="theme-color" content="#2563eb">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -71,46 +77,57 @@
             </button>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3 w-full border p-3 rounded bg-gray-50 hidden mb-6 no-print" id="contenedorFiltros">
-            <div>
-                <label class="font-semibold mr-1 text-xs">Grupo:</label>
-                <select id="filtroGrupo" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-24">
-                    <option value="todos">Todos</option>
-                </select>
+        <div class="w-full border p-4 rounded bg-gray-50 hidden mb-6 no-print shadow-sm" id="contenedorFiltros">
+            
+            <!-- BUSCADOR DE TEXTO -->
+            <div class="w-full mb-4">
+                <label for="busquedaTexto" class="font-semibold text-sm mb-1 block text-gray-700">Buscador General:</label>
+                <input type="text" id="busquedaTexto" placeholder="🔍 Buscar por código, número de parte o descripción..." 
+                       class="w-full border-gray-300 border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition">
             </div>
-            <div>
-                <label class="font-semibold mr-1 text-xs">Máquina:</label>
-                <select id="filtroMaquina" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-28">
-                    <option value="todas">Todas</option>
-                </select>
-            </div>
-            <div>
-                <label class="font-semibold mr-1 text-xs">Stock:</label>
-                <select id="filtroStock" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-24">
-                    <option value="todos">Todos</option>
-                    <option value="cero">Solo = 0</option>
-                    <option value="uno">Solo = 1</option>
-                    <option value="resto">Resto (>1)</option>
-                </select>
-            </div>
-            <div>
-                <label class="font-semibold mr-1 text-xs">Estado:</label>
-                <select id="filtroEstado" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-28">
-                    <option value="todos">Todos</option>
-                    <option value="Activo">Activos</option>
-                    <option value="Moderado">Moderados</option>
-                    <option value="Inactivo">Inactivos</option>
-                    <option value="Sin movimiento">Sin Mov.</option>
-                </select>
-            </div>
-            <div>
-                <label class="font-semibold mr-1 text-xs">Proyección:</label>
-                <select id="filtroProyeccion" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-28">
-                    <option value="todas">Todas</option>
-                    <option value="este_mes">Este mes</option>
-                    <option value="mes_anterior">Mes anterior</option>
-                    <option value="este_anio">Este año</option>
-                </select>
+
+            <!-- FILTROS DESPLEGABLES -->
+            <div class="flex flex-wrap items-center gap-4 w-full">
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Grupo:</label>
+                    <select id="filtroGrupo" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
+                        <option value="todos">Todos</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Máquina:</label>
+                    <select id="filtroMaquina" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todas">Todas</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Stock:</label>
+                    <select id="filtroStock" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
+                        <option value="todos">Todos</option>
+                        <option value="cero">Solo = 0</option>
+                        <option value="uno">Solo = 1</option>
+                        <option value="resto">Resto (>1)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Estado:</label>
+                    <select id="filtroEstado" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todos">Todos</option>
+                        <option value="Activo">Activos</option>
+                        <option value="Moderado">Moderados</option>
+                        <option value="Inactivo">Inactivos</option>
+                        <option value="Sin movimiento">Sin Mov.</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Proyección:</label>
+                    <select id="filtroProyeccion" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todas">Todas</option>
+                        <option value="este_mes">Este mes</option>
+                        <option value="mes_anterior">Mes anterior</option>
+                        <option value="este_anio">Este año</option>
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -144,6 +161,20 @@
     </div>
 
     <script>
+        // Registro del Service Worker para funcionamiento Offline PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // Solo intentar registrar si estamos en un servidor web (http o https)
+                if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+                    navigator.serviceWorker.register('./sw.js')
+                        .then(reg => console.log('PWA Service Worker registrado correctamente.', reg.scope))
+                        .catch(err => console.error('Error al registrar PWA:', err));
+                } else {
+                    console.log('Service Worker omitido: Se requiere un servidor web (http/https) para instalar la PWA. Protocolo actual:', window.location.protocol);
+                }
+            });
+        }
+
         const codeRegex = /^[A-Za-z0-9]-[A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{3}$/;
         const LOCAL_STORAGE_KEY = 'bodegaAnalisisData';
 
@@ -170,7 +201,6 @@
         function formatFecha(timestamp) {
             if (!timestamp) return "N/A";
             const d = new Date(timestamp);
-            // Formatear a la zona horaria local, sumando el offset para evitar desfasajes por horas UTC
             const localDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
             return localDate.toLocaleDateString('es-GT');
         }
@@ -195,6 +225,7 @@
         }
 
         function aplicarFiltros() {
+            const fBusqueda = document.getElementById('busquedaTexto').value.toLowerCase().trim();
             const fStock = document.getElementById('filtroStock').value;
             const fProy = document.getElementById('filtroProyeccion').value;
             const fGrupo = document.getElementById('filtroGrupo').value;
@@ -207,6 +238,8 @@
             const currentMonth = now.getMonth();
 
             filas.forEach(fila => {
+                const codigoTxt = fila.getAttribute('data-codigo');
+                const descTxt = fila.getAttribute('data-desc');
                 const stock = parseFloat(fila.getAttribute('data-stock'));
                 const proyMs = fila.getAttribute('data-proyeccion-ms');
                 const grupo = fila.getAttribute('data-grupo');
@@ -215,7 +248,15 @@
                 
                 let mostrar = true;
                 
-                if (fGrupo !== 'todos' && grupo !== fGrupo) mostrar = false;
+                // 1. Filtro de Texto Libre (Buscador)
+                if (fBusqueda !== "") {
+                    if (!codigoTxt.includes(fBusqueda) && !descTxt.includes(fBusqueda)) {
+                        mostrar = false;
+                    }
+                }
+
+                // 2. Filtros Desplegables
+                if (mostrar && fGrupo !== 'todos' && grupo !== fGrupo) mostrar = false;
                 if (mostrar && fMaquina !== 'todas' && !maquinas.includes(fMaquina.toLowerCase())) mostrar = false;
                 if (mostrar && fEstado !== 'todos' && estado !== fEstado) mostrar = false;
 
@@ -242,10 +283,15 @@
             });
         }
 
+        // Listeners para todos los filtros
         ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado'].forEach(id => {
             document.getElementById(id).addEventListener('change', aplicarFiltros);
         });
+        
+        // Listener para el buscador de texto en tiempo real
+        document.getElementById('busquedaTexto').addEventListener('input', aplicarFiltros);
 
+        // Ordenamiento
         let sortAscendente = true; 
         document.getElementById('thSortProyeccion').addEventListener('click', () => {
             const tbody = document.getElementById('tableBody');
@@ -265,9 +311,8 @@
             document.getElementById('sortIcon').innerText = sortAscendente ? '🔼' : '🔽';
         });
 
-        document.getElementById('btnImprimirPdf').addEventListener('click', () => {
-            window.print();
-        });
+        // Exportación
+        document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
             const tablaOriginal = document.getElementById('resultTable');
@@ -277,7 +322,6 @@
             filasVisibles.forEach(fila => {
                 const rowData = [];
                 const celdas = Array.from(fila.querySelectorAll('th, td')).filter(celda => !celda.classList.contains('hidden'));
-                
                 celdas.forEach(celda => {
                     let texto = celda.innerText.replace('↕️', '').replace('🔼', '').replace('🔽', '').trim();
                     rowData.push(texto);
@@ -293,6 +337,7 @@
             XLSX.writeFile(libro, `Analisis_Bodega_${fecha}.xlsx`);
         });
 
+        // Renderizado Base
         function renderizarTablaYFiltros(datos) {
             const { resultadosTabla, gruposUnicos, maquinasUnicas } = datos;
 
@@ -315,6 +360,9 @@
                 tr.setAttribute("data-grupo", inv.grupo);
                 tr.setAttribute("data-maquinas", maquinasUnicas);
                 tr.setAttribute("data-estado", estado); 
+                // Atributos de búsqueda para texto libre
+                tr.setAttribute("data-codigo", inv.codigo.toLowerCase());
+                tr.setAttribute("data-desc", inv.descripcion.toLowerCase());
                 
                 tr.innerHTML = `
                     <td class="font-bold">${inv.codigo}</td>
@@ -345,6 +393,7 @@
             aplicarFiltros();
         }
 
+        // Procesamiento Principal
         document.getElementById('btnProcesar').addEventListener('click', async () => {
             const fileExcel = document.getElementById('fileExcel').files[0];
             const fileCsv = document.getElementById('fileCsv').files[0];
@@ -360,7 +409,7 @@
                 const setMaquinas = new Set();
                 const todasLasSalidasGlobales = []; 
 
-                // 1. Procesar Excel (Mejora en búsqueda de columna de Cantidad/Stock)
+                // 1. Procesar Excel 
                 const datosInventario = await leerExcel(fileExcel);
                 let inventarioFiltrado = {};
 
@@ -372,20 +421,17 @@
                     let grupoCodigo = partes[0] + '-' + partes[1];
                     setGrupos.add(grupoCodigo);
 
-                    // Búsqueda inteligente de columnas
                     let descKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
                         return kl.includes('desc') || kl.includes('nomb') || kl.includes('art');
                     });
                     let desc = descKey ? row[descKey] : "Sin descripción";
 
-                    // Búsqueda robusta para la Cantidad/Stock/Existencia
                     let cantKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
                         return kl.includes('cant') || kl.includes('exist') || kl.includes('stock') || kl.includes('disp') || kl.includes('saldo');
                     });
                     
-                    // Extraer y parsear la cantidad (quitando posibles comas de miles)
                     let cantRaw = cantKey ? row[cantKey] : 0;
                     let cant = parseFloat(String(cantRaw).replace(/,/g, '').trim());
                     if (isNaN(cant)) cant = 0;
@@ -401,7 +447,6 @@
                         inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra };
                     } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
                         inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
-                        // Si hay duplicados, también actualizar la cantidad al último registro
                         inventarioFiltrado[codigo].cantidad = cant;
                     }
                 });
