@@ -14,9 +14,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-
+    
     <style>
-    table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+        table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
         th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; white-space: nowrap; }
         th { background-color: #f3f4f6; position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .q-col { background-color: #f8fafc; }
@@ -25,7 +25,7 @@
         .sortable-header { cursor: pointer; user-select: none; transition: background-color 0.2s; }
         .sortable-header:hover { background-color: #d1fae5; }
         
-        /* Clases para hacer celdas compactas y con scroll interno */
+        /* Clases para hacer celdas compactas y con scroll interno en PANTALLA */
         .cell-scroll { overflow-x: auto; white-space: nowrap; padding-bottom: 4px; }
         .cell-scroll::-webkit-scrollbar { height: 4px; }
         .cell-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -35,14 +35,40 @@
         .mw-150 { max-width: 150px; }
         .mw-200 { max-width: 200px; }
         
+        /* OPTIMIZACIÓN ABSOLUTA PARA IMPRESIÓN Y PDF */
         @media print {
-            body { background-color: white !important; padding: 0 !important; }
+            @page { size: landscape; margin: 10mm; } /* Fuerza la hoja a horizontal */
+            body { background-color: white !important; padding: 0 !important; font-size: 8pt !important; }
             .no-print { display: none !important; }
-            .max-w-[1400px] { max-width: 100% !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
-            .overflow-x-auto { overflow: visible !important; max-height: none !important; }
-            table { font-size: 0.65rem; width: 100%; page-break-inside: auto; }
-            tr { page-break-inside: avoid; page-break-after: auto; }
-            th, td { padding: 4px; border: 1px solid #cbd5e1; }
+            
+            /* Quitar sombras, márgenes y bordes del contenedor principal */
+            .max-w-[1400px] { max-width: 100% !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; border: none !important; }
+            
+            /* Liberar la tabla para que ocupe todas las páginas necesarias hacia abajo sin scroll */
+            .overflow-auto { overflow: visible !important; max-height: none !important; border: none !important; }
+            
+            /* Forzar tabla a adaptarse al ancho de la hoja y permitir salto de línea */
+            table { font-size: 6pt !important; width: 100% !important; table-layout: auto !important; }
+            th, td { 
+                padding: 3px !important; 
+                border: 1px solid #cbd5e1 !important; 
+                white-space: normal !important; /* Permite que el texto baje a la siguiente línea */
+                word-wrap: break-word !important;
+            }
+            
+            /* Eliminar scroll interno de las celdas y expandir el texto */
+            .cell-scroll { 
+                overflow: visible !important; 
+                white-space: normal !important; 
+                max-width: none !important; 
+                padding-bottom: 0 !important;
+            }
+            
+            /* Repetir encabezados en cada página impresa y evitar cortes de filas a la mitad */
+            thead { display: table-header-group !important; }
+            tr { page-break-inside: avoid !important; }
+            
+            /* Mantener colores de fondo (cuartiles y etiquetas) */
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
     </style>
