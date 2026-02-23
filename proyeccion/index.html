@@ -68,7 +68,13 @@
             </div>
         </div>
         
-        <div id="zonaImportacion" class="mb-6 transition-all duration-300 no-print">
+        <!-- PANTALLA DE CARGA INICIAL -->
+        <div id="pantallaCarga" class="w-full text-center py-12 bg-white rounded-lg shadow-sm border mb-6">
+            <p class="text-blue-600 font-bold text-lg animate-pulse">⏳ Cargando base de datos guardada...</p>
+            <p class="text-gray-500 text-sm mt-2">Por favor espera un momento.</p>
+        </div>
+
+        <div id="zonaImportacion" class="mb-6 transition-all duration-300 no-print hidden">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                 <div class="p-4 border rounded bg-gray-50">
                     <label class="block font-semibold mb-2 text-sm">1. Base de Inventario (RadGridExport.xlsx)</label>
@@ -90,8 +96,14 @@
             <!-- BUSCADOR DE TEXTO -->
             <div class="w-full mb-4">
                 <label for="busquedaTexto" class="font-semibold text-sm mb-1 block text-gray-700">Buscador General:</label>
-                <input type="text" id="busquedaTexto" placeholder="🔍 Buscar por código, número de parte o descripción..." 
-                       class="w-full border-gray-300 border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <div class="flex gap-2">
+                    <input type="text" id="busquedaTexto" placeholder="🔍 Buscar palabras clave (ej. motor 50 hp)..." 
+                           class="w-full border-gray-300 border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition">
+                    <select id="tipoBusqueda" class="border-gray-300 border rounded p-2 text-sm bg-white cursor-pointer w-48 text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" title="Elige si los resultados deben tener TODAS las palabras juntas, o al menos UNA de ellas">
+                        <option value="and">Contiene TODAS (Afinar)</option>
+                        <option value="or">Contiene ALGUNA (O)</option>
+                    </select>
+                </div>
             </div>
 
             <!-- FILTROS DESPLEGABLES -->
@@ -307,6 +319,7 @@
 
         function aplicarFiltros() {
             const fBusqueda = document.getElementById('busquedaTexto').value.toLowerCase().trim();
+            const tipoBusqueda = document.getElementById('tipoBusqueda').value;
             const fStock = document.getElementById('filtroStock').value;
             const fProy = document.getElementById('filtroProyeccion').value;
             const fGrupo = document.getElementById('filtroGrupo').value;
@@ -330,10 +343,19 @@
                 
                 let mostrar = true;
                 
-                // 1. Filtro de Texto Libre (Buscador)
+                // 1. Filtro de Texto Libre Multipalabra (Buscador)
                 if (fBusqueda !== "") {
-                    if (!codigoTxt.includes(fBusqueda) && !descTxt.includes(fBusqueda) && !noParteTxt.includes(fBusqueda)) {
-                        mostrar = false;
+                    const terminos = fBusqueda.split(/\s+/).filter(t => t.length > 0);
+                    const textoFila = `${codigoTxt} ${descTxt} ${noParteTxt}`;
+                    
+                    if (tipoBusqueda === 'and') {
+                        // AND: TODAS las palabras deben estar en algún lugar de la fila (en cualquier orden)
+                        const cumpleTodos = terminos.every(term => textoFila.includes(term));
+                        if (!cumpleTodos) mostrar = false;
+                    } else {
+                        // OR: Con que AL MENOS UNA palabra coincida, se muestra la fila
+                        const cumpleAlguno = terminos.some(term => textoFila.includes(term));
+                        if (!cumpleAlguno) mostrar = false;
                     }
                 }
 
@@ -366,7 +388,7 @@
         }
 
         // Listeners para todos los filtros
-        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado'].forEach(id => {
+        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda'].forEach(id => {
             document.getElementById(id).addEventListener('change', aplicarFiltros);
         });
         
@@ -518,10 +540,10 @@
                     });
                     let desc = descKey ? row[descKey] : "Sin descripción";
 
-                    // Extracción inteligente del Número de Parte
+                    // Extracción inteligente del Número de Parte (Actualizado para incluir "Catálogo")
                     let noParteKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
-                        return kl.includes('parte') || kl === 'pn' || kl === 'part number';
+                        return kl.includes('parte') || kl === 'pn' || kl === 'part number' || kl.includes('catalogo') || kl.includes('catálogo');
                     });
                     let noParte = noParteKey ? row[noParteKey] : "-";
 
@@ -682,9 +704,23 @@
         });
 
         document.addEventListener('DOMContentLoaded', async () => {
-            const datosGuardados = await cargarDatos();
-            if (datosGuardados && datosGuardados.resultadosTabla && datosGuardados.resultadosTabla.length > 0) {
-                renderizarTablaYFiltros(datosGuardados);
+            const pantallaCarga = document.getElementById('pantallaCarga');
+            const zonaImportacion = document.getElementById('zonaImportacion');
+            
+            try {
+                const datosGuardados = await cargarDatos();
+                if (datosGuardados && datosGuardados.resultadosTabla && datosGuardados.resultadosTabla.length > 0) {
+                    renderizarTablaYFiltros(datosGuardados);
+                } else {
+                    // Si no hay datos, mostrar la zona de importación
+                    zonaImportacion.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Error al iniciar la base de datos:", error);
+                zonaImportacion.classList.remove('hidden');
+            } finally {
+                // Ocultar la pantalla de carga una vez que termina de validar
+                if (pantallaCarga) pantallaCarga.classList.add('hidden');
             }
         });
     </script>
