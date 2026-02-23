@@ -11,65 +11,107 @@
     <style>
         table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
         th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
-        th { background-color: #f3f4f6; position: sticky; top: 0; }
+        th { background-color: #f3f4f6; position: sticky; top: 0; z-index: 10; }
         .q-col { background-color: #f8fafc; }
         .proj-col { background-color: #ecfdf5; font-weight: bold; }
         .dest-col { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .badge { padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-align: center; display: inline-block; width: 100px;}
+        .sortable-header { cursor: pointer; user-select: none; transition: background-color 0.2s; }
+        .sortable-header:hover { background-color: #d1fae5; }
+        
+        /* Estilos específicos para generar un PDF limpio al imprimir */
+        @media print {
+            body { background-color: white !important; padding: 0 !important; }
+            .no-print { display: none !important; }
+            .max-w-[1400px] { max-width: 100% !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+            .overflow-x-auto { overflow: visible !important; max-height: none !important; }
+            table { font-size: 0.65rem; width: 100%; page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            th, td { padding: 4px; border: 1px solid #cbd5e1; }
+            /* Forzar al navegador a imprimir los colores de fondo (etiquetas y cuartiles) */
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 p-6">
 
     <div class="max-w-[1400px] mx-auto bg-white p-6 rounded-lg shadow-md">
-        <h1 class="text-2xl font-bold mb-4 text-blue-800">Análisis de Recurrencia e Inventario</h1>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-            <div class="p-4 border rounded bg-gray-50">
-                <label class="block font-semibold mb-2">1. Base de Inventario (RadGridExport.xlsx)</label>
-                <input type="file" id="fileExcel" accept=".xlsx, .xls" class="block w-full text-sm">
-            </div>
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <h1 class="text-2xl font-bold text-blue-800">Análisis de Rotación e Inventario</h1>
             
-            <div class="p-4 border rounded bg-gray-50">
-                <label class="block font-semibold mb-2">2. Salidas de Bodega (salidas_bodega.csv)</label>
-                <input type="file" id="fileCsv" accept=".csv" class="block w-full text-sm">
+            <div id="controlesSesion" class="hidden flex flex-wrap gap-2 no-print">
+                <button id="btnImprimirPdf" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-4 rounded text-sm transition shadow-sm">
+                    🖨️ PDF / Imprimir
+                </button>
+                <button id="btnExportarExcel" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded text-sm transition shadow-sm">
+                    📊 Exportar Excel
+                </button>
+                <div class="w-px bg-gray-300 mx-1"></div> <button id="btnMostrarImportar" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-4 rounded text-sm transition">
+                    🔄 Actualizar Datos
+                </button>
+                <button id="btnBorrarDatos" class="bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-4 rounded text-sm transition border border-red-300">
+                    🗑️ Borrar Todo
+                </button>
             </div>
         </div>
-
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-            <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10">
-                Procesar y Calcular
+        
+        <div id="zonaImportacion" class="mb-6 transition-all duration-300 no-print">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div class="p-4 border rounded bg-gray-50">
+                    <label class="block font-semibold mb-2 text-sm">1. Base de Inventario (RadGridExport.xlsx)</label>
+                    <input type="file" id="fileExcel" accept=".xlsx, .xls" class="block w-full text-sm">
+                </div>
+                
+                <div class="p-4 border rounded bg-gray-50">
+                    <label class="block font-semibold mb-2 text-sm">2. Salidas de Bodega (salidas_bodega.csv)</label>
+                    <input type="file" id="fileCsv" accept=".csv" class="block w-full text-sm">
+                </div>
+            </div>
+            <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
+                Procesar y Guardar
             </button>
+        </div>
 
-            <div class="flex flex-wrap items-center gap-4 w-full md:w-auto border p-3 rounded bg-gray-50 hidden" id="contenedorFiltros">
-                <div>
-                    <label class="font-semibold mr-1 text-sm">Grupo (X-XXX):</label>
-                    <select id="filtroGrupo" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-32">
-                        <option value="todos">Todos</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="font-semibold mr-1 text-sm">Máquina/Destino:</label>
-                    <select id="filtroMaquina" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-36">
-                        <option value="todas">Todas</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="font-semibold mr-1 text-sm">Stock:</label>
-                    <select id="filtroStock" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-28">
-                        <option value="todos">Todos</option>
-                        <option value="cero">Solo = 0</option>
-                        <option value="uno">Solo = 1</option>
-                        <option value="resto">Resto (>1)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="font-semibold mr-1 text-sm">Proyección:</label>
-                    <select id="filtroProyeccion" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-32">
-                        <option value="todas">Todas</option>
-                        <option value="este_mes">Este mes</option>
-                        <option value="mes_anterior">Mes anterior</option>
-                        <option value="este_anio">Este año</option>
-                    </select>
-                </div>
+        <div class="flex flex-wrap items-center gap-3 w-full border p-3 rounded bg-gray-50 hidden mb-6 no-print" id="contenedorFiltros">
+            <div>
+                <label class="font-semibold mr-1 text-xs">Grupo:</label>
+                <select id="filtroGrupo" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-24">
+                    <option value="todos">Todos</option>
+                </select>
+            </div>
+            <div>
+                <label class="font-semibold mr-1 text-xs">Máquina:</label>
+                <select id="filtroMaquina" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-28">
+                    <option value="todas">Todas</option>
+                </select>
+            </div>
+            <div>
+                <label class="font-semibold mr-1 text-xs">Stock:</label>
+                <select id="filtroStock" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-24">
+                    <option value="todos">Todos</option>
+                    <option value="cero">Solo = 0</option>
+                    <option value="uno">Solo = 1</option>
+                    <option value="resto">Resto (>1)</option>
+                </select>
+            </div>
+            <div>
+                <label class="font-semibold mr-1 text-xs">Estado:</label>
+                <select id="filtroEstado" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-28">
+                    <option value="todos">Todos</option>
+                    <option value="Activo">Activos</option>
+                    <option value="Moderado">Moderados</option>
+                    <option value="Inactivo">Inactivos</option>
+                    <option value="Sin movimiento">Sin Mov.</option>
+                </select>
+            </div>
+            <div>
+                <label class="font-semibold mr-1 text-xs">Proyección:</label>
+                <select id="filtroProyeccion" class="border-gray-300 rounded p-1 text-xs bg-white cursor-pointer w-28">
+                    <option value="todas">Todas</option>
+                    <option value="este_mes">Este mes</option>
+                    <option value="mes_anterior">Mes anterior</option>
+                    <option value="este_anio">Este año</option>
+                </select>
             </div>
         </div>
 
@@ -81,11 +123,8 @@
                         <th>Descripción</th>
                         <th>Cant.</th>
                         <th>Destinos / Máquinas</th>
-                        <th class="q-col" title="Cuartiles de fechas de compra">Q0 Compra</th>
-                        <th class="q-col">Q1 Compra</th>
-                        <th class="q-col">Q2 (Mediana)</th>
-                        <th class="q-col">Q3 Compra</th>
-                        <th class="q-col">Q4 Compra</th>
+                        <th>Última Compra</th>
+                        <th class="text-center">Estado (Rotación)</th>
                         <th>Veces Usado</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
@@ -94,7 +133,10 @@
                         <th class="q-col">Q2 Días (Med)</th>
                         <th class="q-col">Q3 Días</th>
                         <th class="q-col">Q4 Días</th>
-                        <th class="proj-col">Proyección Sig. Compra</th>
+                        <th class="proj-col sortable-header no-print" id="thSortProyeccion" title="Clic para ordenar cronológicamente">
+                            Proyección Sig. Compra <span id="sortIcon">↕️</span>
+                        </th>
+                        <th class="proj-col hidden print:table-cell">Proyección Sig. Compra</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -104,17 +146,15 @@
 
     <script>
         const codeRegex = /^[A-Za-z0-9]-[A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{3}$/;
+        const LOCAL_STORAGE_KEY = 'bodegaAnalisisData';
 
+        // --- FUNCIONES MATEMÁTICAS Y DE FORMATO ---
         function calcularCuartil(arr, q) {
             const ordenado = [...arr].sort((a, b) => a - b);
             const pos = (ordenado.length - 1) * q;
             const base = Math.floor(pos);
             const rest = pos - base;
-            if (ordenado[base + 1] !== undefined) {
-                return ordenado[base] + rest * (ordenado[base + 1] - ordenado[base]);
-            } else {
-                return ordenado[base];
-            }
+            return (ordenado[base + 1] !== undefined) ? ordenado[base] + rest * (ordenado[base + 1] - ordenado[base]) : ordenado[base];
         }
 
         function obtenerCincoCuartiles(arr) {
@@ -126,13 +166,7 @@
                 const media = (min + max) / 2;
                 return [min, min, media, max, max];
             }
-            return [
-                calcularCuartil(arr, 0),
-                calcularCuartil(arr, 0.25),
-                calcularCuartil(arr, 0.50),
-                calcularCuartil(arr, 0.75),
-                calcularCuartil(arr, 1)
-            ];
+            return [calcularCuartil(arr, 0), calcularCuartil(arr, 0.25), calcularCuartil(arr, 0.50), calcularCuartil(arr, 0.75), calcularCuartil(arr, 1)];
         }
 
         function formatFecha(timestamp) {
@@ -141,15 +175,14 @@
             return d.toLocaleDateString('es-GT');
         }
 
+        // --- LECTURA DE ARCHIVOS ---
         function leerExcel(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-                    resolve(jsonData);
+                    resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
                 };
                 reader.onerror = reject;
                 reader.readAsArrayBuffer(file);
@@ -158,21 +191,17 @@
 
         function leerCSV(file) {
             return new Promise((resolve, reject) => {
-                Papa.parse(file, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: (results) => resolve(results.data),
-                    error: reject
-                });
+                Papa.parse(file, { header: true, skipEmptyLines: true, complete: (results) => resolve(results.data), error: reject });
             });
         }
 
-        // LÓGICA DE FILTRADO COMBINADO MULTIPLE
+        // --- FILTROS ---
         function aplicarFiltros() {
-            const filtroStock = document.getElementById('filtroStock').value;
-            const filtroProyeccion = document.getElementById('filtroProyeccion').value;
-            const filtroGrupo = document.getElementById('filtroGrupo').value;
-            const filtroMaquina = document.getElementById('filtroMaquina').value;
+            const fStock = document.getElementById('filtroStock').value;
+            const fProy = document.getElementById('filtroProyeccion').value;
+            const fGrupo = document.getElementById('filtroGrupo').value;
+            const fMaquina = document.getElementById('filtroMaquina').value;
+            const fEstado = document.getElementById('filtroEstado').value;
             
             const filas = document.querySelectorAll('.data-row');
             const now = new Date();
@@ -184,64 +213,166 @@
                 const proyMs = fila.getAttribute('data-proyeccion-ms');
                 const grupo = fila.getAttribute('data-grupo');
                 const maquinas = fila.getAttribute('data-maquinas').toLowerCase();
+                const estado = fila.getAttribute('data-estado');
                 
                 let mostrar = true;
                 
-                // Evaluar Grupo
-                if (filtroGrupo !== 'todos' && grupo !== filtroGrupo) mostrar = false;
+                if (fGrupo !== 'todos' && grupo !== fGrupo) mostrar = false;
+                if (mostrar && fMaquina !== 'todas' && !maquinas.includes(fMaquina.toLowerCase())) mostrar = false;
+                if (mostrar && fEstado !== 'todos' && estado !== fEstado) mostrar = false;
 
-                // Evaluar Máquina
-                if (mostrar && filtroMaquina !== 'todas' && !maquinas.includes(filtroMaquina.toLowerCase())) mostrar = false;
-
-                // Evaluar Stock
                 if (mostrar) {
-                    if (filtroStock === 'cero' && stock !== 0) mostrar = false;
-                    else if (filtroStock === 'uno' && stock !== 1) mostrar = false;
-                    else if (filtroStock === 'resto' && stock <= 1) mostrar = false;
+                    if (fStock === 'cero' && stock !== 0) mostrar = false;
+                    else if (fStock === 'uno' && stock !== 1) mostrar = false;
+                    else if (fStock === 'resto' && stock <= 1) mostrar = false;
                 }
                 
-                // Evaluar Proyección
-                if (mostrar && filtroProyeccion !== 'todas') {
-                    if (!proyMs) {
-                        mostrar = false; 
-                    } else {
-                        const dateProy = new Date(parseFloat(proyMs));
-                        const proyYear = dateProy.getFullYear();
-                        const proyMonth = dateProy.getMonth();
-
-                        if (filtroProyeccion === 'este_mes' && (proyYear !== currentYear || proyMonth !== currentMonth)) mostrar = false;
-                        else if (filtroProyeccion === 'mes_anterior') {
-                            let lastMonth = currentMonth - 1;
-                            let lastMonthYear = currentYear;
-                            if (lastMonth < 0) { lastMonth = 11; lastMonthYear--; }
-                            if (proyYear !== lastMonthYear || proyMonth !== lastMonth) mostrar = false;
+                if (mostrar && fProy !== 'todas') {
+                    if (!proyMs) mostrar = false; 
+                    else {
+                        const dProy = new Date(parseFloat(proyMs));
+                        if (fProy === 'este_mes' && (dProy.getFullYear() !== currentYear || dProy.getMonth() !== currentMonth)) mostrar = false;
+                        else if (fProy === 'mes_anterior') {
+                            let lastMonth = currentMonth - 1; let lastYear = currentYear;
+                            if (lastMonth < 0) { lastMonth = 11; lastYear--; }
+                            if (dProy.getFullYear() !== lastYear || dProy.getMonth() !== lastMonth) mostrar = false;
                         } 
-                        else if (filtroProyeccion === 'este_anio' && proyYear !== currentYear) mostrar = false;
+                        else if (fProy === 'este_anio' && dProy.getFullYear() !== currentYear) mostrar = false;
                     }
                 }
-                
                 fila.style.display = mostrar ? '' : 'none';
             });
         }
 
-        // Listeners para los filtros
-        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina'].forEach(id => {
+        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado'].forEach(id => {
             document.getElementById(id).addEventListener('change', aplicarFiltros);
         });
 
+        // --- ORDENAMIENTO ---
+        let sortAscendente = true; 
+        document.getElementById('thSortProyeccion').addEventListener('click', () => {
+            const tbody = document.getElementById('tableBody');
+            const filas = Array.from(tbody.querySelectorAll('.data-row'));
+
+            filas.sort((a, b) => {
+                const valA = a.getAttribute('data-proyeccion-ms');
+                const valB = b.getAttribute('data-proyeccion-ms');
+                if (!valA && !valB) return 0;
+                if (!valA) return 1; 
+                if (!valB) return -1;
+                return sortAscendente ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
+            });
+
+            filas.forEach(fila => tbody.appendChild(fila));
+            sortAscendente = !sortAscendente;
+            document.getElementById('sortIcon').innerText = sortAscendente ? '🔼' : '🔽';
+        });
+
+        // --- EXPORTAR A EXCEL Y PDF ---
+        document.getElementById('btnImprimirPdf').addEventListener('click', () => {
+            // El navegador se encarga del PDF mediante la ventana de impresión nativa
+            window.print();
+        });
+
+        document.getElementById('btnExportarExcel').addEventListener('click', () => {
+            const tablaOriginal = document.getElementById('resultTable');
+            // Filtrar solo las filas que el usuario está viendo actualmente
+            const filasVisibles = Array.from(tablaOriginal.querySelectorAll('tr')).filter(fila => fila.style.display !== 'none');
+            
+            // Convertir HTML a Array puro para limpiarlo de iconos
+            const datosLimpios = [];
+            filasVisibles.forEach(fila => {
+                const rowData = [];
+                // Evitamos celdas ocultas (hidden print:table-cell) para no duplicar columnas
+                const celdas = Array.from(fila.querySelectorAll('th, td')).filter(celda => !celda.classList.contains('hidden'));
+                
+                celdas.forEach(celda => {
+                    // Quitamos los emojis de las cabeceras
+                    let texto = celda.innerText.replace('↕️', '').replace('🔼', '').replace('🔽', '').trim();
+                    rowData.push(texto);
+                });
+                datosLimpios.push(rowData);
+            });
+
+            // Crear hoja de cálculo y descargar
+            const hoja = XLSX.utils.aoa_to_sheet(datosLimpios);
+            const libro = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(libro, hoja, "Bodega_Analisis");
+            
+            const fecha = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(libro, `Analisis_Bodega_${fecha}.xlsx`);
+        });
+
+        // --- RENDERIZADO PRINCIPAL DE LA TABLA ---
+        function renderizarTablaYFiltros(datos) {
+            const { resultadosTabla, gruposUnicos, maquinasUnicas } = datos;
+
+            // Llenar selects
+            const selGrupo = document.getElementById('filtroGrupo');
+            const selMaquina = document.getElementById('filtroMaquina');
+            selGrupo.innerHTML = '<option value="todos">Todos</option>';
+            gruposUnicos.sort().forEach(g => selGrupo.innerHTML += `<option value="${g}">${g}</option>`);
+            selMaquina.innerHTML = '<option value="todas">Todas</option>';
+            maquinasUnicas.sort().forEach(m => selMaquina.innerHTML += `<option value="${m}">${m}</option>`);
+
+            // Llenar tabla
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = ""; 
+
+            resultadosTabla.forEach(fila => {
+                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs } = fila;
+                const tr = document.createElement('tr');
+                tr.className = "data-row hover:bg-gray-100 transition duration-150";
+                tr.setAttribute("data-stock", inv.cantidad);
+                tr.setAttribute("data-proyeccion-ms", proyeccionMs || "");
+                tr.setAttribute("data-grupo", inv.grupo);
+                tr.setAttribute("data-maquinas", maquinasUnicas);
+                tr.setAttribute("data-estado", estado); 
+                
+                tr.innerHTML = `
+                    <td class="font-bold">${inv.codigo}</td>
+                    <td class="text-xs">${inv.descripcion}</td>
+                    <td class="text-center font-bold">${inv.cantidad}</td>
+                    <td class="dest-col text-xs" title="${maquinasUnicas}">${maquinasUnicas}</td>
+                    <td class="text-xs font-semibold text-blue-800">${formatFecha(inv.ultimaCompra)}</td>
+                    <td class="text-center"><span class="badge ${estadoClase}">${estado}</span></td>
+                    <td class="text-center font-bold">${vecesUsado}</td>
+                    <td class="text-xs">${formatFecha(primeraSalida)}</td>
+                    <td class="text-xs">${formatFecha(ultimaSalida)}</td>
+                    <td class="q-col text-right">${qDiasSalidas[0] !== null ? qDiasSalidas[0].toFixed(1) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[1] !== null ? qDiasSalidas[1].toFixed(1) : '-'}</td>
+                    <td class="q-col text-right font-bold text-red-600">${qDiasSalidas[2] !== null ? qDiasSalidas[2].toFixed(1) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[3] !== null ? qDiasSalidas[3].toFixed(1) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[4] !== null ? qDiasSalidas[4].toFixed(1) : '-'}</td>
+                    <td class="proj-col text-sm no-print">${proyeccionTexto}</td>
+                    <td class="proj-col text-sm hidden print:table-cell">${proyeccionTexto}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('resultTable').classList.remove('hidden');
+            document.getElementById('contenedorFiltros').classList.remove('hidden');
+            document.getElementById('zonaImportacion').classList.add('hidden'); // Ocultar importador
+            document.getElementById('controlesSesion').classList.remove('hidden'); // Mostrar botones
+            
+            aplicarFiltros();
+        }
+
+        // --- LÓGICA DE PROCESAMIENTO ---
         document.getElementById('btnProcesar').addEventListener('click', async () => {
             const fileExcel = document.getElementById('fileExcel').files[0];
             const fileCsv = document.getElementById('fileCsv').files[0];
 
-            if (!fileExcel || !fileCsv) {
-                alert("Por favor, selecciona ambos archivos.");
-                return;
-            }
+            if (!fileExcel || !fileCsv) { alert("Por favor, selecciona ambos archivos."); return; }
+
+            sortAscendente = true;
+            document.getElementById('sortIcon').innerText = '↕️';
+            document.getElementById('btnProcesar').innerText = "Procesando...";
 
             try {
-                // Listas únicas para llenar los selects
                 const setGrupos = new Set();
                 const setMaquinas = new Set();
+                const todasLasSalidasGlobales = []; 
 
                 // 1. Procesar Excel
                 const datosInventario = await leerExcel(fileExcel);
@@ -249,73 +380,49 @@
 
                 datosInventario.forEach(row => {
                     let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
-                    if (!codigo) return;
-                    codigo = codigo.trim();
+                    if (!codigo) return; codigo = codigo.trim();
 
-                    // Extraer Grupo (Ej: x-xxx de x-xxx-xx-xxx)
                     let partes = codigo.split('-');
                     let grupoCodigo = partes[0] + '-' + partes[1];
                     setGrupos.add(grupoCodigo);
 
                     let desc = row['Nombre'] || row['Descripción'] || row['Descripcion'] || row['Description'] || "Sin descripción";
                     let cant = row['Cantidad'] || row['Cant'] || row['Qty'] || 0;
-                    
                     let fechaCompraRaw = row['Fecha de última compra'] || row['Fecha Compra'] || row['Fecha'];
                     let fechaCompra = fechaCompraRaw ? new Date(fechaCompraRaw).getTime() : null;
 
                     if (!inventarioFiltrado[codigo]) {
-                        inventarioFiltrado[codigo] = {
-                            codigo, 
-                            grupo: grupoCodigo,
-                            descripcion: desc, 
-                            cantidad: parseFloat(cant), 
-                            fechasCompra: []
-                        };
+                        inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, descripcion: desc, cantidad: parseFloat(cant), ultimaCompra: fechaCompra };
+                    } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
+                        inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
                     }
-                    if (fechaCompra) inventarioFiltrado[codigo].fechasCompra.push(fechaCompra);
                 });
 
-                // 2. Procesar CSV y extraer destinos/máquinas
+                // 2. Procesar CSV
                 const datosSalidas = await leerCSV(fileCsv);
                 let salidasPorCodigo = {};
                 let maquinasPorCodigo = {};
 
                 datosSalidas.forEach(row => {
                     let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
-                    if (!codigo) return;
-                    codigo = codigo.trim();
+                    if (!codigo) return; codigo = codigo.trim();
 
-                    // Extraer fecha
                     let fechaSalidaRaw = row['Fecha'] || row['Date'] || Object.values(row)[1]; 
                     let fechaSalida = new Date(fechaSalidaRaw).getTime();
-
-                    // Extraer máquina/sección dinámicamente
-                    let maquina = row['Máquina'] || row['Maquina'] || row['Destino'] || row['Sección'] || row['Seccion'] || row['Área'] || row['Equipo'] || "";
-                    maquina = maquina.trim();
+                    let maquina = (row['Máquina'] || row['Maquina'] || row['Destino'] || row['Sección'] || row['Seccion'] || row['Área'] || row['Equipo'] || "").trim();
                     if (maquina) setMaquinas.add(maquina);
 
                     if (!isNaN(fechaSalida)) {
                         if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = [];
                         salidasPorCodigo[codigo].push(fechaSalida);
-                        
+                        todasLasSalidasGlobales.push(fechaSalida); 
                         if (!maquinasPorCodigo[codigo]) maquinasPorCodigo[codigo] = new Set();
                         if (maquina) maquinasPorCodigo[codigo].add(maquina);
                     }
                 });
 
-                // Llenar selectores dinámicos
-                const selGrupo = document.getElementById('filtroGrupo');
-                const selMaquina = document.getElementById('filtroMaquina');
-                
-                selGrupo.innerHTML = '<option value="todos">Todos</option>';
-                Array.from(setGrupos).sort().forEach(g => {
-                    selGrupo.innerHTML += `<option value="${g}">${g}</option>`;
-                });
-
-                selMaquina.innerHTML = '<option value="todas">Todas</option>';
-                Array.from(setMaquinas).sort().forEach(m => {
-                    selMaquina.innerHTML += `<option value="${m}">${m}</option>`;
-                });
+                const qGlobales = obtenerCincoCuartiles(todasLasSalidasGlobales);
+                const limiteInactivo = qGlobales[1]; const limiteActivo = qGlobales[3];   
 
                 // 3. Preparar datos
                 let resultadosTabla = [];
@@ -325,99 +432,81 @@
                     const salidas = (salidasPorCodigo[codigo] || []).sort((a, b) => a - b);
                     const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
-                    const qFechasCompra = obtenerCincoCuartiles(inv.fechasCompra);
-                    
                     let vecesUsado = salidas.length;
                     let primeraSalida = vecesUsado > 0 ? salidas[0] : null;
                     let ultimaSalida = vecesUsado > 0 ? salidas[salidas.length - 1] : null;
-                    
-                    let diasEntreSalidas = [];
-                    for (let i = 1; i < salidas.length; i++) {
-                        let diffMs = salidas[i] - salidas[i-1];
-                        let diffDias = diffMs / (1000 * 60 * 60 * 24);
-                        diasEntreSalidas.push(diffDias);
+
+                    let estado = "Sin movimiento"; let estadoClase = "bg-gray-200 text-gray-700"; 
+                    if (ultimaSalida) {
+                        if (ultimaSalida >= limiteActivo) { estado = "Activo"; estadoClase = "bg-green-100 text-green-800"; } 
+                        else if (ultimaSalida >= limiteInactivo) { estado = "Moderado"; estadoClase = "bg-yellow-100 text-yellow-800"; } 
+                        else { estado = "Inactivo"; estadoClase = "bg-red-100 text-red-800"; }
                     }
                     
-                    const qDiasSalidas = obtenerCincoCuartiles(diasEntreSalidas);
+                    let diasEntreSalidas = [];
+                    for (let i = 1; i < salidas.length; i++) diasEntreSalidas.push((salidas[i] - salidas[i-1]) / 86400000);
                     
-                    let proyeccionMs = "";
-                    let proyeccionTexto = "N/A";
+                    const qDiasSalidas = obtenerCincoCuartiles(diasEntreSalidas);
+                    let proyeccionMs = ""; let proyeccionTexto = "N/A";
                     
                     if (inv.cantidad <= 1 && ultimaSalida && qDiasSalidas[2] !== null) { 
-                        let diasMediana = qDiasSalidas[2];
-                        let fechaProyectadaMsLocal = ultimaSalida + (diasMediana * 1000 * 60 * 60 * 24);
+                        let fechaProyectadaMsLocal = ultimaSalida + (qDiasSalidas[2] * 86400000);
                         proyeccionMs = fechaProyectadaMsLocal;
                         proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
-                    resultadosTabla.push({
-                        inv,
-                        maquinasUnicas,
-                        qFechasCompra,
-                        vecesUsado,
-                        primeraSalida,
-                        ultimaSalida,
-                        qDiasSalidas,
-                        proyeccionTexto,
-                        proyeccionMs
-                    });
+                    resultadosTabla.push({ inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs });
                 });
 
-                // 4. Ordenar (Más reciente arriba)
-                resultadosTabla.sort((a, b) => {
-                    let fechaA = a.ultimaSalida || 0;
-                    let fechaB = b.ultimaSalida || 0;
-                    if (fechaA === 0 && fechaB === 0) return 0;
-                    if (fechaA === 0) return 1; 
-                    if (fechaB === 0) return -1;
-                    return fechaB - fechaA;
-                });
+                resultadosTabla.sort((a, b) => (b.ultimaSalida || 0) - (a.ultimaSalida || 0));
 
-                // 5. Renderizar
-                const tbody = document.getElementById('tableBody');
-                tbody.innerHTML = ""; 
+                // Guardar en LocalStorage
+                const datosParaGuardar = {
+                    resultadosTabla,
+                    gruposUnicos: Array.from(setGrupos),
+                    maquinasUnicas: Array.from(setMaquinas)
+                };
 
-                resultadosTabla.forEach(fila => {
-                    const { inv, maquinasUnicas, qFechasCompra, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs } = fila;
+                try {
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(datosParaGuardar));
+                } catch (e) {
+                    console.warn("No se pudo guardar en LocalStorage (posiblemente excedió el límite de espacio).", e);
+                }
 
-                    const tr = document.createElement('tr');
-                    tr.className = "data-row hover:bg-gray-100 transition duration-150";
-                    tr.setAttribute("data-stock", inv.cantidad);
-                    tr.setAttribute("data-proyeccion-ms", proyeccionMs);
-                    tr.setAttribute("data-grupo", inv.grupo);
-                    tr.setAttribute("data-maquinas", maquinasUnicas);
-                    
-                    tr.innerHTML = `
-                        <td class="font-bold">${inv.codigo}</td>
-                        <td>${inv.descripcion}</td>
-                        <td class="text-center font-bold">${inv.cantidad}</td>
-                        <td class="dest-col text-xs" title="${maquinasUnicas}">${maquinasUnicas}</td>
-                        <td class="q-col text-xs">${formatFecha(qFechasCompra[0])}</td>
-                        <td class="q-col text-xs">${formatFecha(qFechasCompra[1])}</td>
-                        <td class="q-col text-xs font-semibold">${formatFecha(qFechasCompra[2])}</td>
-                        <td class="q-col text-xs">${formatFecha(qFechasCompra[3])}</td>
-                        <td class="q-col text-xs">${formatFecha(qFechasCompra[4])}</td>
-                        <td class="text-center">${vecesUsado}</td>
-                        <td class="text-xs">${formatFecha(primeraSalida)}</td>
-                        <td class="text-xs">${formatFecha(ultimaSalida)}</td>
-                        <td class="q-col text-right">${qDiasSalidas[0] !== null ? qDiasSalidas[0].toFixed(1) : '-'}</td>
-                        <td class="q-col text-right">${qDiasSalidas[1] !== null ? qDiasSalidas[1].toFixed(1) : '-'}</td>
-                        <td class="q-col text-right font-bold">${qDiasSalidas[2] !== null ? qDiasSalidas[2].toFixed(1) : '-'}</td>
-                        <td class="q-col text-right">${qDiasSalidas[3] !== null ? qDiasSalidas[3].toFixed(1) : '-'}</td>
-                        <td class="q-col text-right">${qDiasSalidas[4] !== null ? qDiasSalidas[4].toFixed(1) : '-'}</td>
-                        <td class="proj-col text-sm">${proyeccionTexto}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-
-                document.getElementById('resultTable').classList.remove('hidden');
-                document.getElementById('contenedorFiltros').classList.remove('hidden');
-                
-                aplicarFiltros();
+                renderizarTablaYFiltros(datosParaGuardar);
+                document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
 
             } catch (error) {
                 console.error(error);
-                alert("Ocurrió un error al procesar los archivos. Revisa el formato de los datos.");
+                alert("Ocurrió un error al procesar los archivos.");
+                document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
+            }
+        });
+
+        // --- CONTROLES DE SESIÓN ---
+        document.getElementById('btnBorrarDatos').addEventListener('click', () => {
+            if(confirm("¿Estás seguro de que quieres borrar los datos guardados de esta sesión?")) {
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                location.reload(); 
+            }
+        });
+
+        document.getElementById('btnMostrarImportar').addEventListener('click', () => {
+            document.getElementById('zonaImportacion').classList.remove('hidden');
+        });
+
+        // --- INICIALIZACIÓN ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const datosGuardadosStr = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (datosGuardadosStr) {
+                try {
+                    const datosGuardados = JSON.parse(datosGuardadosStr);
+                    if (datosGuardados.resultadosTabla && datosGuardados.resultadosTabla.length > 0) {
+                        renderizarTablaYFiltros(datosGuardados);
+                    }
+                } catch (e) {
+                    console.error("Error leyendo datos guardados", e);
+                }
             }
         });
     </script>
