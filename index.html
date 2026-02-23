@@ -1765,9 +1765,205 @@
                 </ul>
             `;
 
-            // Si es opción B o C, crear tareas (simplificado por ahora)
-            if (importType === 'B' || importType === 'C') {
-                resultsHTML += `<p style="color:#ffb74d;">⚠️ Importación de tareas B/C estará disponible próximamente.</p>`;
+            // OPCIÓN B: IMPORTAR HISTORIAL (tareas completadas con fechas originales)
+            if (importType === 'B') {
+                const fechaCol = csvData.headers.find(h => h.toLowerCase().includes('fecha') && h.toLowerCase().includes('contabiliz'));
+                const descCol = csvData.headers.find(h => h.toLowerCase().includes('descripcion'));
+                
+                if (!fechaCol) {
+                    resultsHTML += `<p style="color:#f44336;">❌ Error: No se encontró columna de "Fecha Contabilizacion" en el CSV.</p>`;
+                } else {
+                    let tasksCreated = 0;
+                    const tasksByDate = new Map(); // Para distribuir horarios
+                    
+                    // Generar código de tarea base
+                    const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
+                    let nextTaskNum = (codes.length > 0 ? Math.max(...codes) : 0) + 1;
+                    
+                    data.forEach(row => {
+                        // Parsear fecha (formato: "2/1/2023" o similar)
+                        const fechaStr = row[fechaCol];
+                        if (!fechaStr) return;
+                        
+                        const dateParts = fechaStr.split('/');
+                        if (dateParts.length !== 3) return;
+                        
+                        const [month, day, year] = dateParts;
+                        const taskDate = new Date(year, month - 1, day);
+                        const dateStr = formatDate(taskDate);
+                        
+                        // Asignar hora: distribuir desde 00:00 hasta 06:00 si hay varias el mismo día
+                        if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, []);
+                        const tasksOnDate = tasksByDate.get(dateStr);
+                        const hour = Math.min(tasksOnDate.length, 6); // 00:00 a 06:00
+                        tasksOnDate.push(hour);
+                        
+                        const groupId = 'GRP_CSV_B_' + Date.now() + '_' + tasksCreated;
+                        const taskCode = `T-${nextTaskNum.toString().padStart(3, '0')}`;
+                        nextTaskNum++;
+                        
+                        state.tasks.push({
+                            id: Date.now() + Math.random(),
+                            groupId: groupId,
+                            date: dateStr,
+                            hour: hour,
+                            category: row[maqCol] || 'Importado',
+                            subcategory: row[secCol] || '',
+                            process: row[depCol] || '',
+                            detail: row[descCol] || 'Mantenimiento registrado',
+                            maintenanceType: 'correctivo',
+                            priority: 'medium',
+                            title: `${row[maqCol] || 'Importado'} ${row[secCol] || ''}`,
+                            taskCode: taskCode,
+                            assignees: row[autCol] ? [row[autCol]] : [],
+                            cost: 0,
+                            originalTotal: 0,
+                            breakdown: [],
+                            selectedDays: [taskDate.getDay()],
+                            recurrence: null,
+                            baseStartDate: dateStr,
+                            baseEndDate: dateStr,
+                            status: 'done', // ✅ Marcada como completada
+                            seconds: 0
+                        });
+                        
+                        tasksCreated++;
+                    });
+                    
+                    resultsHTML += `<p style="color:#4caf50;">✅ <b>${tasksCreated}</b> tareas históricas creadas y marcadas como completadas.</p>`;
+                    resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Las tareas fueron distribuidas en horarios de 00:00 a 06:00 según la cantidad por día.</p>`;
+                }
+            }
+            
+            // OPCIÓN C: CREAR PLANTILLAS FUTURAS CON ANÁLISIS PREDICTIVO
+            if (importType === 'C') {
+                const fechaCol = csvData.headers.find(h => h.toLowerCase().includes('fecha') && h.toLowerCase().includes('contabiliz'));
+                const descCol = csvData.headers.find(h => h.toLowerCase().includes('descripcion'));
+                
+                if (!fechaCol) {
+                    resultsHTML += `<p style="color:#f44336;">❌ Error: No se encontró columna de "Fecha Contabilizacion" en el CSV.</p>`;
+                } else {
+                    // Agrupar por identificador único (Maquinaria + Seccion + Departamento + Descripcion)
+                    const groupedRecords = new Map();
+                    
+                    data.forEach(row => {
+                        const key = `${row[maqCol]||''}_${row[secCol]||''}_${row[depCol]||''}_${row[descCol]||''}`;
+                        if (!groupedRecords.has(key)) {
+                            groupedRecords.set(key, {
+                                category: row[maqCol] || 'Importado',
+                                subcategory: row[secCol] || '',
+                                process: row[depCol] || '',
+                                detail: row[descCol] || 'Mantenimiento',
+                                leader: row[autCol] || '',
+                                dates: []
+                            });
+                        }
+                        
+                        // Parsear fecha
+                        const fechaStr = row[fechaCol];
+                        if (fechaStr) {
+                            const dateParts = fechaStr.split('/');
+                            if (dateParts.length === 3) {
+                                const [month, day, year] = dateParts;
+                                const date = new Date(year, month - 1, day);
+                                groupedRecords.get(key).dates.push(date);
+                            }
+                        }
+                    });
+                    
+                    // Analizar frecuencia y proyectar
+                    let tasksCreated = 0;
+                    let analysisHTML = '<div style="margin-top:15px; padding:15px; background:#1a1a1a; border-radius:8px; border:1px solid #333;"><h4 style="margin-top:0; color:var(--accent);">📈 Análisis de Frecuencia</h4>';
+                    
+                    const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
+                    let nextTaskNum = (codes.length > 0 ? Math.max(...codes) : 0) + 1;
+                    const today = new Date();
+                    
+                    groupedRecords.forEach((record, key) => {
+                        if (record.dates.length === 0) return;
+                        
+                        // Ordenar fechas
+                        record.dates.sort((a, b) => a - b);
+                        const lastDate = record.dates[record.dates.length - 1];
+                        
+                        // Calcular frecuencia promedio (intervalos entre mantenimientos)
+                        let intervals = [];
+                        for (let i = 1; i < record.dates.length; i++) {
+                            const diffDays = Math.round((record.dates[i] - record.dates[i-1]) / (1000 * 60 * 60 * 24));
+                            if (diffDays > 0) intervals.push(diffDays);
+                        }
+                        
+                        let avgFrequency = 30; // Default: 30 días
+                        if (intervals.length > 0) {
+                            avgFrequency = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
+                        }
+                        
+                        // Calcular fecha proyectada
+                        const projectedDate = new Date(lastDate);
+                        projectedDate.setDate(projectedDate.getDate() + avgFrequency);
+                        
+                        // Si la fecha proyectada ya pasó, programar para mañana
+                        const taskDate = projectedDate > today ? projectedDate : new Date(today.getTime() + 24*60*60*1000);
+                        const dateStr = formatDate(taskDate);
+                        
+                        // Crear tarea
+                        const groupId = 'GRP_CSV_C_' + Date.now() + '_' + tasksCreated;
+                        const taskCode = `T-${nextTaskNum.toString().padStart(3, '0')}`;
+                        nextTaskNum++;
+                        
+                        state.tasks.push({
+                            id: Date.now() + Math.random(),
+                            groupId: groupId,
+                            date: dateStr,
+                            hour: 0, // 00:00 por defecto
+                            category: record.category,
+                            subcategory: record.subcategory,
+                            process: record.process,
+                            detail: `${record.detail} (Proyectada cada ${avgFrequency} días)`,
+                            maintenanceType: 'preventivo',
+                            priority: 'medium',
+                            title: `${record.category} ${record.subcategory}`,
+                            taskCode: taskCode,
+                            assignees: record.leader ? [record.leader] : [],
+                            cost: 0,
+                            originalTotal: 0,
+                            breakdown: [],
+                            selectedDays: [taskDate.getDay()],
+                            recurrence: null,
+                            baseStartDate: dateStr,
+                            baseEndDate: dateStr,
+                            status: 'planned', // 📅 Tarea futura
+                            seconds: 0
+                        });
+                        
+                        // Agregar al análisis
+                        const displayFreq = avgFrequency === 30 && intervals.length === 0 ? 'Por defecto: 30 días' : `Cada ${avgFrequency} días`;
+                        analysisHTML += `
+                            <div style="background:#222; padding:12px; border-radius:6px; margin-bottom:10px; border-left:4px solid ${stringToColor(record.category)};">
+                                <div style="font-weight:bold; color:${stringToColor(record.category)}; margin-bottom:5px;">${record.category} - ${record.subcategory}</div>
+                                <div style="font-size:0.85em; color:#aaa; margin-bottom:8px;">${record.detail}</div>
+                                <div style="display:grid; grid-template-columns: auto 1fr; gap:8px; font-size:0.85em;">
+                                    <span style="color:#888;">Última vez:</span>
+                                    <span style="color:#fff;">${lastDate.toLocaleDateString('es')}</span>
+                                    
+                                    <span style="color:#888;">Frecuencia:</span>
+                                    <span style="color:#88d8b0;">${displayFreq}</span>
+                                    
+                                    <span style="color:#888;">📅 Se PROYECTA para:</span>
+                                    <span style="color:#00bcd4; font-weight:bold;">${taskDate.toLocaleDateString('es')}</span>
+                                </div>
+                            </div>
+                        `;
+                        
+                        tasksCreated++;
+                    });
+                    
+                    analysisHTML += '</div>';
+                    
+                    resultsHTML += `<p style="color:#4caf50;">✅ <b>${tasksCreated}</b> tareas proyectadas creadas desde HOY en adelante.</p>`;
+                    resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Basadas en ${data.length} registros históricos. El usuario puede ajustar fechas después.</p>`;
+                    resultsHTML += analysisHTML;
+                }
             }
 
             document.getElementById('csvResultsContent').innerHTML = resultsHTML;
