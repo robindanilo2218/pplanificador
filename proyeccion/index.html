@@ -141,6 +141,11 @@
                         <th>Código</th>
                         <th>Descripción</th>
                         <th>Cant.</th>
+                        <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Stock Min (Q0)</th>
+                        <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Lím. Inf (Q1)</th>
+                        <th class="q-col" title="Stock Mediano (Q2 Consumo)">Mediano (Q2)</th>
+                        <th class="q-col" title="Stock Límite Superior (Q3 Consumo)">Lím. Sup (Q3)</th>
+                        <th class="q-col" title="Stock Máximo (Q4 Consumo)">Stock Max (Q4)</th>
                         <th>Destinos / Máquinas</th>
                         <th>Última Compra</th>
                         <th class="text-center">Estado (Rotación)</th>
@@ -207,6 +212,8 @@
             const localDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
             return localDate.toLocaleDateString('es-GT');
         }
+
+        const formatQ = (val) => val !== null && val !== undefined ? (Number.isInteger(val) ? val : val.toFixed(1)) : '-';
 
         function leerExcel(file) {
             return new Promise((resolve, reject) => {
@@ -356,6 +363,7 @@
 
             resultadosTabla.forEach(fila => {
                 const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs } = fila;
+                const qConsumo = fila.qConsumo || [null, null, null, null, null];
                 const tr = document.createElement('tr');
                 tr.className = "data-row hover:bg-gray-100 transition duration-150";
                 tr.setAttribute("data-stock", inv.cantidad);
@@ -371,6 +379,11 @@
                     <td class="font-bold">${inv.codigo}</td>
                     <td class="text-xs">${inv.descripcion}</td>
                     <td class="text-center font-bold text-blue-900 bg-blue-50">${inv.cantidad}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[0])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[1])}</td>
+                    <td class="q-col text-right font-bold text-blue-700">${formatQ(qConsumo[2])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[3])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[4])}</td>
                     <td class="dest-col text-xs" title="${maquinasUnicas}">${maquinasUnicas}</td>
                     <td class="text-xs font-semibold text-gray-700">${formatFecha(inv.ultimaCompra)}</td>
                     <td class="text-center"><span class="badge ${estadoClase}">${estado}</span></td>
@@ -468,9 +481,19 @@
                     let maquina = (row['Máquina'] || row['Maquina'] || row['Destino'] || row['Sección'] || row['Seccion'] || row['Área'] || row['Equipo'] || "").trim();
                     if (maquina) setMaquinas.add(maquina);
 
+                    // Extraer Cantidad de la salida para el consumo
+                    let cantKey = Object.keys(row).find(k => {
+                        let kl = k.toLowerCase().trim();
+                        return kl.includes('cant') || kl.includes('qty') || kl === 'salida' || kl === 'despacho' || kl === 'consumo';
+                    });
+                    let cantSalidaRaw = cantKey ? row[cantKey] : 1;
+                    let cantSalida = parseFloat(String(cantSalidaRaw).replace(/,/g, '').trim());
+                    if (isNaN(cantSalida) || cantSalida === 0) cantSalida = 1;
+
                     if (!isNaN(fechaSalida)) {
-                        if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = [];
-                        salidasPorCodigo[codigo].push(fechaSalida);
+                        if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = { fechas: [], cantidades: [] };
+                        salidasPorCodigo[codigo].fechas.push(fechaSalida);
+                        salidasPorCodigo[codigo].cantidades.push(cantSalida);
                         todasLasSalidasGlobales.push(fechaSalida); 
                         if (!maquinasPorCodigo[codigo]) maquinasPorCodigo[codigo] = new Set();
                         if (maquina) maquinasPorCodigo[codigo].add(maquina);
@@ -485,7 +508,9 @@
 
                 Object.keys(inventarioFiltrado).forEach(codigo => {
                     const inv = inventarioFiltrado[codigo];
-                    const salidas = (salidasPorCodigo[codigo] || []).sort((a, b) => a - b);
+                    const salidas = (salidasPorCodigo[codigo]?.fechas || []).sort((a, b) => a - b);
+                    const cantidadesSalidas = salidasPorCodigo[codigo]?.cantidades || [];
+                    const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
                     const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
                     let vecesUsado = salidas.length;
@@ -511,7 +536,7 @@
                         proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
-                    resultadosTabla.push({ inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs });
+                    resultadosTabla.push({ inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo });
                 });
 
                 resultadosTabla.sort((a, b) => (b.ultimaSalida || 0) - (a.ultimaSalida || 0));
