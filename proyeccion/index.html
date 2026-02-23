@@ -14,11 +14,12 @@
         th { background-color: #f3f4f6; position: sticky; top: 0; }
         .q-col { background-color: #f8fafc; }
         .proj-col { background-color: #ecfdf5; font-weight: bold; }
+        .dest-col { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 p-6">
 
-    <div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-md">
+    <div class="max-w-[1400px] mx-auto bg-white p-6 rounded-lg shadow-md">
         <h1 class="text-2xl font-bold mb-4 text-blue-800">Análisis de Recurrencia e Inventario</h1>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
@@ -33,19 +34,42 @@
             </div>
         </div>
 
-        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto">
-                Procesar y Calcular Cuartiles
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10">
+                Procesar y Calcular
             </button>
 
-            <div class="flex items-center w-full md:w-auto border p-2 rounded bg-gray-50 hidden" id="contenedorFiltro">
-                <label for="filtroStock" class="font-semibold mr-3">Ver Stock:</label>
-                <select id="filtroStock" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer">
-                    <option value="todos">Todos los artículos</option>
-                    <option value="cero">Solo Stock = 0</option>
-                    <option value="uno">Solo Stock = 1</option>
-                    <option value="resto">Resto (Stock > 1)</option>
-                </select>
+            <div class="flex flex-wrap items-center gap-4 w-full md:w-auto border p-3 rounded bg-gray-50 hidden" id="contenedorFiltros">
+                <div>
+                    <label class="font-semibold mr-1 text-sm">Grupo (X-XXX):</label>
+                    <select id="filtroGrupo" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-32">
+                        <option value="todos">Todos</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-sm">Máquina/Destino:</label>
+                    <select id="filtroMaquina" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-36">
+                        <option value="todas">Todas</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-sm">Stock:</label>
+                    <select id="filtroStock" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-28">
+                        <option value="todos">Todos</option>
+                        <option value="cero">Solo = 0</option>
+                        <option value="uno">Solo = 1</option>
+                        <option value="resto">Resto (>1)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-sm">Proyección:</label>
+                    <select id="filtroProyeccion" class="border-gray-300 rounded p-1 text-sm bg-white cursor-pointer w-32">
+                        <option value="todas">Todas</option>
+                        <option value="este_mes">Este mes</option>
+                        <option value="mes_anterior">Mes anterior</option>
+                        <option value="este_anio">Este año</option>
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -56,19 +80,20 @@
                         <th>Código</th>
                         <th>Descripción</th>
                         <th>Cant.</th>
-                        <th class="q-col" title="Cuartiles de fechas de compra">Q0 Compra (Min)</th>
+                        <th>Destinos / Máquinas</th>
+                        <th class="q-col" title="Cuartiles de fechas de compra">Q0 Compra</th>
                         <th class="q-col">Q1 Compra</th>
-                        <th class="q-col">Q2 Compra (Mediana)</th>
+                        <th class="q-col">Q2 (Mediana)</th>
                         <th class="q-col">Q3 Compra</th>
-                        <th class="q-col">Q4 Compra (Max)</th>
+                        <th class="q-col">Q4 Compra</th>
                         <th>Veces Usado</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas">Q0 Días (Min)</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas">Q0 Días</th>
                         <th class="q-col">Q1 Días</th>
-                        <th class="q-col">Q2 Días (Mediana)</th>
+                        <th class="q-col">Q2 Días (Med)</th>
                         <th class="q-col">Q3 Días</th>
-                        <th class="q-col">Q4 Días (Max)</th>
+                        <th class="q-col">Q4 Días</th>
                         <th class="proj-col">Proyección Sig. Compra</th>
                     </tr>
                 </thead>
@@ -94,18 +119,13 @@
 
         function obtenerCincoCuartiles(arr) {
             if (!arr || arr.length === 0) return [null, null, null, null, null];
-            
-            if (arr.length === 1) {
-                return [arr[0], arr[0], arr[0], arr[0], arr[0]];
-            }
-            
+            if (arr.length === 1) return [arr[0], arr[0], arr[0], arr[0], arr[0]];
             if (arr.length === 2) {
                 const min = Math.min(arr[0], arr[1]);
                 const max = Math.max(arr[0], arr[1]);
                 const media = (min + max) / 2;
                 return [min, min, media, max, max];
             }
-
             return [
                 calcularCuartil(arr, 0),
                 calcularCuartil(arr, 0.25),
@@ -147,23 +167,67 @@
             });
         }
 
-        function aplicarFiltroStock() {
-            const filtro = document.getElementById('filtroStock').value;
-            const filas = document.querySelectorAll('.data-row');
+        // LÓGICA DE FILTRADO COMBINADO MULTIPLE
+        function aplicarFiltros() {
+            const filtroStock = document.getElementById('filtroStock').value;
+            const filtroProyeccion = document.getElementById('filtroProyeccion').value;
+            const filtroGrupo = document.getElementById('filtroGrupo').value;
+            const filtroMaquina = document.getElementById('filtroMaquina').value;
             
+            const filas = document.querySelectorAll('.data-row');
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+
             filas.forEach(fila => {
                 const stock = parseFloat(fila.getAttribute('data-stock'));
+                const proyMs = fila.getAttribute('data-proyeccion-ms');
+                const grupo = fila.getAttribute('data-grupo');
+                const maquinas = fila.getAttribute('data-maquinas').toLowerCase();
+                
                 let mostrar = true;
                 
-                if (filtro === 'cero' && stock !== 0) mostrar = false;
-                else if (filtro === 'uno' && stock !== 1) mostrar = false;
-                else if (filtro === 'resto' && stock <= 1) mostrar = false;
+                // Evaluar Grupo
+                if (filtroGrupo !== 'todos' && grupo !== filtroGrupo) mostrar = false;
+
+                // Evaluar Máquina
+                if (mostrar && filtroMaquina !== 'todas' && !maquinas.includes(filtroMaquina.toLowerCase())) mostrar = false;
+
+                // Evaluar Stock
+                if (mostrar) {
+                    if (filtroStock === 'cero' && stock !== 0) mostrar = false;
+                    else if (filtroStock === 'uno' && stock !== 1) mostrar = false;
+                    else if (filtroStock === 'resto' && stock <= 1) mostrar = false;
+                }
+                
+                // Evaluar Proyección
+                if (mostrar && filtroProyeccion !== 'todas') {
+                    if (!proyMs) {
+                        mostrar = false; 
+                    } else {
+                        const dateProy = new Date(parseFloat(proyMs));
+                        const proyYear = dateProy.getFullYear();
+                        const proyMonth = dateProy.getMonth();
+
+                        if (filtroProyeccion === 'este_mes' && (proyYear !== currentYear || proyMonth !== currentMonth)) mostrar = false;
+                        else if (filtroProyeccion === 'mes_anterior') {
+                            let lastMonth = currentMonth - 1;
+                            let lastMonthYear = currentYear;
+                            if (lastMonth < 0) { lastMonth = 11; lastMonthYear--; }
+                            if (proyYear !== lastMonthYear || proyMonth !== lastMonth) mostrar = false;
+                        } 
+                        else if (filtroProyeccion === 'este_anio' && proyYear !== currentYear) mostrar = false;
+                    }
+                }
                 
                 fila.style.display = mostrar ? '' : 'none';
             });
         }
 
-        document.getElementById('filtroStock').addEventListener('change', aplicarFiltroStock);
+        // Listeners para los filtros
+        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina'].forEach(id => {
+            document.getElementById(id).addEventListener('change', aplicarFiltros);
+        });
 
         document.getElementById('btnProcesar').addEventListener('click', async () => {
             const fileExcel = document.getElementById('fileExcel').files[0];
@@ -175,6 +239,10 @@
             }
 
             try {
+                // Listas únicas para llenar los selects
+                const setGrupos = new Set();
+                const setMaquinas = new Set();
+
                 // 1. Procesar Excel
                 const datosInventario = await leerExcel(fileExcel);
                 let inventarioFiltrado = {};
@@ -184,7 +252,11 @@
                     if (!codigo) return;
                     codigo = codigo.trim();
 
-                    // CORRECCIÓN: Se prioriza 'Nombre' (inventario) y luego 'Descripción' (salidas si se cruzara)
+                    // Extraer Grupo (Ej: x-xxx de x-xxx-xx-xxx)
+                    let partes = codigo.split('-');
+                    let grupoCodigo = partes[0] + '-' + partes[1];
+                    setGrupos.add(grupoCodigo);
+
                     let desc = row['Nombre'] || row['Descripción'] || row['Descripcion'] || row['Description'] || "Sin descripción";
                     let cant = row['Cantidad'] || row['Cant'] || row['Qty'] || 0;
                     
@@ -193,36 +265,65 @@
 
                     if (!inventarioFiltrado[codigo]) {
                         inventarioFiltrado[codigo] = {
-                            codigo, descripcion: desc, cantidad: parseFloat(cant), fechasCompra: []
+                            codigo, 
+                            grupo: grupoCodigo,
+                            descripcion: desc, 
+                            cantidad: parseFloat(cant), 
+                            fechasCompra: []
                         };
                     }
                     if (fechaCompra) inventarioFiltrado[codigo].fechasCompra.push(fechaCompra);
                 });
 
-                // 2. Procesar CSV
+                // 2. Procesar CSV y extraer destinos/máquinas
                 const datosSalidas = await leerCSV(fileCsv);
                 let salidasPorCodigo = {};
+                let maquinasPorCodigo = {};
 
                 datosSalidas.forEach(row => {
                     let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
                     if (!codigo) return;
                     codigo = codigo.trim();
 
+                    // Extraer fecha
                     let fechaSalidaRaw = row['Fecha'] || row['Date'] || Object.values(row)[1]; 
                     let fechaSalida = new Date(fechaSalidaRaw).getTime();
+
+                    // Extraer máquina/sección dinámicamente
+                    let maquina = row['Máquina'] || row['Maquina'] || row['Destino'] || row['Sección'] || row['Seccion'] || row['Área'] || row['Equipo'] || "";
+                    maquina = maquina.trim();
+                    if (maquina) setMaquinas.add(maquina);
 
                     if (!isNaN(fechaSalida)) {
                         if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = [];
                         salidasPorCodigo[codigo].push(fechaSalida);
+                        
+                        if (!maquinasPorCodigo[codigo]) maquinasPorCodigo[codigo] = new Set();
+                        if (maquina) maquinasPorCodigo[codigo].add(maquina);
                     }
                 });
 
-                // 3. Preparar datos para ordenar
+                // Llenar selectores dinámicos
+                const selGrupo = document.getElementById('filtroGrupo');
+                const selMaquina = document.getElementById('filtroMaquina');
+                
+                selGrupo.innerHTML = '<option value="todos">Todos</option>';
+                Array.from(setGrupos).sort().forEach(g => {
+                    selGrupo.innerHTML += `<option value="${g}">${g}</option>`;
+                });
+
+                selMaquina.innerHTML = '<option value="todas">Todas</option>';
+                Array.from(setMaquinas).sort().forEach(m => {
+                    selMaquina.innerHTML += `<option value="${m}">${m}</option>`;
+                });
+
+                // 3. Preparar datos
                 let resultadosTabla = [];
 
                 Object.keys(inventarioFiltrado).forEach(codigo => {
                     const inv = inventarioFiltrado[codigo];
                     const salidas = (salidasPorCodigo[codigo] || []).sort((a, b) => a - b);
+                    const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
                     const qFechasCompra = obtenerCincoCuartiles(inv.fechasCompra);
                     
@@ -239,77 +340,80 @@
                     
                     const qDiasSalidas = obtenerCincoCuartiles(diasEntreSalidas);
                     
-                    let proyeccion = "N/A";
+                    let proyeccionMs = "";
+                    let proyeccionTexto = "N/A";
+                    
                     if (inv.cantidad <= 1 && ultimaSalida && qDiasSalidas[2] !== null) { 
                         let diasMediana = qDiasSalidas[2];
-                        let fechaProyectadaMs = ultimaSalida + (diasMediana * 1000 * 60 * 60 * 24);
-                        proyeccion = formatFecha(fechaProyectadaMs);
+                        let fechaProyectadaMsLocal = ultimaSalida + (diasMediana * 1000 * 60 * 60 * 24);
+                        proyeccionMs = fechaProyectadaMsLocal;
+                        proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
-                    // Guardamos el objeto completo para poder ordenarlo antes de dibujarlo
                     resultadosTabla.push({
                         inv,
+                        maquinasUnicas,
                         qFechasCompra,
                         vecesUsado,
                         primeraSalida,
                         ultimaSalida,
                         qDiasSalidas,
-                        proyeccion
+                        proyeccionTexto,
+                        proyeccionMs
                     });
                 });
 
-                // 4. ORDENAR LOS DATOS (De más reciente a más lejano por Última Salida)
+                // 4. Ordenar (Más reciente arriba)
                 resultadosTabla.sort((a, b) => {
                     let fechaA = a.ultimaSalida || 0;
                     let fechaB = b.ultimaSalida || 0;
-                    
-                    // Si ambos son 0 (N/A), mantener el orden relativo
                     if (fechaA === 0 && fechaB === 0) return 0;
-                    // Enviar los N/A al fondo
                     if (fechaA === 0) return 1; 
                     if (fechaB === 0) return -1;
-                    
-                    // Orden descendente (más reciente arriba)
                     return fechaB - fechaA;
                 });
 
-                // 5. Renderizar resultados ordenados
+                // 5. Renderizar
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = ""; 
 
                 resultadosTabla.forEach(fila => {
-                    const { inv, qFechasCompra, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccion } = fila;
+                    const { inv, maquinasUnicas, qFechasCompra, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs } = fila;
 
                     const tr = document.createElement('tr');
                     tr.className = "data-row hover:bg-gray-100 transition duration-150";
                     tr.setAttribute("data-stock", inv.cantidad);
+                    tr.setAttribute("data-proyeccion-ms", proyeccionMs);
+                    tr.setAttribute("data-grupo", inv.grupo);
+                    tr.setAttribute("data-maquinas", maquinasUnicas);
                     
                     tr.innerHTML = `
                         <td class="font-bold">${inv.codigo}</td>
                         <td>${inv.descripcion}</td>
                         <td class="text-center font-bold">${inv.cantidad}</td>
-                        <td class="q-col text-sm">${formatFecha(qFechasCompra[0])}</td>
-                        <td class="q-col text-sm">${formatFecha(qFechasCompra[1])}</td>
-                        <td class="q-col text-sm">${formatFecha(qFechasCompra[2])}</td>
-                        <td class="q-col text-sm">${formatFecha(qFechasCompra[3])}</td>
-                        <td class="q-col text-sm">${formatFecha(qFechasCompra[4])}</td>
+                        <td class="dest-col text-xs" title="${maquinasUnicas}">${maquinasUnicas}</td>
+                        <td class="q-col text-xs">${formatFecha(qFechasCompra[0])}</td>
+                        <td class="q-col text-xs">${formatFecha(qFechasCompra[1])}</td>
+                        <td class="q-col text-xs font-semibold">${formatFecha(qFechasCompra[2])}</td>
+                        <td class="q-col text-xs">${formatFecha(qFechasCompra[3])}</td>
+                        <td class="q-col text-xs">${formatFecha(qFechasCompra[4])}</td>
                         <td class="text-center">${vecesUsado}</td>
-                        <td class="text-sm">${formatFecha(primeraSalida)}</td>
-                        <td class="text-sm">${formatFecha(ultimaSalida)}</td>
-                        <td class="q-col text-right">${qDiasSalidas[0] !== null ? qDiasSalidas[0].toFixed(1) : 'N/A'}</td>
-                        <td class="q-col text-right">${qDiasSalidas[1] !== null ? qDiasSalidas[1].toFixed(1) : 'N/A'}</td>
-                        <td class="q-col text-right font-bold">${qDiasSalidas[2] !== null ? qDiasSalidas[2].toFixed(1) : 'N/A'}</td>
-                        <td class="q-col text-right">${qDiasSalidas[3] !== null ? qDiasSalidas[3].toFixed(1) : 'N/A'}</td>
-                        <td class="q-col text-right">${qDiasSalidas[4] !== null ? qDiasSalidas[4].toFixed(1) : 'N/A'}</td>
-                        <td class="proj-col">${proyeccion}</td>
+                        <td class="text-xs">${formatFecha(primeraSalida)}</td>
+                        <td class="text-xs">${formatFecha(ultimaSalida)}</td>
+                        <td class="q-col text-right">${qDiasSalidas[0] !== null ? qDiasSalidas[0].toFixed(1) : '-'}</td>
+                        <td class="q-col text-right">${qDiasSalidas[1] !== null ? qDiasSalidas[1].toFixed(1) : '-'}</td>
+                        <td class="q-col text-right font-bold">${qDiasSalidas[2] !== null ? qDiasSalidas[2].toFixed(1) : '-'}</td>
+                        <td class="q-col text-right">${qDiasSalidas[3] !== null ? qDiasSalidas[3].toFixed(1) : '-'}</td>
+                        <td class="q-col text-right">${qDiasSalidas[4] !== null ? qDiasSalidas[4].toFixed(1) : '-'}</td>
+                        <td class="proj-col text-sm">${proyeccionTexto}</td>
                     `;
                     tbody.appendChild(tr);
                 });
 
                 document.getElementById('resultTable').classList.remove('hidden');
-                document.getElementById('contenedorFiltro').classList.remove('hidden');
+                document.getElementById('contenedorFiltros').classList.remove('hidden');
                 
-                aplicarFiltroStock();
+                aplicarFiltros();
 
             } catch (error) {
                 console.error(error);
