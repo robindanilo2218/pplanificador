@@ -209,11 +209,11 @@
                         <th class="sol-col" title="Fecha solicitud de compra (Inventario Online)">Fecha Solicitud</th>
                         <th class="sol-col" title="Local, Nacional o Extranjero">Origen</th>
                         
-                        <th class="q-col" title="Consumo Mínimo (Q0 Consumo)">Q0 (Consumo)</th>
-                        <th class="q-col" title="Consumo Límite Inferior (Q1 Consumo)">Q1 (Consumo)</th>
-                        <th class="q-col" title="Consumo Mediano (Q2 Consumo)">Q2 (Consumo)</th>
-                        <th class="q-col" title="Consumo Límite Superior (Q3 Consumo)">Q3 (Consumo)</th>
-                        <th class="q-col" title="Consumo Máximo (Q4 Consumo)">Q4 (Consumo)</th>
+                        <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Q0</th>
+                        <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Q1</th>
+                        <th class="q-col" title="Stock Mediano (Q2 Consumo)">Q2</th>
+                        <th class="q-col" title="Stock Límite Superior (Q3 Consumo)">Q3</th>
+                        <th class="q-col" title="Stock Máximo (Q4 Consumo)">Q4</th>
                         <th>Destinos / Máquinas</th>
                         <th>Última Compra</th>
                         <th class="text-center">Estado (Rotación)</th>
@@ -221,11 +221,11 @@
                         <th title="Demanda anual histórica proyectada a 365 días">Demanda Anual</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0 (Días)</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Q1)">Q1 (Días)</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Mediana)">Q2 (Días)</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Q3)">Q3 (Días)</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Máximo)">Q4 (Días)</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q1)">Q1</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mediana)">Q2</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q3)">Q3</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Máximo)">Q4</th>
                         <th class="proj-col sortable-header no-print" id="thSortProyeccion" title="Clic para ordenar cronológicamente">
                             Proyección Sig. Compra <span id="sortIcon">↕️</span>
                         </th>
@@ -592,7 +592,7 @@
         document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
-            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0 Consumo', 'Q1 Consumo', 'Q2 Consumo', 'Q3 Consumo', 'Q4 Consumo', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
             
             DATOS_FILTRADOS.forEach(f => {
                 datosLimpios.push([
@@ -742,14 +742,13 @@
                         }
                     });
 
-                    // FIX: Búsqueda estricta de Cantidad consumida (Ignorando columnas de Saldo o Existencia)
+                    // RESTAURADO A LA VERSIÓN ORIGINAL: Evita atrapar "Número de Documento" o "Saldos"
                     let cantKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
-                        if (kl.includes('saldo') || kl.includes('exist') || kl.includes('stock')) return false; // RECHAZAR SALDOS
-                        return kl.includes('cant') || kl.includes('qty') || kl === 'salida' || kl === 'despacho' || kl === 'consumo' || kl.includes('sac') || kl.includes('sal');
+                        return kl.includes('cant') || kl.includes('qty') || kl === 'salida' || kl === 'despacho' || kl === 'consumo';
                     });
                     let cantidad = cantKey ? parseFloat(String(row[cantKey]).replace(/,/g, '').trim()) : 1;
-                    if (isNaN(cantidad) || cantidad <= 0) cantidad = 1;
+                    if (isNaN(cantidad) || cantidad === 0) cantidad = 1;
 
                     if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = { fechas: [], cantidades: [] };
                     salidasPorCodigo[codigo].fechas.push(fechaSalida);
@@ -836,7 +835,9 @@
                 Object.keys(inventarioFiltrado).forEach(codigo => {
                     const inv = inventarioFiltrado[codigo];
                     const salidas = (salidasPorCodigo[codigo]?.fechas || []).sort((a, b) => a - b);
-                    const cantidadesSalidas = (salidasPorCodigo[codigo]?.cantidades || []).filter(c => c > 0 && !isNaN(c));
+                    
+                    // RESTAURADO: Se quitó el filtro de error que afectaba los cálculos
+                    const cantidadesSalidas = salidasPorCodigo[codigo]?.cantidades || [];
                     const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
                     const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
