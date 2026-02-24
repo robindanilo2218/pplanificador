@@ -108,8 +108,8 @@
 
                 <div class="p-4 border rounded bg-yellow-50 shadow-sm border-yellow-200">
                     <label class="block font-semibold mb-2 text-sm text-yellow-800" title="Archivos de inventario_online">3. Solicitudes (Online) <span class="text-xs font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
-                    <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv" class="block w-full text-xs cursor-pointer">
-                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico</p>
+                    <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv" class="block w-full text-xs cursor-pointer" multiple>
+                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico. Puedes subir varios.</p>
                 </div>
             </div>
             <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
@@ -618,7 +618,7 @@
         document.getElementById('btnProcesar').addEventListener('click', async () => {
             const fileExcel = document.getElementById('fileExcel').files[0];
             const fileCsv = document.getElementById('fileCsv').files[0];
-            const fileSolicitudes = document.getElementById('fileSolicitudes').files[0]; // Nuevo archivo
+            const filesSolicitudes = document.getElementById('fileSolicitudes').files; // Múltiples archivos
 
             if (!fileExcel || !fileCsv) { alert("Por favor, selecciona los archivos obligatorios de Inventario y Salidas."); return; }
 
@@ -682,104 +682,57 @@
                     }
                 });
 
-                // 2. Procesar CSV Salidas de Bodega
-                const datosSalidas = await leerCSV(fileCsv);
-                let salidasPorCodigo = {};
-                let maquinasPorCodigo = {};
-
-                datosSalidas.forEach(row => {
-                    let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
-                    if (!codigo) return; codigo = codigo.trim();
-
-                    let fechaSalidaRaw = row['Fecha'] || row['Date'] || Object.values(row)[1]; 
-                    
-                    // Modificación: usar el parseador robusto
-                    let fechaSalida = parseFechaRobusta(fechaSalidaRaw);
-                    
-                    // Extraer todos los destinos (Máquina, Sección, Departamento, etc.)
-                    let destinosEnFila = new Set();
-                    Object.keys(row).forEach(k => {
-                        let kl = k.toLowerCase().trim();
-                        if (kl.includes('maquina') || kl.includes('máquina') || 
-                            kl.includes('seccion') || kl.includes('sección') || 
-                            kl.includes('departamento') || kl.includes('depto') || 
-                            kl.includes('destino') || kl === 'área' || kl === 'area' || kl === 'equipo') {
-                            let val = String(row[k]).trim();
-                            if (val && val !== '-' && val !== '0' && val.toLowerCase() !== 'null') {
-                                destinosEnFila.add(val);
-                            }
-                        }
-                    });
-
-                    let cantKey = Object.keys(row).find(k => {
-                        let kl = k.toLowerCase().trim();
-                        return kl.includes('cant') || kl.includes('qty') || kl === 'salida' || kl === 'despacho' || kl === 'consumo';
-                    });
-                    let cantSalidaRaw = cantKey ? row[cantKey] : 1;
-                    let cantSalida = parseFloat(String(cantSalidaRaw).replace(/,/g, '').trim());
-                    if (isNaN(cantSalida) || cantSalida === 0) cantSalida = 1;
-
-                    if (!isNaN(fechaSalida)) {
-                        if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = { fechas: [], cantidades: [] };
-                        salidasPorCodigo[codigo].fechas.push(fechaSalida);
-                        salidasPorCodigo[codigo].cantidades.push(cantSalida);
-                        todasLasSalidasGlobales.push(fechaSalida); 
-                        if (!maquinasPorCodigo[codigo]) maquinasPorCodigo[codigo] = new Set();
-                        
-                        destinosEnFila.forEach(dest => {
-                            setMaquinas.add(dest);
-                            maquinasPorCodigo[codigo].add(dest);
-                        });
-                    }
-                });
-
-                // 3. Procesar Solicitudes Online (Nuevo filtro Darvin/Orozco)
+                // 3. Procesar Solicitudes Online (Múltiples archivos - Nuevo filtro Darvin/Orozco)
                 let solicitudesFiltradas = {};
-                if (fileSolicitudes) {
-                    let datosSolicitudes = [];
-                    if (fileSolicitudes.name.toLowerCase().endsWith('.csv')) {
-                        datosSolicitudes = await leerCSV(fileSolicitudes);
-                    } else {
-                        datosSolicitudes = await leerExcel(fileSolicitudes);
-                    }
-
-                    datosSolicitudes.forEach(row => {
-                        // Filtro de usuario: ignorar fila si no contiene Orozco o Darvin
-                        const rowStr = JSON.stringify(row).toLowerCase();
-                        if (!rowStr.includes('orozco') && !rowStr.includes('darvin')) return;
-
-                        let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
-                        if (!codigo) return; codigo = codigo.trim();
-
-                        // Encontrar la columna de Fecha buscando específicamente "fecha documento"
-                        let fechaKey = Object.keys(row).find(k => {
-                            let kl = k.toLowerCase().trim();
-                            return kl.includes('fecha documento') || kl.includes('fecha doc');
-                        });
-                        let fechaSolRaw = fechaKey ? row[fechaKey] : null;
+                if (filesSolicitudes && filesSolicitudes.length > 0) {
+                    for (let i = 0; i < filesSolicitudes.length; i++) {
+                        let fileSol = filesSolicitudes[i];
+                        let datosSolicitudes = [];
                         
-                        // Parseo robusto de Fechas
-                        let fechaSol = parseFechaRobusta(fechaSolRaw);
-                        
-                        if (!fechaSol || isNaN(fechaSol)) return; // Necesitamos fecha válida para saber cuál es el más reciente
-
-                        // Determinar Origen (Extranjero si dice Panamá, Local si tiene num cotización)
-                        let origen = "-";
-                        if (rowStr.includes('panamá') || rowStr.includes('panama') || rowStr.includes('extranjero')) {
-                            origen = "Extranjero";
+                        if (fileSol.name.toLowerCase().endsWith('.csv')) {
+                            datosSolicitudes = await leerCSV(fileSol);
                         } else {
-                            let cotizKey = Object.keys(row).find(k => k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot.'));
-                            // Validar que la celda de cotización exista y no esté vacía
-                            if (cotizKey && row[cotizKey] !== undefined && row[cotizKey] !== null && String(row[cotizKey]).trim() !== "") {
-                                origen = "Local";
-                            }
+                            datosSolicitudes = await leerExcel(fileSol);
                         }
 
-                        // Guardar solo el más reciente comparando el timestamp
-                        if (!solicitudesFiltradas[codigo] || fechaSol > solicitudesFiltradas[codigo].fecha) {
-                            solicitudesFiltradas[codigo] = { fecha: fechaSol, origen: origen };
-                        }
-                    });
+                        datosSolicitudes.forEach(row => {
+                            // Filtro de usuario: ignorar fila si no contiene Orozco o Darvin
+                            const rowStr = JSON.stringify(row).toLowerCase();
+                            if (!rowStr.includes('orozco') && !rowStr.includes('darvin')) return;
+
+                            let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                            if (!codigo) return; codigo = codigo.trim();
+
+                            // Encontrar la columna de Fecha buscando específicamente "fecha documento"
+                            let fechaKey = Object.keys(row).find(k => {
+                                let kl = k.toLowerCase().trim();
+                                return kl.includes('fecha documento') || kl.includes('fecha doc');
+                            });
+                            let fechaSolRaw = fechaKey ? row[fechaKey] : null;
+                            
+                            // Parseo robusto de Fechas
+                            let fechaSol = parseFechaRobusta(fechaSolRaw);
+                            
+                            if (!fechaSol || isNaN(fechaSol)) return; // Necesitamos fecha válida para saber cuál es el más reciente
+
+                            // Determinar Origen (Extranjero si dice Panamá, Local si tiene num cotización)
+                            let origen = "-";
+                            if (rowStr.includes('panamá') || rowStr.includes('panama') || rowStr.includes('extranjero')) {
+                                origen = "Extranjero";
+                            } else {
+                                let cotizKey = Object.keys(row).find(k => k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot.'));
+                                // Validar que la celda de cotización exista y no esté vacía
+                                if (cotizKey && row[cotizKey] !== undefined && row[cotizKey] !== null && String(row[cotizKey]).trim() !== "") {
+                                    origen = "Local";
+                                }
+                            }
+
+                            // Guardar solo el más reciente comparando el timestamp
+                            if (!solicitudesFiltradas[codigo] || fechaSol > solicitudesFiltradas[codigo].fecha) {
+                                solicitudesFiltradas[codigo] = { fecha: fechaSol, origen: origen };
+                            }
+                        });
+                    }
                 }
 
                 const qGlobales = obtenerCincoCuartiles(todasLasSalidasGlobales);
