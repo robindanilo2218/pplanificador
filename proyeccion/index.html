@@ -10,7 +10,6 @@
     <link rel="icon" type="image/svg+xml" href="./icon.svg">
     <meta name="theme-color" content="#2563eb">
 
-    <!-- Librerías de Estilos y Procesamiento (Se habían borrado) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -37,38 +36,26 @@
         
         /* OPTIMIZACIÓN ABSOLUTA PARA IMPRESIÓN Y PDF */
         @media print {
-            @page { size: landscape; margin: 10mm; } /* Fuerza la hoja a horizontal */
+            @page { size: landscape; margin: 10mm; } 
             body { background-color: white !important; padding: 0 !important; font-size: 8pt !important; }
             .no-print { display: none !important; }
-            
-            /* Quitar sombras, márgenes y bordes del contenedor principal */
             .max-w-[1400px] { max-width: 100% !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; border: none !important; }
-            
-            /* Liberar la tabla para que ocupe todas las páginas necesarias hacia abajo sin scroll */
             .overflow-auto { overflow: visible !important; max-height: none !important; border: none !important; }
-            
-            /* Forzar tabla a adaptarse al ancho de la hoja y permitir salto de línea */
             table { font-size: 6pt !important; width: 100% !important; table-layout: auto !important; }
             th, td { 
                 padding: 3px !important; 
                 border: 1px solid #cbd5e1 !important; 
-                white-space: normal !important; /* Permite que el texto baje a la siguiente línea */
+                white-space: normal !important; 
                 word-wrap: break-word !important;
             }
-            
-            /* Eliminar scroll interno de las celdas y expandir el texto */
             .cell-scroll { 
                 overflow: visible !important; 
                 white-space: normal !important; 
                 max-width: none !important; 
                 padding-bottom: 0 !important;
             }
-            
-            /* Repetir encabezados en cada página impresa y evitar cortes de filas a la mitad */
             thead { display: table-header-group !important; }
             tr { page-break-inside: avoid !important; }
-            
-            /* Mantener colores de fondo (cuartiles y etiquetas) */
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
     </style>
@@ -90,10 +77,10 @@
                 <button id="btnMostrarImportar" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-4 rounded text-sm transition">
                     🔄 Actualizar Datos
                 </button>
-                <button id="btnActualizarApp" class="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold py-1 px-4 rounded text-sm transition border border-purple-300" title="Descarga la última versión del sistema sin borrar tus datos">
+                <button id="btnActualizarApp" class="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold py-1 px-4 rounded text-sm transition border border-purple-300" title="Descarga la última versión de la app">
                     ✨ Actualizar App
                 </button>
-                <button id="btnBorrarDatos" class="bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-4 rounded text-sm transition border border-red-300" title="Borra los datos guardados en este dispositivo">
+                <button id="btnBorrarDatos" class="bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-4 rounded text-sm transition border border-red-300">
                     🗑️ Borrar Todo
                 </button>
             </div>
@@ -102,7 +89,7 @@
         <!-- PANTALLA DE CARGA INICIAL -->
         <div id="pantallaCarga" class="w-full text-center py-12 bg-white rounded-lg shadow-sm border mb-6">
             <p class="text-blue-600 font-bold text-lg animate-pulse">⏳ Cargando base de datos guardada...</p>
-            <p class="text-gray-500 text-sm mt-2">Por favor espera un momento.</p>
+            <p class="text-gray-500 text-sm mt-2">Optimizando registros y buscando proyecciones vencidas.</p>
         </div>
 
         <div id="zonaImportacion" class="mb-6 transition-all duration-300 no-print hidden">
@@ -124,16 +111,19 @@
 
         <div class="w-full border p-4 rounded bg-gray-50 hidden mb-6 no-print shadow-sm" id="contenedorFiltros">
             
-            <!-- BUSCADOR DE TEXTO -->
+            <!-- BUSCADOR MANUAL OPTIMIZADO -->
             <div class="w-full mb-4">
-                <label for="busquedaTexto" class="font-semibold text-sm mb-1 block text-gray-700">Buscador General:</label>
-                <div class="flex gap-2">
-                    <input type="text" id="busquedaTexto" placeholder="🔍 Buscar palabras clave (ej. motor 50 hp)..." 
+                <label for="busquedaTexto" class="font-semibold text-sm mb-1 block text-gray-700">Buscador General (Presiona Enter para buscar):</label>
+                <div class="flex flex-col md:flex-row gap-2">
+                    <input type="text" id="busquedaTexto" placeholder="🔍 Escribe código, parte o descripción..." 
                            class="w-full border-gray-300 border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition">
-                    <select id="tipoBusqueda" class="border-gray-300 border rounded p-2 text-sm bg-white cursor-pointer w-48 text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" title="Elige si los resultados deben tener TODAS las palabras juntas, o al menos UNA de ellas">
+                    <select id="tipoBusqueda" class="border-gray-300 border rounded p-2 text-sm bg-white cursor-pointer md:w-48 text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" title="Elige si los resultados deben tener TODAS las palabras juntas, o al menos UNA de ellas">
                         <option value="and">Contiene TODAS (Afinar)</option>
                         <option value="or">Contiene ALGUNA (O)</option>
                     </select>
+                    <button id="btnEjecutarBusqueda" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-bold shadow-sm transition">
+                        Buscar
+                    </button>
                 </div>
             </div>
 
@@ -181,7 +171,7 @@
                 </div>
                 <div>
                     <label class="font-semibold mr-1 text-xs text-gray-600">Últ. Salida:</label>
-                    <select id="filtroUltimaSalida" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
+                    <select id="filtroUltimaSalida" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
                         <option value="todas">Todas</option>
                         <option value="este_mes">Este mes</option>
                         <option value="mes_anterior">Mes anterior</option>
@@ -232,27 +222,30 @@
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
+        
+        <!-- BOTÓN DE CARGA RÁPIDA (PAGINACIÓN) -->
+        <div id="controlesPaginacion" class="w-full py-4 flex flex-col items-center hidden no-print">
+            <p class="text-sm text-gray-500 mb-2">Mostrando <span id="countVisibles" class="font-bold">0</span> de <span id="countTotalFiltrados" class="font-bold">0</span> resultados</p>
+            <button id="btnCargarMas" class="bg-white hover:bg-gray-100 text-blue-600 font-bold py-2 px-8 rounded border border-blue-300 shadow-sm transition">
+                ⬇️ Cargar más registros
+            </button>
+        </div>
     </div>
 
     <script>
         // Registro del Service Worker para funcionamiento Offline PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // Solo intentar registrar si estamos en un servidor web (http o https)
                 if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
                     navigator.serviceWorker.register('./sw.js')
-                        .then(reg => console.log('PWA Service Worker registrado correctamente.', reg.scope))
                         .catch(err => console.error('Error al registrar PWA:', err));
-                } else {
-                    console.log('Service Worker omitido: Se requiere un servidor web (http/https) para instalar la PWA. Protocolo actual:', window.location.protocol);
                 }
             });
         }
 
         const codeRegex = /^[A-Za-z0-9]-[A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{3}$/;
         
-        // --- NUEVO MOTOR DE BASE DE DATOS LOCAL (IndexedDB) ---
-        // Reemplaza a localStorage para permitir guardar archivos enormes sin límite de 5MB
+        // --- BASE DE DATOS LOCAL (IndexedDB) ---
         const DB_NAME = 'BodegaDB';
         const STORE_NAME = 'analisisStore';
 
@@ -280,9 +273,7 @@
                     tx.oncomplete = () => resolve();
                     tx.onerror = () => reject(tx.error);
                 });
-            } catch (error) {
-                console.error("Error guardando en IndexedDB:", error);
-            }
+            } catch (error) { console.error("Error guardando en IndexedDB:", error); }
         }
 
         async function cargarDatos() {
@@ -295,10 +286,7 @@
                     request.onsuccess = () => resolve(request.result);
                     request.onerror = () => reject(request.error);
                 });
-            } catch (error) {
-                console.error("Error cargando de IndexedDB:", error);
-                return null;
-            }
+            } catch (error) { return null; }
         }
 
         async function borrarDatosLocales() {
@@ -311,12 +299,10 @@
                     tx.oncomplete = () => resolve();
                     tx.onerror = () => reject(tx.error);
                 });
-            } catch (error) {
-                console.error("Error borrando en IndexedDB:", error);
-            }
+            } catch (error) { console.error("Error borrando en IndexedDB:", error); }
         }
-        // ------------------------------------------------------
 
+        // --- MATEMÁTICAS Y FORMATO ---
         function calcularCuartil(arr, q) {
             const ordenado = [...arr].sort((a, b) => a - b);
             const pos = (ordenado.length - 1) * q;
@@ -365,204 +351,20 @@
             });
         }
 
-        function aplicarFiltros() {
-            const fBusqueda = document.getElementById('busquedaTexto').value.toLowerCase().trim();
-            const tipoBusqueda = document.getElementById('tipoBusqueda').value;
-            const fStock = document.getElementById('filtroStock').value;
-            const fProy = document.getElementById('filtroProyeccion').value;
-            const fGrupo = document.getElementById('filtroGrupo').value;
-            const fMaquina = document.getElementById('filtroMaquina').value;
-            const fEstado = document.getElementById('filtroEstado').value;
-            const fUltimaSalida = document.getElementById('filtroUltimaSalida').value;
-            const fDesde = document.getElementById('filtroSalidaDesde').value;
-            const fHasta = document.getElementById('filtroSalidaHasta').value;
+        // --- SISTEMA DE RENDERIZADO RÁPIDO (LAZY LOADING) EN SEGUNDO PLANO ---
+        let TODOS_LOS_DATOS = []; 
+        let DATOS_FILTRADOS = [];
+        let PUNTERO_PAGINA = 0;
+        const REGISTROS_POR_PAGINA = 50;
 
-            const contRango = document.getElementById('contenedorRangoSalidas');
-            if (fUltimaSalida === 'rango') {
-                contRango.classList.remove('hidden');
-                contRango.classList.add('flex');
-            } else {
-                contRango.classList.add('hidden');
-                contRango.classList.remove('flex');
-            }
-            
-            const filas = document.querySelectorAll('.data-row');
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth();
-
-            filas.forEach(fila => {
-                const codigoTxt = fila.getAttribute('data-codigo');
-                const descTxt = fila.getAttribute('data-desc');
-                const noParteTxt = fila.getAttribute('data-noparte') || "";
-                const stock = parseFloat(fila.getAttribute('data-stock'));
-                const proyMs = fila.getAttribute('data-proyeccion-ms');
-                const grupo = fila.getAttribute('data-grupo');
-                const maquinas = fila.getAttribute('data-maquinas').toLowerCase();
-                const estado = fila.getAttribute('data-estado');
-                const ultimaSalidaMs = fila.getAttribute('data-ultimasalida-ms');
-                
-                let mostrar = true;
-                
-                // 1. Filtro de Texto Libre Multipalabra (Buscador)
-                if (fBusqueda !== "") {
-                    const terminos = fBusqueda.split(/\s+/).filter(t => t.length > 0);
-                    const textoFila = `${codigoTxt} ${descTxt} ${noParteTxt}`;
-                    
-                    if (tipoBusqueda === 'and') {
-                        // AND: TODAS las palabras deben estar en algún lugar de la fila (en cualquier orden)
-                        const cumpleTodos = terminos.every(term => textoFila.includes(term));
-                        if (!cumpleTodos) mostrar = false;
-                    } else {
-                        // OR: Con que AL MENOS UNA palabra coincida, se muestra la fila
-                        const cumpleAlguno = terminos.some(term => textoFila.includes(term));
-                        if (!cumpleAlguno) mostrar = false;
-                    }
-                }
-
-                // 2. Filtros Desplegables
-                if (mostrar && fGrupo !== 'todos' && grupo !== fGrupo) mostrar = false;
-                if (mostrar && fMaquina !== 'todas' && !maquinas.includes(fMaquina.toLowerCase())) mostrar = false;
-                if (mostrar && fEstado !== 'todos' && estado !== fEstado) mostrar = false;
-
-                if (mostrar) {
-                    if (fStock === 'cero' && stock !== 0) mostrar = false;
-                    else if (fStock === 'uno' && stock !== 1) mostrar = false;
-                    else if (fStock === 'resto' && stock <= 1) mostrar = false;
-                }
-                
-                if (mostrar && fUltimaSalida !== 'todas') {
-                    if (!ultimaSalidaMs) {
-                        mostrar = false;
-                    } else {
-                        const dSalida = new Date(parseFloat(ultimaSalidaMs));
-                        const localSalida = new Date(dSalida.getTime() + dSalida.getTimezoneOffset() * 60000);
-                        const sYear = localSalida.getFullYear();
-                        const sMonth = localSalida.getMonth();
-
-                        if (fUltimaSalida === 'este_mes') {
-                            if (sYear !== currentYear || sMonth !== currentMonth) mostrar = false;
-                        } else if (fUltimaSalida === 'mes_anterior') {
-                            let lastMonth = currentMonth - 1; let lastYear = currentYear;
-                            if (lastMonth < 0) { lastMonth = 11; lastYear--; }
-                            if (sYear !== lastYear || sMonth !== lastMonth) mostrar = false;
-                        } else if (fUltimaSalida === 'este_anio') {
-                            if (sYear !== currentYear) mostrar = false;
-                        } else if (fUltimaSalida === 'anio_anterior') {
-                            if (sYear !== currentYear - 1) mostrar = false;
-                        } else if (fUltimaSalida === 'rango') {
-                            if (fDesde) {
-                                const desdeDate = new Date(fDesde + "T00:00:00");
-                                if (localSalida.getTime() < desdeDate.getTime()) mostrar = false;
-                            }
-                            if (fHasta) {
-                                const hastaDate = new Date(fHasta + "T23:59:59");
-                                if (localSalida.getTime() > hastaDate.getTime()) mostrar = false;
-                            }
-                        }
-                    }
-                }
-
-                if (mostrar && fProy !== 'todas') {
-                    if (!proyMs) mostrar = false; 
-                    else {
-                        const dProy = new Date(parseFloat(proyMs));
-                        if (fProy === 'este_mes' && (dProy.getFullYear() !== currentYear || dProy.getMonth() !== currentMonth)) mostrar = false;
-                        else if (fProy === 'mes_anterior') {
-                            let lastMonth = currentMonth - 1; let lastYear = currentYear;
-                            if (lastMonth < 0) { lastMonth = 11; lastYear--; }
-                            if (dProy.getFullYear() !== lastYear || dProy.getMonth() !== lastMonth) mostrar = false;
-                        } 
-                        else if (fProy === 'este_anio' && dProy.getFullYear() !== currentYear) mostrar = false;
-                    }
-                }
-                fila.style.display = mostrar ? '' : 'none';
-            });
-        }
-
-        // Listeners para todos los filtros
-        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda', 'filtroUltimaSalida', 'filtroSalidaDesde', 'filtroSalidaHasta'].forEach(id => {
-            document.getElementById(id).addEventListener('change', aplicarFiltros);
-        });
-        
-        // Listener para el buscador de texto en tiempo real
-        document.getElementById('busquedaTexto').addEventListener('input', aplicarFiltros);
-
-        // Ordenamiento
-        let sortAscendente = true; 
-        document.getElementById('thSortProyeccion').addEventListener('click', () => {
+        function renderizarBloqueTabla() {
             const tbody = document.getElementById('tableBody');
-            const filas = Array.from(tbody.querySelectorAll('.data-row'));
-
-            filas.sort((a, b) => {
-                const valA = a.getAttribute('data-proyeccion-ms');
-                const valB = b.getAttribute('data-proyeccion-ms');
-                if (!valA && !valB) return 0;
-                if (!valA) return 1; 
-                if (!valB) return -1;
-                return sortAscendente ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
-            });
-
-            filas.forEach(fila => tbody.appendChild(fila));
-            sortAscendente = !sortAscendente;
-            document.getElementById('sortIcon').innerText = sortAscendente ? '🔼' : '🔽';
-        });
-
-        // Exportación
-        document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
-
-        document.getElementById('btnExportarExcel').addEventListener('click', () => {
-            const tablaOriginal = document.getElementById('resultTable');
-            const filasVisibles = Array.from(tablaOriginal.querySelectorAll('tr')).filter(fila => fila.style.display !== 'none');
+            const bloque = DATOS_FILTRADOS.slice(PUNTERO_PAGINA, PUNTERO_PAGINA + REGISTROS_POR_PAGINA);
             
-            const datosLimpios = [];
-            filasVisibles.forEach(fila => {
-                const rowData = [];
-                const celdas = Array.from(fila.querySelectorAll('th, td')).filter(celda => !celda.classList.contains('hidden'));
-                celdas.forEach(celda => {
-                    let texto = celda.innerText.replace('↕️', '').replace('🔼', '').replace('🔽', '').trim();
-                    rowData.push(texto);
-                });
-                datosLimpios.push(rowData);
-            });
-
-            const hoja = XLSX.utils.aoa_to_sheet(datosLimpios);
-            const libro = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(libro, hoja, "Bodega_Analisis");
-            
-            const fecha = new Date().toISOString().slice(0, 10);
-            XLSX.writeFile(libro, `Analisis_Bodega_${fecha}.xlsx`);
-        });
-
-        // Renderizado Base
-        function renderizarTablaYFiltros(datos) {
-            const { resultadosTabla, gruposUnicos, maquinasUnicas } = datos;
-
-            const selGrupo = document.getElementById('filtroGrupo');
-            const selMaquina = document.getElementById('filtroMaquina');
-            selGrupo.innerHTML = '<option value="todos">Todos</option>';
-            gruposUnicos.sort().forEach(g => selGrupo.innerHTML += `<option value="${g}">${g}</option>`);
-            selMaquina.innerHTML = '<option value="todas">Todas</option>';
-            maquinasUnicas.sort().forEach(m => selMaquina.innerHTML += `<option value="${m}">${m}</option>`);
-
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = ""; 
-
-            resultadosTabla.forEach(fila => {
-                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs } = fila;
-                const qConsumo = fila.qConsumo || [null, null, null, null, null];
+            bloque.forEach(fila => {
+                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo } = fila;
                 const tr = document.createElement('tr');
-                tr.className = "data-row hover:bg-gray-100 transition duration-150";
-                tr.setAttribute("data-stock", inv.cantidad);
-                tr.setAttribute("data-proyeccion-ms", proyeccionMs || "");
-                tr.setAttribute("data-grupo", inv.grupo);
-                tr.setAttribute("data-maquinas", maquinasUnicas);
-                tr.setAttribute("data-estado", estado); 
-                tr.setAttribute("data-ultimasalida-ms", ultimaSalida || "");
-                // Atributos de búsqueda para texto libre
-                tr.setAttribute("data-codigo", inv.codigo.toLowerCase());
-                tr.setAttribute("data-desc", inv.descripcion.toLowerCase());
-                tr.setAttribute("data-noparte", (inv.noParte || "").toLowerCase());
+                tr.className = "hover:bg-gray-100 transition duration-150";
                 
                 tr.innerHTML = `
                     <td><div class="cell-scroll mw-120 font-bold text-xs" title="${inv.codigo}">${inv.codigo}</div></td>
@@ -585,21 +387,208 @@
                     <td class="q-col text-right font-bold text-red-600">${qDiasSalidas[2] !== null ? qDiasSalidas[2].toFixed(1) : '-'}</td>
                     <td class="q-col text-right">${qDiasSalidas[3] !== null ? qDiasSalidas[3].toFixed(1) : '-'}</td>
                     <td class="q-col text-right">${qDiasSalidas[4] !== null ? qDiasSalidas[4].toFixed(1) : '-'}</td>
-                    <td class="proj-col text-sm no-print">${proyeccionTexto}</td>
+                    <td class="proj-col text-sm no-print" data-val="${proyeccionMs||0}">${proyeccionTexto}</td>
                     <td class="proj-col text-sm hidden print:table-cell">${proyeccionTexto}</td>
                 `;
                 tbody.appendChild(tr);
             });
+
+            PUNTERO_PAGINA += bloque.length;
+
+            const btnPaginacion = document.getElementById('controlesPaginacion');
+            document.getElementById('countVisibles').innerText = PUNTERO_PAGINA;
+            document.getElementById('countTotalFiltrados').innerText = DATOS_FILTRADOS.length;
+            
+            if (PUNTERO_PAGINA < DATOS_FILTRADOS.length) {
+                btnPaginacion.classList.remove('hidden');
+            } else {
+                btnPaginacion.classList.add('hidden');
+            }
+        }
+
+        // Ejecuta los filtros sobre el Array en memoria, no sobre el HTML (100x más rápido)
+        function ejecutarBusqueda() {
+            const fBusqueda = document.getElementById('busquedaTexto').value.toLowerCase().trim();
+            const tipoBusqueda = document.getElementById('tipoBusqueda').value;
+            const fStock = document.getElementById('filtroStock').value;
+            const fProy = document.getElementById('filtroProyeccion').value;
+            const fGrupo = document.getElementById('filtroGrupo').value;
+            const fMaquina = document.getElementById('filtroMaquina').value;
+            const fEstado = document.getElementById('filtroEstado').value;
+            const fUltimaSalida = document.getElementById('filtroUltimaSalida').value;
+            const fDesde = document.getElementById('filtroSalidaDesde').value;
+            const fHasta = document.getElementById('filtroSalidaHasta').value;
+
+            const contRango = document.getElementById('contenedorRangoSalidas');
+            if (fUltimaSalida === 'rango') {
+                contRango.classList.remove('hidden'); contRango.classList.add('flex');
+            } else {
+                contRango.classList.add('hidden'); contRango.classList.remove('flex');
+            }
+
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+
+            DATOS_FILTRADOS = TODOS_LOS_DATOS.filter(fila => {
+                let mostrar = true;
+
+                // 1. Buscador Manual (Texto Libre Multipalabra)
+                if (fBusqueda !== "") {
+                    const terminos = fBusqueda.split(/\s+/).filter(t => t.length > 0);
+                    const textoFila = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte}`.toLowerCase();
+                    
+                    if (tipoBusqueda === 'and') {
+                        if (!terminos.every(term => textoFila.includes(term))) mostrar = false;
+                    } else {
+                        if (!terminos.some(term => textoFila.includes(term))) mostrar = false;
+                    }
+                }
+
+                // 2. Filtros Desplegables
+                if (mostrar && fGrupo !== 'todos' && fila.inv.grupo !== fGrupo) mostrar = false;
+                if (mostrar && fMaquina !== 'todas' && !fila.maquinasUnicas.toLowerCase().includes(fMaquina.toLowerCase())) mostrar = false;
+                if (mostrar && fEstado !== 'todos' && fila.estado !== fEstado) mostrar = false;
+
+                if (mostrar) {
+                    if (fStock === 'cero' && fila.inv.cantidad !== 0) mostrar = false;
+                    else if (fStock === 'uno' && fila.inv.cantidad !== 1) mostrar = false;
+                    else if (fStock === 'resto' && fila.inv.cantidad <= 1) mostrar = false;
+                }
+                
+                if (mostrar && fUltimaSalida !== 'todas') {
+                    if (!fila.ultimaSalida) mostrar = false;
+                    else {
+                        const dSalida = new Date(parseFloat(fila.ultimaSalida));
+                        const localSalida = new Date(dSalida.getTime() + dSalida.getTimezoneOffset() * 60000);
+                        const sYear = localSalida.getFullYear();
+                        const sMonth = localSalida.getMonth();
+
+                        if (fUltimaSalida === 'este_mes' && (sYear !== currentYear || sMonth !== currentMonth)) mostrar = false;
+                        else if (fUltimaSalida === 'mes_anterior') {
+                            let lMonth = currentMonth - 1; let lYear = currentYear;
+                            if (lMonth < 0) { lMonth = 11; lYear--; }
+                            if (sYear !== lYear || sMonth !== lMonth) mostrar = false;
+                        } 
+                        else if (fUltimaSalida === 'este_anio' && sYear !== currentYear) mostrar = false;
+                        else if (fUltimaSalida === 'anio_anterior' && sYear !== currentYear - 1) mostrar = false;
+                        else if (fUltimaSalida === 'rango') {
+                            if (fDesde && localSalida.getTime() < new Date(fDesde + "T00:00:00").getTime()) mostrar = false;
+                            if (fHasta && localSalida.getTime() > new Date(fHasta + "T23:59:59").getTime()) mostrar = false;
+                        }
+                    }
+                }
+
+                if (mostrar && fProy !== 'todas') {
+                    if (!fila.proyeccionMs) mostrar = false; 
+                    else {
+                        const dProy = new Date(parseFloat(fila.proyeccionMs));
+                        if (fProy === 'este_mes' && (dProy.getFullYear() !== currentYear || dProy.getMonth() !== currentMonth)) mostrar = false;
+                        else if (fProy === 'mes_anterior') {
+                            let lMonth = currentMonth - 1; let lYear = currentYear;
+                            if (lMonth < 0) { lMonth = 11; lYear--; }
+                            if (dProy.getFullYear() !== lYear || dProy.getMonth() !== lMonth) mostrar = false;
+                        } 
+                        else if (fProy === 'este_anio' && dProy.getFullYear() !== currentYear) mostrar = false;
+                    }
+                }
+
+                return mostrar;
+            });
+
+            // Limpiar la tabla y pintar el primer bloque de resultados
+            document.getElementById('tableBody').innerHTML = "";
+            PUNTERO_PAGINA = 0;
+            renderizarBloqueTabla();
+        }
+
+        // Listeners: La búsqueda de texto SOLO se ejecuta al dar Enter o clic en el botón
+        document.getElementById('busquedaTexto').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') ejecutarBusqueda();
+        });
+        document.getElementById('btnEjecutarBusqueda').addEventListener('click', ejecutarBusqueda);
+        
+        // Los filtros de menús siguen siendo automáticos
+        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda', 'filtroUltimaSalida', 'filtroSalidaDesde', 'filtroSalidaHasta'].forEach(id => {
+            document.getElementById(id).addEventListener('change', ejecutarBusqueda);
+        });
+
+        document.getElementById('btnCargarMas').addEventListener('click', renderizarBloqueTabla);
+
+        let sortAscendente = true; 
+        document.getElementById('thSortProyeccion').addEventListener('click', () => {
+            // Ordenar el arreglo en memoria
+            DATOS_FILTRADOS.sort((a, b) => {
+                const valA = a.proyeccionMs;
+                const valB = b.proyeccionMs;
+                if (!valA && !valB) return 0;
+                if (!valA) return 1; 
+                if (!valB) return -1;
+                return sortAscendente ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
+            });
+            
+            sortAscendente = !sortAscendente;
+            document.getElementById('sortIcon').innerText = sortAscendente ? '🔼' : '🔽';
+            
+            // Repintar desde cero
+            document.getElementById('tableBody').innerHTML = "";
+            PUNTERO_PAGINA = 0;
+            renderizarBloqueTabla();
+        });
+
+        // Exportación y PDF
+        document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
+
+        document.getElementById('btnExportarExcel').addEventListener('click', () => {
+            // Exporta TODO lo filtrado, no solo lo visible en la página
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            
+            DATOS_FILTRADOS.forEach(f => {
+                datosLimpios.push([
+                    f.inv.codigo, f.inv.noParte || "-", f.inv.descripcion, f.inv.cantidad,
+                    formatQ(f.qConsumo[0]), formatQ(f.qConsumo[1]), formatQ(f.qConsumo[2]), formatQ(f.qConsumo[3]), formatQ(f.qConsumo[4]),
+                    f.maquinasUnicas, formatFecha(f.inv.ultimaCompra), f.estado, f.vecesUsado,
+                    formatFecha(f.primeraSalida), formatFecha(f.ultimaSalida),
+                    formatQ(f.qDiasSalidas[0]), formatQ(f.qDiasSalidas[1]), formatQ(f.qDiasSalidas[2]), formatQ(f.qDiasSalidas[3]), formatQ(f.qDiasSalidas[4]),
+                    f.proyeccionTexto
+                ]);
+            });
+
+            const hoja = XLSX.utils.aoa_to_sheet(datosLimpios);
+            const libro = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(libro, hoja, "Bodega_Analisis");
+            const fecha = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(libro, `Analisis_Bodega_${fecha}.xlsx`);
+        });
+
+        // Configuración inicial de la interfaz
+        function inicializarInterfaz(datos) {
+            TODOS_LOS_DATOS = datos.resultadosTabla;
+
+            // PRIORIDAD: Ordenar por fecha de proyección más antigua primero (Urgentes)
+            TODOS_LOS_DATOS.sort((a, b) => {
+                if (!a.proyeccionMs && !b.proyeccionMs) return (b.ultimaSalida || 0) - (a.ultimaSalida || 0); // Si no hay proyección, ordenar por última salida
+                if (!a.proyeccionMs) return 1;
+                if (!b.proyeccionMs) return -1;
+                return a.proyeccionMs - b.proyeccionMs; // Menor a mayor (Fechas viejas arriba)
+            });
+
+            const selGrupo = document.getElementById('filtroGrupo');
+            const selMaquina = document.getElementById('filtroMaquina');
+            selGrupo.innerHTML = '<option value="todos">Todos</option>';
+            datos.gruposUnicos.sort().forEach(g => selGrupo.innerHTML += `<option value="${g}">${g}</option>`);
+            selMaquina.innerHTML = '<option value="todas">Todas</option>';
+            datos.maquinasUnicas.sort().forEach(m => selMaquina.innerHTML += `<option value="${m}">${m}</option>`);
 
             document.getElementById('resultTable').classList.remove('hidden');
             document.getElementById('contenedorFiltros').classList.remove('hidden');
             document.getElementById('zonaImportacion').classList.add('hidden');
             document.getElementById('controlesSesion').classList.remove('hidden');
             
-            aplicarFiltros();
+            ejecutarBusqueda();
         }
 
-        // Procesamiento Principal
+        // --- PROCESAMIENTO DE ARCHIVOS ---
         document.getElementById('btnProcesar').addEventListener('click', async () => {
             const fileExcel = document.getElementById('fileExcel').files[0];
             const fileCsv = document.getElementById('fileCsv').files[0];
@@ -629,12 +618,10 @@
 
                     let descKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
-                        // Se eliminó 'art' de la búsqueda para evitar capturar la columna "Artículo" que tiene el código
                         return kl.includes('desc') || kl.includes('nomb') || kl.includes('detalle');
                     });
                     let desc = descKey ? row[descKey] : "Sin descripción";
 
-                    // Extracción inteligente del Número de Parte (Actualizado para incluir "Catálogo")
                     let noParteKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
                         return kl.includes('parte') || kl === 'pn' || kl === 'part number' || kl.includes('catalogo') || kl.includes('catálogo');
@@ -680,7 +667,6 @@
                     let maquina = (row['Máquina'] || row['Maquina'] || row['Destino'] || row['Sección'] || row['Seccion'] || row['Área'] || row['Equipo'] || "").trim();
                     if (maquina) setMaquinas.add(maquina);
 
-                    // Extraer Cantidad de la salida para el consumo
                     let cantKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
                         return kl.includes('cant') || kl.includes('qty') || kl === 'salida' || kl === 'despacho' || kl === 'consumo';
@@ -738,18 +724,14 @@
                     resultadosTabla.push({ inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo });
                 });
 
-                resultadosTabla.sort((a, b) => (b.ultimaSalida || 0) - (a.ultimaSalida || 0));
-
                 const datosParaGuardar = {
                     resultadosTabla,
                     gruposUnicos: Array.from(setGrupos),
                     maquinasUnicas: Array.from(setMaquinas)
                 };
 
-                // Guardar en IndexedDB (sin límite de espacio de 5MB)
                 await guardarDatos(datosParaGuardar);
-
-                renderizarTablaYFiltros(datosParaGuardar);
+                inicializarInterfaz(datosParaGuardar);
                 document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
 
             } catch (error) {
@@ -766,28 +748,15 @@
             }
         });
 
-        // Botón para Forzar Actualización de la PWA (Borra caché, conserva LocalStorage)
         document.getElementById('btnActualizarApp').addEventListener('click', () => {
             if(confirm("¿Buscar e instalar una nueva versión de la aplicación? \n\nTus datos guardados NO se perderán.")) {
                 if ('serviceWorker' in navigator && caches) {
-                    // 1. Limpiar todas las cachés del Service Worker
-                    caches.keys().then(names => {
-                        return Promise.all(names.map(name => caches.delete(name)));
-                    }).then(() => {
-                        // 2. Desregistrar los Service Workers activos
-                        navigator.serviceWorker.getRegistrations().then(registrations => {
-                            let unregisterPromises = registrations.map(registration => registration.unregister());
-                            return Promise.all(unregisterPromises);
-                        }).then(() => {
-                            // 3. Recargar la página forzando la red (agregando un timestamp para evitar caché del navegador)
-                            window.location.href = window.location.pathname + '?updated=' + new Date().getTime();
-                        });
-                    }).catch(err => {
-                        console.error("Error al actualizar la app:", err);
-                        window.location.reload();
-                    });
+                    caches.keys().then(names => Promise.all(names.map(name => caches.delete(name))))
+                    .then(() => navigator.serviceWorker.getRegistrations())
+                    .then(registrations => Promise.all(registrations.map(r => r.unregister())))
+                    .then(() => { window.location.href = window.location.pathname + '?updated=' + new Date().getTime(); })
+                    .catch(err => { window.location.reload(); });
                 } else {
-                    // Fallback si no hay SW activo
                     window.location.href = window.location.pathname + '?updated=' + new Date().getTime();
                 }
             }
@@ -804,16 +773,14 @@
             try {
                 const datosGuardados = await cargarDatos();
                 if (datosGuardados && datosGuardados.resultadosTabla && datosGuardados.resultadosTabla.length > 0) {
-                    renderizarTablaYFiltros(datosGuardados);
+                    inicializarInterfaz(datosGuardados);
                 } else {
-                    // Si no hay datos, mostrar la zona de importación
                     zonaImportacion.classList.remove('hidden');
                 }
             } catch (error) {
                 console.error("Error al iniciar la base de datos:", error);
                 zonaImportacion.classList.remove('hidden');
             } finally {
-                // Ocultar la pantalla de carga una vez que termina de validar
                 if (pantallaCarga) pantallaCarga.classList.add('hidden');
             }
         });
