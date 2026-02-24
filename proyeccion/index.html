@@ -369,11 +369,39 @@
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                    resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+                    try {
+                        // Intento 1: Leer como Excel normal (Binario real)
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                        resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+                    } catch (err1) {
+                        // Intento 2 (FALLBACK RADGRID): Es un HTML o XML disfrazado de .xls
+                        console.warn("Formato Excel no estándar detectado (Probablemente RadGrid). Intentando modo compatibilidad...", err1);
+                        const readerFallback = new FileReader();
+                        readerFallback.onload = (e2) => {
+                            try {
+                                const text = e2.target.result;
+                                // Si es un HTML disfrazado, buscar la tabla interna
+                                if (text.toLowerCase().includes('<table')) {
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(text, 'text/html');
+                                    const table = doc.querySelector('table');
+                                    if (table) {
+                                        const wbHTML = XLSX.utils.table_to_book(table, {cellDates: true});
+                                        return resolve(XLSX.utils.sheet_to_json(wbHTML.Sheets[wbHTML.SheetNames[0]]));
+                                    }
+                                }
+                                // Si es un XML Spreadsheet 2003
+                                const wbFallback = XLSX.read(text, { type: 'binary', cellDates: true });
+                                resolve(XLSX.utils.sheet_to_json(wbFallback.Sheets[wbFallback.SheetNames[0]]));
+                            } catch (errFallback) {
+                                reject(new Error("No se pudo interpretar el archivo RadGridExport. El formato interno está corrupto o es irreconocible."));
+                            }
+                        };
+                        readerFallback.readAsBinaryString(file);
+                    }
                 };
-                reader.onerror = reject;
+                reader.onerror = () => reject(new Error("Error de lectura del archivo en el navegador."));
                 reader.readAsArrayBuffer(file);
             });
         }
@@ -635,60 +663,60 @@
                 const datosInventario = await leerExcel(fileExcel);
                 let inventarioFiltrado = {};
 
-                datosInventario.forEach(row => {
-                    let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
-                    if (!codigo) return; codigo = codigo.trim();
+                datosInventario.forEach((row, index) => {
+                    try {
+                        if (!row || typeof row !== 'object') return; // Protección contra filas vacías
+                        
+                        let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                        if (!codigo) return; codigo = codigo.trim();
 
-                    let partes = codigo.split('-');
-                    let grupoCodigo = partes[0] + '-' + partes[1];
-                    setGrupos.add(grupoCodigo);
+                        let partes = codigo.split('-');
+                        let grupoCodigo = partes[0] + '-' + partes[1];
+                        setGrupos.add(grupoCodigo);
 
-                    let descKey = Object.keys(row).find(k => {
-                        let kl = k.toLowerCase().trim();
-                        return kl.includes('desc') || kl.includes('nomb') || kl.includes('detalle');
-                    });
-                    let desc = descKey ? row[descKey] : "Sin descripción";
+                        let descKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('desc') || kl.includes('nomb') || kl.includes('detalle');
+                        });
+                        let desc = descKey ? row[descKey] : "Sin descripción";
 
-                    let noParteKey = Object.keys(row).find(k => {
-                        let kl = k.toLowerCase().trim();
-                        return kl.includes('parte') || kl === 'pn' || kl === 'part number' || kl.includes('catalogo') || kl.includes('catálogo');
-                    });
-                    let noParte = noParteKey ? row[noParteKey] : "-";
+                        let noParteKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('parte') || kl === 'pn' || kl === 'part number' || kl.includes('catalogo') || kl.includes('catálogo');
+                        });
+                        let noParte = noParteKey ? row[noParteKey] : "-";
 
-                    let cantKey = Object.keys(row).find(k => {
-                        let kl = k.toLowerCase().trim();
-                        return kl.includes('cant') || kl.includes('exist') || kl.includes('stock') || kl.includes('disp') || kl.includes('saldo');
-                    });
-                    
-                    let cantRaw = cantKey ? row[cantKey] : 0;
-                    let cant = parseFloat(String(cantRaw).replace(/,/g, '').trim());
-                    if (isNaN(cant)) cant = 0;
-                    
-                    let fechaKey = Object.keys(row).find(k => {
-                        let kl = k.toLowerCase().trim();
-                        return kl.includes('fecha') || kl.includes('date') || kl.includes('últ') || kl.includes('ult');
-                    });
-                    let fechaCompraRaw = fechaKey ? row[fechaKey] : null;
-                    
-                    // Modificación: usar el parseador robusto
-                    let fechaCompra = parseFechaRobusta(fechaCompraRaw);
+                        let cantKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('cant') || kl.includes('exist') || kl.includes('stock') || kl.includes('disp') || kl.includes('saldo');
+                        });
+                        
+                        let cantRaw = cantKey ? row[cantKey] : 0;
+                        let cant = parseFloat(String(cantRaw).replace(/,/g, '').trim());
+                        if (isNaN(cant)) cant = 0;
+                        
+                        let fechaKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('fecha') || kl.includes('date') || kl.includes('últ') || kl.includes('ult');
+                        });
+                        let fechaCompraRaw = fechaKey ? row[fechaKey] : null;
+                        
+                        // Modificación: usar el parseador robusto
+                        let fechaCompra = parseFechaRobusta(fechaCompraRaw);
 
-                    if (!inventarioFiltrado[codigo]) {
-                        inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra };
-                    } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
-                        inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
-                        inventarioFiltrado[codigo].cantidad = cant;
-                        inventarioFiltrado[codigo].noParte = String(noParte);
+                        if (!inventarioFiltrado[codigo]) {
+                            inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra };
+                        } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
+                            inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
+                            inventarioFiltrado[codigo].cantidad = cant;
+                            inventarioFiltrado[codigo].noParte = String(noParte);
+                        }
+                    } catch (errRow) {
+                        console.error("Fila omitida por error de formato en la línea " + index, errRow);
                     }
                 });
 
-                // 3. Procesar Solicitudes Online (Múltiples archivos - Nuevo filtro Darvin/Orozco)
-                let solicitudesFiltradas = {};
-                if (filesSolicitudes && filesSolicitudes.length > 0) {
-                    for (let i = 0; i < filesSolicitudes.length; i++) {
-                        let fileSol = filesSolicitudes[i];
-                        let datosSolicitudes = [];
-                        
+                // 2. Procesar CSV Salidas de Bodega
                         if (fileSol.name.toLowerCase().endsWith('.csv')) {
                             datosSolicitudes = await leerCSV(fileSol);
                         } else {
@@ -791,8 +819,8 @@
                 document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
 
             } catch (error) {
-                console.error(error);
-                alert("Ocurrió un error al procesar los archivos. Verifica los formatos de columnas.");
+                console.error("Error crítico durante el procesamiento:", error);
+                alert("Error al procesar: " + (error.message || "Verifica los formatos de columnas. Revisa la consola para más detalles."));
                 document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
             }
         });
