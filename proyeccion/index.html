@@ -109,7 +109,7 @@
                 <div class="p-4 border rounded bg-yellow-50 shadow-sm border-yellow-200">
                     <label class="block font-semibold mb-2 text-sm text-yellow-800" title="Archivos de inventario_online">3. Solicitudes (Online) <span class="text-xs font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
                     <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv" class="block w-full text-xs cursor-pointer">
-                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico</p>
+                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Darvin/Orozco</p>
                 </div>
             </div>
             <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
@@ -333,9 +333,32 @@
             return [calcularCuartil(arr, 0), calcularCuartil(arr, 0.25), calcularCuartil(arr, 0.50), calcularCuartil(arr, 0.75), calcularCuartil(arr, 1)];
         }
 
+        // NUEVO: Función maestra y robusta para interpretar cualquier tipo de fecha sin que la app colapse
+        function parseFechaRobusta(fechaRaw) {
+            if (!fechaRaw) return null;
+            if (fechaRaw instanceof Date) return fechaRaw.getTime();
+            if (typeof fechaRaw === 'number') return new Date(Math.round((fechaRaw - 25569) * 86400 * 1000)).getTime();
+            if (typeof fechaRaw === 'string') {
+                let text = fechaRaw.trim();
+                let parts = text.split('/');
+                if (parts.length === 3) {
+                    let year = parts[2].length === 2 ? "20" + parts[2] : parts[2];
+                    return new Date(`${year}-${parts[1]}-${parts[0]}T12:00:00`).getTime();
+                }
+                let partsDash = text.split('-');
+                if (partsDash.length === 3 && partsDash[0].length <= 2) {
+                    let year = partsDash[2].length === 2 ? "20" + partsDash[2] : partsDash[2];
+                    return new Date(`${year}-${partsDash[1]}-${partsDash[0]}T12:00:00`).getTime();
+                }
+                return new Date(text).getTime();
+            }
+            return null;
+        }
+
         function formatFecha(timestamp) {
-            if (!timestamp) return "-";
+            if (!timestamp || isNaN(timestamp)) return "-"; // Modificado para evitar el error crítico RangeError
             const d = new Date(timestamp);
+            if (isNaN(d.getTime())) return "-";
             const localDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
             return localDate.toLocaleDateString('es-GT');
         }
@@ -646,7 +669,9 @@
                         return kl.includes('fecha') || kl.includes('date') || kl.includes('últ') || kl.includes('ult');
                     });
                     let fechaCompraRaw = fechaKey ? row[fechaKey] : null;
-                    let fechaCompra = fechaCompraRaw ? new Date(fechaCompraRaw).getTime() : null;
+                    
+                    // Modificación: usar el parseador robusto
+                    let fechaCompra = parseFechaRobusta(fechaCompraRaw);
 
                     if (!inventarioFiltrado[codigo]) {
                         inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra };
@@ -667,7 +692,9 @@
                     if (!codigo) return; codigo = codigo.trim();
 
                     let fechaSalidaRaw = row['Fecha'] || row['Date'] || Object.values(row)[1]; 
-                    let fechaSalida = new Date(fechaSalidaRaw).getTime();
+                    
+                    // Modificación: usar el parseador robusto
+                    let fechaSalida = parseFechaRobusta(fechaSalidaRaw);
                     
                     // Extraer todos los destinos (Máquina, Sección, Departamento, etc.)
                     let destinosEnFila = new Set();
@@ -731,21 +758,8 @@
                         });
                         let fechaSolRaw = fechaKey ? row[fechaKey] : null;
                         
-                        // Parseo robusto de Fechas (soporta objetos Date de Excel y textos DD/MM/YYYY)
-                        let fechaSol = null;
-                        if (fechaSolRaw instanceof Date) {
-                            fechaSol = fechaSolRaw.getTime();
-                        } else if (typeof fechaSolRaw === 'number') {
-                            fechaSol = new Date(Math.round((fechaSolRaw - 25569) * 86400 * 1000)).getTime();
-                        } else if (typeof fechaSolRaw === 'string') {
-                            let parts = fechaSolRaw.split('/');
-                            if (parts.length === 3) {
-                                // Convertir DD/MM/YYYY a formato ISO entendible YYYY-MM-DD
-                                fechaSol = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`).getTime();
-                            } else {
-                                fechaSol = new Date(fechaSolRaw).getTime();
-                            }
-                        }
+                        // Parseo robusto de Fechas
+                        let fechaSol = parseFechaRobusta(fechaSolRaw);
                         
                         if (!fechaSol || isNaN(fechaSol)) return; // Necesitamos fecha válida para saber cuál es el más reciente
 
