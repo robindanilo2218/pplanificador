@@ -208,7 +208,6 @@
                         <!-- Novedad: Solicitudes Online -->
                         <th class="sol-col" title="Fecha solicitud de compra (Inventario Online)">Fecha Solicitud</th>
                         <th class="sol-col" title="Local o Extranjero">Origen</th>
-                        <th class="sol-col" title="Cantidad solicitada más reciente">Cant. Solicit.</th>
                         
                         <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Q0</th>
                         <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Q1</th>
@@ -373,7 +372,7 @@
             const bloque = DATOS_FILTRADOS.slice(PUNTERO_PAGINA, PUNTERO_PAGINA + REGISTROS_POR_PAGINA);
             
             bloque.forEach(fila => {
-                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo, solFecha, solOrigen, solCantidad } = fila;
+                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo, solFecha, solOrigen } = fila;
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-100 transition duration-150";
                 
@@ -385,7 +384,6 @@
                     
                     <td class="sol-col text-xs text-center">${formatFecha(solFecha)}</td>
                     <td class="sol-col text-xs text-center font-semibold text-gray-700">${solOrigen}</td>
-                    <td class="sol-col text-center font-bold text-gray-800">${solCantidad}</td>
                     
                     <td class="q-col text-right text-gray-600">${formatQ(qConsumo[0])}</td>
                     <td class="q-col text-right text-gray-600">${formatQ(qConsumo[1])}</td>
@@ -547,12 +545,12 @@
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
             // Actualizado para incluir las columnas de solicitudes online
-            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Cant. Solicit.', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
             
             DATOS_FILTRADOS.forEach(f => {
                 datosLimpios.push([
                     f.inv.codigo, f.inv.noParte || "-", f.inv.descripcion, f.inv.cantidad,
-                    formatFecha(f.solFecha), f.solOrigen, f.solCantidad,
+                    formatFecha(f.solFecha), f.solOrigen,
                     formatQ(f.qConsumo[0]), formatQ(f.qConsumo[1]), formatQ(f.qConsumo[2]), formatQ(f.qConsumo[3]), formatQ(f.qConsumo[4]),
                     f.maquinasUnicas, formatFecha(f.inv.ultimaCompra), f.estado, f.vecesUsado,
                     formatFecha(f.primeraSalida), formatFecha(f.ultimaSalida),
@@ -709,30 +707,46 @@
                         let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
                         if (!codigo) return; codigo = codigo.trim();
 
-                        let fechaKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha') || k.toLowerCase().includes('date') || k.toLowerCase().includes('solicitud'));
+                        // Encontrar la columna de Fecha buscando específicamente "fecha documento"
+                        let fechaKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('fecha documento') || kl.includes('fecha doc');
+                        });
                         let fechaSolRaw = fechaKey ? row[fechaKey] : null;
-                        let fechaSol = fechaSolRaw ? new Date(fechaSolRaw).getTime() : null;
+                        
+                        // Parseo robusto de Fechas (soporta objetos Date de Excel y textos DD/MM/YYYY)
+                        let fechaSol = null;
+                        if (fechaSolRaw instanceof Date) {
+                            fechaSol = fechaSolRaw.getTime();
+                        } else if (typeof fechaSolRaw === 'number') {
+                            fechaSol = new Date(Math.round((fechaSolRaw - 25569) * 86400 * 1000)).getTime();
+                        } else if (typeof fechaSolRaw === 'string') {
+                            let parts = fechaSolRaw.split('/');
+                            if (parts.length === 3) {
+                                // Convertir DD/MM/YYYY a formato ISO entendible YYYY-MM-DD
+                                fechaSol = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`).getTime();
+                            } else {
+                                fechaSol = new Date(fechaSolRaw).getTime();
+                            }
+                        }
+                        
                         if (!fechaSol || isNaN(fechaSol)) return; // Necesitamos fecha válida para saber cuál es el más reciente
-
-                        let cantKey = Object.keys(row).find(k => k.toLowerCase().includes('cant') || k.toLowerCase().includes('solicit'));
-                        let cantRaw = cantKey ? row[cantKey] : 0;
-                        let cant = parseFloat(String(cantRaw).replace(/,/g, '').trim());
-                        if (isNaN(cant)) cant = 0;
 
                         // Determinar Origen (Extranjero si dice Panamá, Local si tiene num cotización)
                         let origen = "-";
-                        if (rowStr.includes('panamá') || rowStr.includes('panama')) {
+                        if (rowStr.includes('panamá') || rowStr.includes('panama') || rowStr.includes('extranjero')) {
                             origen = "Extranjero";
                         } else {
                             let cotizKey = Object.keys(row).find(k => k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot.'));
-                            if (cotizKey && row[cotizKey]) {
+                            // Validar que la celda de cotización exista y no esté vacía
+                            if (cotizKey && row[cotizKey] !== undefined && row[cotizKey] !== null && String(row[cotizKey]).trim() !== "") {
                                 origen = "Local";
                             }
                         }
 
-                        // Guardar solo el más reciente
+                        // Guardar solo el más reciente comparando el timestamp
                         if (!solicitudesFiltradas[codigo] || fechaSol > solicitudesFiltradas[codigo].fecha) {
-                            solicitudesFiltradas[codigo] = { fecha: fechaSol, origen: origen, cantidad: cant };
+                            solicitudesFiltradas[codigo] = { fecha: fechaSol, origen: origen };
                         }
                     });
                 }
@@ -750,7 +764,7 @@
                     const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
                     const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
-                    const sol = solicitudesFiltradas[codigo] || { fecha: null, origen: "-", cantidad: "-" };
+                    const sol = solicitudesFiltradas[codigo] || { fecha: null, origen: "-" };
 
                     let vecesUsado = salidas.length;
                     let primeraSalida = vecesUsado > 0 ? salidas[0] : null;
@@ -778,7 +792,7 @@
                     resultadosTabla.push({ 
                         inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, 
                         ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo,
-                        solFecha: sol.fecha, solOrigen: sol.origen, solCantidad: sol.cantidad
+                        solFecha: sol.fecha, solOrigen: sol.origen
                     });
                 });
 
