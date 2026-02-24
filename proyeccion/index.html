@@ -109,7 +109,7 @@
                 <div class="p-4 border rounded bg-yellow-50 shadow-sm border-yellow-200">
                     <label class="block font-semibold mb-2 text-sm text-yellow-800" title="Archivos de inventario_online">3. Solicitudes (Online) <span class="text-xs font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
                     <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv" class="block w-full text-xs cursor-pointer" multiple>
-                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico. Busca "Fecha Documento". Puedes subir varios.</p>
+                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Orozco/Darvin. Puedes subir varios.</p>
                 </div>
             </div>
             <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
@@ -209,23 +209,23 @@
                         <th class="sol-col" title="Fecha solicitud de compra (Inventario Online)">Fecha Solicitud</th>
                         <th class="sol-col" title="Local, Nacional o Extranjero">Origen</th>
                         
-                        <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Q0</th>
-                        <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Q1</th>
-                        <th class="q-col" title="Stock Mediano (Q2 Consumo)">Q2</th>
-                        <th class="q-col" title="Stock Límite Superior (Q3 Consumo)">Q3</th>
-                        <th class="q-col" title="Stock Máximo (Q4 Consumo)">Q4</th>
+                        <th class="q-col" title="Consumo Mínimo (Q0 Consumo)">Q0 (Consumo)</th>
+                        <th class="q-col" title="Consumo Límite Inferior (Q1 Consumo)">Q1 (Consumo)</th>
+                        <th class="q-col" title="Consumo Mediano (Q2 Consumo)">Q2 (Consumo)</th>
+                        <th class="q-col" title="Consumo Límite Superior (Q3 Consumo)">Q3 (Consumo)</th>
+                        <th class="q-col" title="Consumo Máximo (Q4 Consumo)">Q4 (Consumo)</th>
                         <th>Destinos / Máquinas</th>
                         <th>Última Compra</th>
                         <th class="text-center">Estado (Rotación)</th>
                         <th>Veces Usado</th>
-                        <th title="Demanda anual proyectada basada en Q2 de días y cantidades">Demanda Anual</th>
+                        <th title="Demanda anual histórica proyectada a 365 días">Demanda Anual</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Q1)">Q1</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Mediana)">Q2</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Q3)">Q3</th>
-                        <th class="q-col" title="Cuartiles de días entre salidas (Máximo)">Q4</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0 (Días)</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q1)">Q1 (Días)</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mediana)">Q2 (Días)</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q3)">Q3 (Días)</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Máximo)">Q4 (Días)</th>
                         <th class="proj-col sortable-header no-print" id="thSortProyeccion" title="Clic para ordenar cronológicamente">
                             Proyección Sig. Compra <span id="sortIcon">↕️</span>
                         </th>
@@ -441,7 +441,7 @@
                     <td class="text-xs font-semibold text-gray-700">${formatFecha(inv.ultimaCompra)}</td>
                     <td class="text-center"><span class="badge ${estadoClase}">${estado}</span></td>
                     <td class="text-center font-bold">${vecesUsado}</td>
-                    <td class="text-center font-bold text-purple-700 bg-purple-50">${fila.demandaAnual || '-'}</td>
+                    <td class="text-center font-bold text-purple-700 bg-purple-50">${fila.demandaAnual !== null ? fila.demandaAnual : '-'}</td>
                     <td class="text-xs">${formatFecha(primeraSalida)}</td>
                     <td class="text-xs">${formatFecha(ultimaSalida)}</td>
                     <td class="q-col text-right">${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}</td>
@@ -592,7 +592,7 @@
         document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
-            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0 Consumo', 'Q1 Consumo', 'Q2 Consumo', 'Q3 Consumo', 'Q4 Consumo', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
             
             DATOS_FILTRADOS.forEach(f => {
                 datosLimpios.push([
@@ -600,7 +600,7 @@
                     formatFecha(f.solFecha), f.solOrigen,
                     formatQ(f.qConsumo[0]), formatQ(f.qConsumo[1]), formatQ(f.qConsumo[2]), formatQ(f.qConsumo[3]), formatQ(f.qConsumo[4]),
                     f.maquinasUnicas, formatFecha(f.inv.ultimaCompra), f.estado, f.vecesUsado,
-                    f.demandaAnual || "-",
+                    f.demandaAnual !== null ? f.demandaAnual : "-",
                     formatFecha(f.primeraSalida), formatFecha(f.ultimaSalida),
                     formatQ(f.qDiasSalidas[0]), formatQ(f.qDiasSalidas[1]), formatQ(f.qDiasSalidas[2]), formatQ(f.qDiasSalidas[3]), formatQ(f.qDiasSalidas[4]),
                     f.proyeccionTexto
@@ -728,7 +728,6 @@
                     let fechaSalida = fechaKey ? parseFechaRobusta(row[fechaKey]) : null;
                     if (!fechaSalida) return;
 
-                    // MÚLTIPLES DESTINOS RECUPERADOS
                     let destinosEnFila = new Set();
                     Object.keys(row).forEach(k => {
                         let kl = k.toLowerCase().trim();
@@ -743,13 +742,14 @@
                         }
                     });
 
-                    // BÚSQUEDA DE CANTIDAD ROBUSTA RECUPERADA
+                    // FIX: Búsqueda estricta de Cantidad consumida (Ignorando columnas de Saldo o Existencia)
                     let cantKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
+                        if (kl.includes('saldo') || kl.includes('exist') || kl.includes('stock')) return false; // RECHAZAR SALDOS
                         return kl.includes('cant') || kl.includes('qty') || kl === 'salida' || kl === 'despacho' || kl === 'consumo' || kl.includes('sac') || kl.includes('sal');
                     });
                     let cantidad = cantKey ? parseFloat(String(row[cantKey]).replace(/,/g, '').trim()) : 1;
-                    if (isNaN(cantidad) || cantidad === 0) cantidad = 1;
+                    if (isNaN(cantidad) || cantidad <= 0) cantidad = 1;
 
                     if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = { fechas: [], cantidades: [] };
                     salidasPorCodigo[codigo].fechas.push(fechaSalida);
@@ -764,7 +764,7 @@
                     });
                 });
 
-                // 3. Procesar Solicitudes Online (OPCIONAL - Múltiples archivos CSV/XLS/HTML)
+                // 3. Procesar Solicitudes Online (Múltiples archivos)
                 const solicitudesFiltradas = {};
 
                 if (filesSolicitudes && filesSolicitudes.length > 0) {
@@ -778,13 +778,14 @@
                         }
 
                         datosSolicitudes.forEach(row => {
-                            // Filtro: solo registros de Electrico (tu modificación conservada)
                             const rowStr = JSON.stringify(row).toLowerCase();
-                            if (!rowStr.includes('electrico')) return;
+                            // FIX: Regresamos el filtro al requerimiento original: Solo tomar Orozco o Darvin
+                            if (!rowStr.includes('orozco') && !rowStr.includes('darvin')) return;
 
                             let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
                             if (!codigo) return; codigo = codigo.trim();
 
+                            // Buscar columna de Fecha de Solicitud de manera más abierta
                             let fechaKey = Object.keys(row).find(k => {
                                 let kl = k.toLowerCase().trim();
                                 return kl.includes('fecha') && (kl.includes('doc') || kl.includes('solic'));
@@ -797,7 +798,7 @@
                             
                             if (!fechaSol || isNaN(fechaSol)) return;
 
-                            // Determinar Origen (Tu modificación conservada)
+                            // Determinar Origen
                             let origen = "-";
                             if (rowStr.includes('panamá') || rowStr.includes('panama') || rowStr.includes('extranjero')) {
                                 origen = "Extranjero";
@@ -855,11 +856,19 @@
                         proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
-                    // Calcular demanda anual (Tu modificación conservada)
+                    // FIX: FÓRMULA DE DEMANDA ANUAL ROBUSTA (Basada en el total histórico real)
                     let demandaAnual = null;
-                    if (qDiasSalidas[2] !== null && qDiasSalidas[2] > 0 && qConsumo[2] !== null && qConsumo[2] > 0) {
-                        const frecuenciaAnual = 365 / qDiasSalidas[2]; 
-                        demandaAnual = Math.round(frecuenciaAnual * qConsumo[2]); 
+                    if (vecesUsado > 0) {
+                        let totalConsumidoHistorico = cantidadesSalidas.reduce((a, b) => a + b, 0);
+                        
+                        if (vecesUsado > 1 && primeraSalida && ultimaSalida && ultimaSalida > primeraSalida) {
+                            let diasDeHistoria = (ultimaSalida - primeraSalida) / 86400000;
+                            // Si sacó X cantidad en Y días de historia, ¿cuánto sacaría en 365 días?
+                            demandaAnual = Math.round((totalConsumidoHistorico / diasDeHistoria) * 365);
+                        } else {
+                            // Si solo lo ha sacado 1 sola vez en la historia (o en un mismo día), usamos ese número como base anual
+                            demandaAnual = Math.round(totalConsumidoHistorico);
+                        }
                     }
 
                     resultadosTabla.push({ 
