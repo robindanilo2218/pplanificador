@@ -217,7 +217,7 @@
                         <th>Destinos / Máquinas</th>
                         <th>Última Compra</th>
                         <th class="text-center">Estado (Rotación)</th>
-                        <th>Veces Usado</th>
+                        <th>Hz</th>
                         <th title="Demanda anual histórica (Mínimo, Máximo en un año)">Demanda Anual (Mín, Máx)</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
@@ -592,7 +592,7 @@
         document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
-            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual (Mín, Máx)', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Hz', 'Demanda Anual (Mín, Máx)', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
             
             DATOS_FILTRADOS.forEach(f => {
                 datosLimpios.push([
@@ -797,17 +797,23 @@
                             
                             if (!fechaSol || isNaN(fechaSol)) return;
 
-                            // Determinar Origen
+                            // Determinar Origen (Evaluando el contenido de celdas específicas, no toda la fila)
                             let origen = "-";
-                            if (rowStr.includes('panamá') || rowStr.includes('panama') || rowStr.includes('extranjero')) {
+                            
+                            // 1. Buscar si existe la columna Panamá y si tiene algún dato escrito adentro
+                            let panamaKey = Object.keys(row).find(k => k.toLowerCase().includes('panam') || k.toLowerCase().includes('extranjero'));
+                            let tienePanama = panamaKey && row[panamaKey] !== undefined && row[panamaKey] !== null && String(row[panamaKey]).trim() !== "" && String(row[panamaKey]).trim() !== "-";
+
+                            // 2. Buscar si existe la columna Cotización y si tiene algún dato escrito adentro
+                            let cotizKey = Object.keys(row).find(k => k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot.') || k.toLowerCase() === 'cot');
+                            let tieneCotizacion = cotizKey && row[cotizKey] !== undefined && row[cotizKey] !== null && String(row[cotizKey]).trim() !== "" && String(row[cotizKey]).trim() !== "-";
+
+                            if (tienePanama) {
                                 origen = "Extranjero";
+                            } else if (tieneCotizacion) {
+                                origen = "Local";
                             } else {
-                                let cotizKey = Object.keys(row).find(k => k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot'));
-                                if (cotizKey && row[cotizKey] !== undefined && row[cotizKey] !== null && String(row[cotizKey]).trim() !== "") {
-                                    origen = "Local";
-                                } else {
-                                    origen = "Nacional";
-                                }
+                                origen = "Nacional";
                             }
 
                             if (!solicitudesFiltradas[codigo] || fechaSol > solicitudesFiltradas[codigo].fecha) {
