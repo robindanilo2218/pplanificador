@@ -218,7 +218,7 @@
                         <th>Última Compra</th>
                         <th class="text-center">Estado (Rotación)</th>
                         <th>Veces Usado</th>
-                        <th title="Demanda anual histórica proyectada a 365 días">Demanda Anual</th>
+                        <th title="Demanda anual histórica (Mínimo, Máximo en un año)">Demanda Anual (Mín, Máx)</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
                         <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0</th>
@@ -592,7 +592,7 @@
         document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
-            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual (Mín, Máx)', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
             
             DATOS_FILTRADOS.forEach(f => {
                 datosLimpios.push([
@@ -834,10 +834,21 @@
 
                 Object.keys(inventarioFiltrado).forEach(codigo => {
                     const inv = inventarioFiltrado[codigo];
-                    const salidas = (salidasPorCodigo[codigo]?.fechas || []).sort((a, b) => a - b);
                     
-                    // RESTAURADO: Se quitó el filtro de error que afectaba los cálculos
-                    const cantidadesSalidas = salidasPorCodigo[codigo]?.cantidades || [];
+                    // FIX: Alinear correctamente fechas con cantidades al ordenar
+                    let historialSalidas = [];
+                    let fCrudas = salidasPorCodigo[codigo]?.fechas || [];
+                    let cCrudas = salidasPorCodigo[codigo]?.cantidades || [];
+                    for(let i=0; i < fCrudas.length; i++) {
+                        if (cCrudas[i] > 0 && !isNaN(cCrudas[i])) {
+                            historialSalidas.push({ fecha: fCrudas[i], cantidad: cCrudas[i] });
+                        }
+                    }
+                    historialSalidas.sort((a, b) => a.fecha - b.fecha);
+
+                    const salidas = historialSalidas.map(h => h.fecha);
+                    const cantidadesSalidas = historialSalidas.map(h => h.cantidad);
+                    
                     const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
                     const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
@@ -866,17 +877,24 @@
                         proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
-                    // FIX: FÓRMULA DE DEMANDA ANUAL ROBUSTA (Basada en el rango de fechas global)
+                    // FIX: DEMANDA ANUAL (Mínimo y Máximo consumo agrupado por Año histórico)
                     let demandaAnual = null;
-                    if (vecesUsado > 0) {
-                        // Sumamos absolutamente todo lo consumido en la historia
-                        let totalConsumidoHistorico = cantidadesSalidas.reduce((a, b) => a + b, 0);
+                    if (historialSalidas.length > 0) {
+                        let consumoPorAnio = {};
                         
-                        // Proyectamos el consumo histórico dividiéndolo entre los días totales del archivo y multiplicando por 365
-                        demandaAnual = Math.round((totalConsumidoHistorico / diasGlobalesHistoria) * 365);
-                        
-                        // Si se consumió muy poco (ej. 1 pieza en 5 años), aseguramos que al menos marque 1 para no poner cero
-                        if (demandaAnual === 0 && totalConsumidoHistorico > 0) demandaAnual = 1;
+                        // Agrupar y sumar el consumo por cada año de calendario
+                        historialSalidas.forEach(h => {
+                            let localYear = new Date(h.fecha).getFullYear();
+                            if (!consumoPorAnio[localYear]) consumoPorAnio[localYear] = 0;
+                            consumoPorAnio[localYear] += h.cantidad;
+                        });
+
+                        // Extraer los totales y buscar el Mínimo y Máximo
+                        let valoresAnuales = Object.values(consumoPorAnio);
+                        let minAnual = Math.min(...valoresAnuales);
+                        let maxAnual = Math.max(...valoresAnuales);
+
+                        demandaAnual = `${minAnual}, ${maxAnual}`;
                     }
 
                     resultadosTabla.push({ 
