@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análisis Estadístico de Inventario y Bodega</title>
+    
+    <!-- Enlaces PWA -->
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg">
+    <meta name="theme-color" content="#2563eb">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <style>
+        table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+        th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; white-space: nowrap; }
+        th { background-color: #f3f4f6; position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .q-col { background-color: #f8fafc; max-width: 50px; min-width: 40px; text-align: right; padding: 4px; }
+        .proj-col { background-color: #ecfdf5; font-weight: bold; }
+        .sol-col { background-color: #fffbeb; } /* Color amarillento para solicitudes */
+        .badge { padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-align: center; display: inline-block; width: 100px;}
+        .sortable-header { cursor: pointer; user-select: none; transition: background-color 0.2s; }
+        .sortable-header:hover { background-color: #d1fae5; }
+        
+        /* Clases para hacer celdas compactas y con scroll interno en PANTALLA */
+        .cell-scroll { overflow-x: auto; white-space: nowrap; padding-bottom: 4px; }
+        .cell-scroll::-webkit-scrollbar { height: 4px; }
+        .cell-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        .mw-80 { max-width: 80px; }
+        .mw-120 { max-width: 120px; }
+        .mw-150 { max-width: 150px; }
+        .mw-200 { max-width: 200px; }
+        
+        /* OPTIMIZACIÓN ABSOLUTA PARA IMPRESIÓN Y PDF */
+        @media print {
+            @page { size: landscape; margin: 10mm; } 
+            body { background-color: white !important; padding: 0 !important; font-size: 8pt !important; }
+            .no-print { display: none !important; }
+            .max-w-[1400px] { max-width: 100% !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; border: none !important; }
+            .overflow-auto { overflow: visible !important; max-height: none !important; border: none !important; }
+            table { font-size: 6pt !important; width: 100% !important; table-layout: auto !important; }
+            th, td { 
+                padding: 3px !important; 
+                border: 1px solid #cbd5e1 !important; 
+                white-space: normal !important; 
+                word-wrap: break-word !important;
+            }
+            .cell-scroll { 
+                overflow: visible !important; 
+                white-space: normal !important; 
+                max-width: none !important; 
+                padding-bottom: 0 !important;
+            }
+            thead { display: table-header-group !important; }
+            tr { page-break-inside: avoid !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 p-2 md:p-6">
+
+    <div class="max-w-[1400px] mx-auto bg-white p-3 md:p-6 rounded-lg shadow-md">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <h1 class="text-2xl font-bold text-blue-800">Análisis de Rotación e Inventario</h1>
+            
+            <div id="controlesSesion" class="hidden flex flex-wrap gap-2 no-print">
+                <button id="btnImprimirPdf" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-4 rounded text-sm transition shadow-sm">
+                    🖨️ PDF / Imprimir
+                </button>
+                <button id="btnExportarExcel" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded text-sm transition shadow-sm">
+                    📊 Exportar Excel
+                </button>
+                <div class="w-px bg-gray-300 mx-1"></div>
+                <button id="btnMostrarImportar" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-4 rounded text-sm transition">
+                    🔄 Actualizar Datos
+                </button>
+                <button id="btnActualizarApp" class="bg-purple-100 hover:bg-purple-200 text-purple-700 font-semibold py-1 px-4 rounded text-sm transition border border-purple-300" title="Descarga la última versión de la app">
+                    ✨ Actualizar App
+                </button>
+                <button id="btnBorrarDatos" class="bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-4 rounded text-sm transition border border-red-300">
+                    🗑️ Borrar Todo
+                </button>
+            </div>
+        </div>
+        
+        <!-- PANTALLA DE CARGA INICIAL -->
+        <div id="pantallaCarga" class="w-full text-center py-12 bg-white rounded-lg shadow-sm border mb-6">
+            <p class="text-blue-600 font-bold text-lg animate-pulse">⏳ Cargando base de datos guardada...</p>
+            <p class="text-gray-500 text-sm mt-2">Optimizando registros y buscando proyecciones vencidas.</p>
+        </div>
+
+        <div id="zonaImportacion" class="mb-6 transition-all duration-300 no-print hidden">
+            <!-- Ahora son 3 columnas para los 3 archivos -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="p-4 border rounded bg-gray-50 shadow-sm">
+                    <label class="block font-semibold mb-2 text-sm text-blue-800">1. Base Inventario</label>
+                    <input type="file" id="fileExcel" accept=".xlsx, .xls" class="block w-full text-xs cursor-pointer">
+                </div>
+                
+                <div class="p-4 border rounded bg-gray-50 shadow-sm">
+                    <label class="block font-semibold mb-2 text-sm text-green-800">2. Salidas Bodega</label>
+                    <input type="file" id="fileCsv" accept=".csv" class="block w-full text-xs cursor-pointer">
+                </div>
+
+                <div class="p-4 border rounded bg-yellow-50 shadow-sm border-yellow-200">
+                    <label class="block font-semibold mb-2 text-sm text-yellow-800" title="Archivos de inventario_online">3. Solicitudes (Online) <span class="text-xs font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
+                    <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv" class="block w-full text-xs cursor-pointer" multiple>
+                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico. Puedes subir varios.</p>
+                </div>
+            </div>
+            <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
+                Procesar y Guardar
+            </button>
+        </div>
+
+        <div class="w-full border p-4 rounded bg-gray-50 hidden mb-6 no-print shadow-sm" id="contenedorFiltros">
+            
+            <!-- BUSCADOR MANUAL OPTIMIZADO -->
+            <div class="w-full mb-4">
+                <label for="busquedaTexto" class="font-semibold text-sm mb-1 block text-gray-700">Buscador General (Presiona Enter para buscar):</label>
+                <div class="flex flex-col md:flex-row gap-2">
+                    <input type="text" id="busquedaTexto" placeholder="🔍 Escribe código, parte o descripción..." 
+                           class="w-full border-gray-300 border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition">
+                    <select id="tipoBusqueda" class="border-gray-300 border rounded p-2 text-sm bg-white cursor-pointer md:w-48 text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" title="Elige si los resultados deben tener TODAS las palabras juntas, o al menos UNA de ellas">
+                        <option value="and">Contiene TODAS (Afinar)</option>
+                        <option value="or">Contiene ALGUNA (O)</option>
+                    </select>
+                    <button id="btnEjecutarBusqueda" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-bold shadow-sm transition">
+                        Buscar
+                    </button>
+                </div>
+            </div>
+
+            <!-- FILTROS DESPLEGABLES -->
+            <div class="flex flex-wrap items-center gap-4 w-full">
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Grupo:</label>
+                    <select id="filtroGrupo" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
+                        <option value="todos">Todos</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Máquina:</label>
+                    <select id="filtroMaquina" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todas">Todas</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Stock:</label>
+                    <select id="filtroStock" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
+                        <option value="todos">Todos</option>
+                        <option value="cero">Solo = 0</option>
+                        <option value="uno">Solo = 1</option>
+                        <option value="resto">Resto (>1)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Estado:</label>
+                    <select id="filtroEstado" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todos">Todos</option>
+                        <option value="Activo">Activos</option>
+                        <option value="Moderado">Moderados</option>
+                        <option value="Inactivo">Inactivos</option>
+                        <option value="Sin movimiento">Sin Mov.</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Proyección:</label>
+                    <select id="filtroProyeccion" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todas">Todas</option>
+                        <option value="este_mes">Este mes</option>
+                        <option value="mes_anterior">Mes anterior</option>
+                        <option value="este_anio">Este año</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Últ. Salida:</label>
+                    <select id="filtroUltimaSalida" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todas">Todas</option>
+                        <option value="este_mes">Este mes</option>
+                        <option value="mes_anterior">Mes anterior</option>
+                        <option value="este_anio">Este año</option>
+                        <option value="anio_anterior">Año anterior</option>
+                        <option value="rango">Rango fechas...</option>
+                    </select>
+                </div>
+                <div id="contenedorRangoSalidas" class="hidden items-center gap-1 border-l pl-3 border-gray-300">
+                    <label class="font-semibold text-xs text-gray-600">Desde:</label>
+                    <input type="date" id="filtroSalidaDesde" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
+                    <label class="font-semibold text-xs text-gray-600">Hasta:</label>
+                    <input type="date" id="filtroSalidaHasta" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
+                </div>
+            </div>
+        </div>
+
+        <div class="overflow-auto w-full border border-gray-200 rounded-md" style="max-height: 70vh; -webkit-overflow-scrolling: touch;">
+            <table id="resultTable" class="min-w-full hidden bg-white">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>No. Parte</th>
+                        <th>Descripción</th>
+                        <th>Cant.</th>
+                        <!-- Novedad: Solicitudes Online -->
+                        <th class="sol-col" title="Fecha solicitud de compra (Inventario Online)">Fecha Solicitud</th>
+                        <th class="sol-col" title="Local o Extranjero">Origen</th>
+                        
+                        <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Q0</th>
+                        <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Q1</th>
+                        <th class="q-col" title="Stock Mediano (Q2 Consumo)">Q2</th>
+                        <th class="q-col" title="Stock Límite Superior (Q3 Consumo)">Q3</th>
+                        <th class="q-col" title="Stock Máximo (Q4 Consumo)">Q4</th>
+                        <th>Destinos / Máquinas</th>
+                        <th>Última Compra</th>
+                        <th class="text-center">Estado (Rotación)</th>
+                        <th>Veces Usado</th>
+                        <th title="Demanda anual proyectada basada en Q2 de días y cantidades">Demanda Anual</th>
+                        <th>Primera Salida</th>
+                        <th>Última Salida</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q1)">Q1</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Mediana)">Q2</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Q3)">Q3</th>
+                        <th class="q-col" title="Cuartiles de días entre salidas (Máximo)">Q4</th>
+                        <th class="proj-col sortable-header no-print" id="thSortProyeccion" title="Clic para ordenar cronológicamente">
+                            Proyección Sig. Compra <span id="sortIcon">↕️</span>
+                        </th>
+                        <th class="proj-col hidden print:table-cell">Proyección Sig. Compra</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        
+        <!-- BOTÓN DE CARGA RÁPIDA (PAGINACIÓN) -->
+        <div id="controlesPaginacion" class="w-full py-4 flex flex-col items-center hidden no-print">
+            <p class="text-sm text-gray-500 mb-2">Mostrando <span id="countVisibles" class="font-bold">0</span> de <span id="countTotalFiltrados" class="font-bold">0</span> resultados</p>
+            <button id="btnCargarMas" class="bg-white hover:bg-gray-100 text-blue-600 font-bold py-2 px-8 rounded border border-blue-300 shadow-sm transition">
+                ⬇️ Cargar más registros
+            </button>
+        </div>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+                    navigator.serviceWorker.register('./sw.js')
+                        .catch(err => console.error('Error al registrar PWA:', err));
+                }
+            });
+        }
+
+        const codeRegex = /^[A-Za-z0-9]-[A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{3}$/;
+        
+        // --- BASE DE DATOS LOCAL (IndexedDB) ---
+        const DB_NAME = 'BodegaDB';
+        const STORE_NAME = 'analisisStore';
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME);
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function guardarDatos(datos) {
+            try {
+                const db = await initDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    store.put(datos, 'datosGuardados');
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            } catch (error) { console.error("Error guardando en IndexedDB:", error); }
+        }
+
+        async function cargarDatos() {
+            try {
+                const db = await initDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.get('datosGuardados');
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            } catch (error) { return null; }
+        }
+
+        async function borrarDatosLocales() {
+            try {
+                const db = await initDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    store.delete('datosGuardados');
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            } catch (error) { console.error("Error borrando en IndexedDB:", error); }
+        }
+
+        function calcularCuartil(arr, q) {
+            const ordenado = [...arr].sort((a, b) => a - b);
+            const pos = (ordenado.length - 1) * q;
+            const base = Math.floor(pos);
+            const rest = pos - base;
+            return (ordenado[base + 1] !== undefined) ? ordenado[base] + rest * (ordenado[base + 1] - ordenado[base]) : ordenado[base];
+        }
+
+        function obtenerCincoCuartiles(arr) {
+            if (!arr || arr.length === 0) return [null, null, null, null, null];
+            if (arr.length === 1) return [arr[0], arr[0], arr[0], arr[0], arr[0]];
+            if (arr.length === 2) {
+                const min = Math.min(arr[0], arr[1]);
+                const max = Math.max(arr[0], arr[1]);
+                const media = (min + max) / 2;
+                return [min, min, media, max, max];
+            }
+            return [calcularCuartil(arr, 0), calcularCuartil(arr, 0.25), calcularCuartil(arr, 0.50), calcularCuartil(arr, 0.75), calcularCuartil(arr, 1)];
+        }
+
+        // NUEVO: Función maestra y robusta para interpretar cualquier tipo de fecha sin que la app colapse
+        function parseFechaRobusta(fechaRaw) {
+            if (!fechaRaw) return null;
+            if (fechaRaw instanceof Date) return fechaRaw.getTime();
+            if (typeof fechaRaw === 'number') return new Date(Math.round((fechaRaw - 25569) * 86400 * 1000)).getTime();
+            if (typeof fechaRaw === 'string') {
+                let text = fechaRaw.trim();
+                let parts = text.split('/');
+                if (parts.length === 3) {
+                    let year = parts[2].length === 2 ? "20" + parts[2] : parts[2];
+                    return new Date(`${year}-${parts[1]}-${parts[0]}T12:00:00`).getTime();
+                }
+                let partsDash = text.split('-');
+                if (partsDash.length === 3 && partsDash[0].length <= 2) {
+                    let year = partsDash[2].length === 2 ? "20" + partsDash[2] : partsDash[2];
+                    return new Date(`${year}-${partsDash[1]}-${partsDash[0]}T12:00:00`).getTime();
+                }
+                return new Date(text).getTime();
+            }
+            return null;
+        }
+
+        function formatFecha(timestamp) {
+            if (!timestamp || isNaN(timestamp)) return "-"; // Modificado para evitar el error crítico RangeError
+            const d = new Date(timestamp);
+            if (isNaN(d.getTime())) return "-";
+            const localDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
+            return localDate.toLocaleDateString('es-GT');
+        }
+
+        const formatQ = (val) => val !== null && val !== undefined ? Math.round(val) : '-';
+
+        function leerExcel(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        // Intento 1: Leer como Excel normal (Binario real)
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                        resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+                    } catch (err1) {
+                        // Intento 2 (FALLBACK RADGRID): Es un HTML o XML disfrazado de .xls
+                        console.warn("Formato Excel no estándar detectado (Probablemente RadGrid). Intentando modo compatibilidad...", err1);
+                        const readerFallback = new FileReader();
+                        readerFallback.onload = (e2) => {
+                            try {
+                                const text = e2.target.result;
+                                // Si es un HTML disfrazado, buscar la tabla interna
+                                if (text.toLowerCase().includes('<table')) {
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(text, 'text/html');
+                                    const table = doc.querySelector('table');
+                                    if (table) {
+                                        const wbHTML = XLSX.utils.table_to_book(table, {cellDates: true});
+                                        return resolve(XLSX.utils.sheet_to_json(wbHTML.Sheets[wbHTML.SheetNames[0]]));
+                                    }
+                                }
+                                // Si es un XML Spreadsheet 2003
+                                const wbFallback = XLSX.read(text, { type: 'binary', cellDates: true });
+                                resolve(XLSX.utils.sheet_to_json(wbFallback.Sheets[wbFallback.SheetNames[0]]));
+                            } catch (errFallback) {
+                                reject(new Error("No se pudo interpretar el archivo RadGridExport. El formato interno está corrupto o es irreconocible."));
+                            }
+                        };
+                        readerFallback.readAsBinaryString(file);
+                    }
+                };
+                reader.onerror = () => reject(new Error("Error de lectura del archivo en el navegador."));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function leerCSV(file) {
+            return new Promise((resolve, reject) => {
+                Papa.parse(file, { header: true, skipEmptyLines: true, complete: (results) => resolve(results.data), error: reject });
+            });
+        }
+
+        // --- SISTEMA DE RENDERIZADO RÁPIDO (LAZY LOADING) ---
+        let TODOS_LOS_DATOS = []; 
+        let DATOS_FILTRADOS = [];
+        let PUNTERO_PAGINA = 0;
+        const REGISTROS_POR_PAGINA = 50;
+
+        function renderizarBloqueTabla() {
+            const tbody = document.getElementById('tableBody');
+            const bloque = DATOS_FILTRADOS.slice(PUNTERO_PAGINA, PUNTERO_PAGINA + REGISTROS_POR_PAGINA);
+            
+            bloque.forEach(fila => {
+                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo, solFecha, solOrigen } = fila;
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-100 transition duration-150";
+                
+                tr.innerHTML = `
+                    <td><div class="cell-scroll mw-120 font-bold text-xs" title="${inv.codigo}">${inv.codigo}</div></td>
+                    <td><div class="cell-scroll mw-120 text-xs text-gray-600" title="${inv.noParte || '-'}">${inv.noParte || "-"}</div></td>
+                    <td><div class="cell-scroll mw-200 text-xs" title="${inv.descripcion}">${inv.descripcion}</div></td>
+                    <td class="text-center font-bold text-blue-900 bg-blue-50">${inv.cantidad}</td>
+                    
+                    <td class="sol-col text-xs text-center">${formatFecha(solFecha)}</td>
+                    <td class="sol-col text-xs text-center font-semibold text-gray-700">${solOrigen}</td>
+                    
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[0])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[1])}</td>
+                    <td class="q-col text-right font-bold text-blue-700">${formatQ(qConsumo[2])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[3])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[4])}</td>
+                    <td><div class="cell-scroll mw-150 text-xs" title="${maquinasUnicas}">${maquinasUnicas}</div></td>
+                    <td class="text-xs font-semibold text-gray-700">${formatFecha(inv.ultimaCompra)}</td>
+                    <td class="text-center"><span class="badge ${estadoClase}">${estado}</span></td>
+                    <td class="text-center font-bold">${vecesUsado}</td>
+                    <td class="text-center font-bold text-purple-700 bg-purple-50">${fila.demandaAnual || '-'}</td>
+                    <td class="text-xs">${formatFecha(primeraSalida)}</td>
+                    <td class="text-xs">${formatFecha(ultimaSalida)}</td>
+                    <td class="q-col text-right">${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[1] !== null ? Math.round(qDiasSalidas[1]) : '-'}</td>
+                    <td class="q-col text-right font-bold text-red-600">${qDiasSalidas[2] !== null ? Math.round(qDiasSalidas[2]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[3] !== null ? Math.round(qDiasSalidas[3]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[4] !== null ? Math.round(qDiasSalidas[4]) : '-'}</td>
+                    <td class="proj-col text-sm no-print" data-val="${proyeccionMs||0}">${proyeccionTexto}</td>
+                    <td class="proj-col text-sm hidden print:table-cell">${proyeccionTexto}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            PUNTERO_PAGINA += bloque.length;
+
+            const btnPaginacion = document.getElementById('controlesPaginacion');
+            document.getElementById('countVisibles').innerText = PUNTERO_PAGINA;
+            document.getElementById('countTotalFiltrados').innerText = DATOS_FILTRADOS.length;
+            
+            if (PUNTERO_PAGINA < DATOS_FILTRADOS.length) {
+                btnPaginacion.classList.remove('hidden');
+            } else {
+                btnPaginacion.classList.add('hidden');
+            }
+        }
+
+        function ejecutarBusqueda() {
+            const fBusqueda = document.getElementById('busquedaTexto').value.toLowerCase().trim();
+            const tipoBusqueda = document.getElementById('tipoBusqueda').value;
+            const fStock = document.getElementById('filtroStock').value;
+            const fProy = document.getElementById('filtroProyeccion').value;
+            const fGrupo = document.getElementById('filtroGrupo').value;
+            const fMaquina = document.getElementById('filtroMaquina').value;
+            const fEstado = document.getElementById('filtroEstado').value;
+            const fUltimaSalida = document.getElementById('filtroUltimaSalida').value;
+            const fDesde = document.getElementById('filtroSalidaDesde').value;
+            const fHasta = document.getElementById('filtroSalidaHasta').value;
+
+            const contRango = document.getElementById('contenedorRangoSalidas');
+            if (fUltimaSalida === 'rango') {
+                contRango.classList.remove('hidden'); contRango.classList.add('flex');
+            } else {
+                contRango.classList.add('hidden'); contRango.classList.remove('flex');
+            }
+
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+
+            DATOS_FILTRADOS = TODOS_LOS_DATOS.filter(fila => {
+                let mostrar = true;
+
+                if (fBusqueda !== "") {
+                    const terminos = fBusqueda.split(/\s+/).filter(t => t.length > 0);
+                    const textoFila = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte}`.toLowerCase();
+                    if (tipoBusqueda === 'and') {
+                        if (!terminos.every(term => textoFila.includes(term))) mostrar = false;
+                    } else {
+                        if (!terminos.some(term => textoFila.includes(term))) mostrar = false;
+                    }
+                }
+
+                if (mostrar && fGrupo !== 'todos' && fila.inv.grupo !== fGrupo) mostrar = false;
+                if (mostrar && fMaquina !== 'todas' && !fila.maquinasUnicas.toLowerCase().includes(fMaquina.toLowerCase())) mostrar = false;
+                if (mostrar && fEstado !== 'todos' && fila.estado !== fEstado) mostrar = false;
+
+                if (mostrar) {
+                    if (fStock === 'cero' && fila.inv.cantidad !== 0) mostrar = false;
+                    else if (fStock === 'uno' && fila.inv.cantidad !== 1) mostrar = false;
+                    else if (fStock === 'resto' && fila.inv.cantidad <= 1) mostrar = false;
+                }
+                
+                if (mostrar && fUltimaSalida !== 'todas') {
+                    if (!fila.ultimaSalida) mostrar = false;
+                    else {
+                        const dSalida = new Date(parseFloat(fila.ultimaSalida));
+                        const localSalida = new Date(dSalida.getTime() + dSalida.getTimezoneOffset() * 60000);
+                        const sYear = localSalida.getFullYear();
+                        const sMonth = localSalida.getMonth();
+
+                        if (fUltimaSalida === 'este_mes' && (sYear !== currentYear || sMonth !== currentMonth)) mostrar = false;
+                        else if (fUltimaSalida === 'mes_anterior') {
+                            let lMonth = currentMonth - 1; let lYear = currentYear;
+                            if (lMonth < 0) { lMonth = 11; lYear--; }
+                            if (sYear !== lYear || sMonth !== lMonth) mostrar = false;
+                        } 
+                        else if (fUltimaSalida === 'este_anio' && sYear !== currentYear) mostrar = false;
+                        else if (fUltimaSalida === 'anio_anterior' && sYear !== currentYear - 1) mostrar = false;
+                        else if (fUltimaSalida === 'rango') {
+                            if (fDesde && localSalida.getTime() < new Date(fDesde + "T00:00:00").getTime()) mostrar = false;
+                            if (fHasta && localSalida.getTime() > new Date(fHasta + "T23:59:59").getTime()) mostrar = false;
+                        }
+                    }
+                }
+
+                if (mostrar && fProy !== 'todas') {
+                    if (!fila.proyeccionMs) mostrar = false; 
+                    else {
+                        const dProy = new Date(parseFloat(fila.proyeccionMs));
+                        if (fProy === 'este_mes' && (dProy.getFullYear() !== currentYear || dProy.getMonth() !== currentMonth)) mostrar = false;
+                        else if (fProy === 'mes_anterior') {
+                            let lMonth = currentMonth - 1; let lYear = currentYear;
+                            if (lMonth < 0) { lMonth = 11; lYear--; }
+                            if (dProy.getFullYear() !== lYear || dProy.getMonth() !== lMonth) mostrar = false;
+                        } 
+                        else if (fProy === 'este_anio' && dProy.getFullYear() !== currentYear) mostrar = false;
+                    }
+                }
+
+                return mostrar;
+            });
+
+            document.getElementById('tableBody').innerHTML = "";
+            PUNTERO_PAGINA = 0;
+            renderizarBloqueTabla();
+        }
+
+        document.getElementById('busquedaTexto').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') ejecutarBusqueda();
+        });
+        document.getElementById('btnEjecutarBusqueda').addEventListener('click', ejecutarBusqueda);
+        
+        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda', 'filtroUltimaSalida', 'filtroSalidaDesde', 'filtroSalidaHasta'].forEach(id => {
+            document.getElementById(id).addEventListener('change', ejecutarBusqueda);
+        });
+
+        document.getElementById('btnCargarMas').addEventListener('click', renderizarBloqueTabla);
+
+        let sortAscendente = true; 
+        document.getElementById('thSortProyeccion').addEventListener('click', () => {
+            DATOS_FILTRADOS.sort((a, b) => {
+                const valA = a.proyeccionMs;
+                const valB = b.proyeccionMs;
+                if (!valA && !valB) return 0;
+                if (!valA) return 1; 
+                if (!valB) return -1;
+                return sortAscendente ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
+            });
+            
+            sortAscendente = !sortAscendente;
+            document.getElementById('sortIcon').innerText = sortAscendente ? '🔼' : '🔽';
+            
+            document.getElementById('tableBody').innerHTML = "";
+            PUNTERO_PAGINA = 0;
+            renderizarBloqueTabla();
+        });
+
+        document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
+
+        document.getElementById('btnExportarExcel').addEventListener('click', () => {
+            // Actualizado para incluir las columnas de solicitudes online y demanda anual
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            
+            DATOS_FILTRADOS.forEach(f => {
+                datosLimpios.push([
+                    f.inv.codigo, f.inv.noParte || "-", f.inv.descripcion, f.inv.cantidad,
+                    formatFecha(f.solFecha), f.solOrigen,
+                    formatQ(f.qConsumo[0]), formatQ(f.qConsumo[1]), formatQ(f.qConsumo[2]), formatQ(f.qConsumo[3]), formatQ(f.qConsumo[4]),
+                    f.maquinasUnicas, formatFecha(f.inv.ultimaCompra), f.estado, f.vecesUsado,
+                    f.demandaAnual || "-",
+                    formatFecha(f.primeraSalida), formatFecha(f.ultimaSalida),
+                    formatQ(f.qDiasSalidas[0]), formatQ(f.qDiasSalidas[1]), formatQ(f.qDiasSalidas[2]), formatQ(f.qDiasSalidas[3]), formatQ(f.qDiasSalidas[4]),
+                    f.proyeccionTexto
+                ]);
+            });
+
+            const hoja = XLSX.utils.aoa_to_sheet(datosLimpios);
+            const libro = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(libro, hoja, "Bodega_Analisis");
+            const fecha = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(libro, `Analisis_Bodega_${fecha}.xlsx`);
+        });
+
+        function inicializarInterfaz(datos) {
+            TODOS_LOS_DATOS = datos.resultadosTabla;
+
+            TODOS_LOS_DATOS.sort((a, b) => {
+                if (!a.proyeccionMs && !b.proyeccionMs) return (b.ultimaSalida || 0) - (a.ultimaSalida || 0); 
+                if (!a.proyeccionMs) return 1;
+                if (!b.proyeccionMs) return -1;
+                return a.proyeccionMs - b.proyeccionMs; 
+            });
+
+            const selGrupo = document.getElementById('filtroGrupo');
+            const selMaquina = document.getElementById('filtroMaquina');
+            selGrupo.innerHTML = '<option value="todos">Todos</option>';
+            datos.gruposUnicos.sort().forEach(g => selGrupo.innerHTML += `<option value="${g}">${g}</option>`);
+            selMaquina.innerHTML = '<option value="todas">Todas</option>';
+            datos.maquinasUnicas.sort().forEach(m => selMaquina.innerHTML += `<option value="${m}">${m}</option>`);
+
+            document.getElementById('resultTable').classList.remove('hidden');
+            document.getElementById('contenedorFiltros').classList.remove('hidden');
+            document.getElementById('zonaImportacion').classList.add('hidden');
+            document.getElementById('controlesSesion').classList.remove('hidden');
+            
+            ejecutarBusqueda();
+        }
+
+        // --- PROCESAMIENTO DE LOS 3 ARCHIVOS ---
+        document.getElementById('btnProcesar').addEventListener('click', async () => {
+            const fileExcel = document.getElementById('fileExcel').files[0];
+            const fileCsv = document.getElementById('fileCsv').files[0];
+            const filesSolicitudes = document.getElementById('fileSolicitudes').files; // Múltiples archivos
+
+            if (!fileExcel || !fileCsv) { alert("Por favor, selecciona los archivos obligatorios de Inventario y Salidas."); return; }
+
+            sortAscendente = true;
+            document.getElementById('sortIcon').innerText = '↕️';
+            document.getElementById('btnProcesar').innerText = "Procesando...";
+
+            try {
+                const setGrupos = new Set();
+                const setMaquinas = new Set();
+                const todasLasSalidasGlobales = []; 
+
+                // 1. Procesar Excel de Inventario
+                const datosInventario = await leerExcel(fileExcel);
+                let inventarioFiltrado = {};
+
+                datosInventario.forEach((row, index) => {
+                    try {
+                        if (!row || typeof row !== 'object') return; // Protección contra filas vacías
+                        
+                        let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                        if (!codigo) return; codigo = codigo.trim();
+
+                        let partes = codigo.split('-');
+                        let grupoCodigo = partes[0] + '-' + partes[1];
+                        setGrupos.add(grupoCodigo);
+
+                        let descKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('desc') || kl.includes('nomb') || kl.includes('detalle');
+                        });
+                        let desc = descKey ? row[descKey] : "Sin descripción";
+
+                        let noParteKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('parte') || kl === 'pn' || kl === 'part number' || kl.includes('catalogo') || kl.includes('catálogo');
+                        });
+                        let noParte = noParteKey ? row[noParteKey] : "-";
+
+                        let cantKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('cant') || kl.includes('exist') || kl.includes('stock') || kl.includes('disp') || kl.includes('saldo');
+                        });
+                        
+                        let cantRaw = cantKey ? row[cantKey] : 0;
+                        let cant = parseFloat(String(cantRaw).replace(/,/g, '').trim());
+                        if (isNaN(cant)) cant = 0;
+                        
+                        let fechaKey = Object.keys(row).find(k => {
+                            let kl = k.toLowerCase().trim();
+                            return kl.includes('fecha') || kl.includes('date') || kl.includes('últ') || kl.includes('ult');
+                        });
+                        let fechaCompraRaw = fechaKey ? row[fechaKey] : null;
+                        
+                        // Modificación: usar el parseador robusto
+                        let fechaCompra = parseFechaRobusta(fechaCompraRaw);
+
+                        if (!inventarioFiltrado[codigo]) {
+                            inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra };
+                        } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
+                            inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
+                            inventarioFiltrado[codigo].cantidad = cant;
+                            inventarioFiltrado[codigo].noParte = String(noParte);
+                        }
+                    } catch (errRow) {
+                        console.error("Fila omitida por error de formato en la línea " + index, errRow);
+                    }
+                });
+
+                // 2. Procesar CSV Salidas de Bodega
+                const datosCsv = await leerCSV(fileCsv);
+                const salidasPorCodigo = {};
+                const maquinasPorCodigo = {};
+
+                datosCsv.forEach(row => {
+                    let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                    if (!codigo) return; codigo = codigo.trim();
+
+                    let fechaKey = Object.keys(row).find(k => {
+                        let kl = k.toLowerCase().trim();
+                        return kl.includes('fecha') || kl.includes('date') || kl.includes('dia') || kl.includes('día');
+                    });
+                    let fechaSalida = fechaKey ? parseFechaRobusta(row[fechaKey]) : null;
+                    if (!fechaSalida) return;
+
+                    let cantKey = Object.keys(row).find(k => {
+                        let kl = k.toLowerCase().trim();
+                        return kl.includes('cant') || kl.includes('sac') || kl.includes('sal');
+                    });
+                    let cantidad = cantKey ? parseFloat(String(row[cantKey]).replace(/,/g, '').trim()) : 0;
+                    if (isNaN(cantidad)) cantidad = 0;
+
+                    let maquinaKey = Object.keys(row).find(k => {
+                        let kl = k.toLowerCase().trim();
+                        return kl.includes('dest') || kl.includes('maq') || kl.includes('equip') || kl.includes('centro');
+                    });
+                    let maquina = maquinaKey ? row[maquinaKey] : null;
+                    if (maquina) { 
+                        if (!maquinasPorCodigo[codigo]) maquinasPorCodigo[codigo] = new Set();
+                        maquinasPorCodigo[codigo].add(String(maquina).trim());
+                        setMaquinas.add(String(maquina).trim());
+                    }
+
+                    if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = { fechas: [], cantidades: [] };
+                    salidasPorCodigo[codigo].fechas.push(fechaSalida);
+                    salidasPorCodigo[codigo].cantidades.push(cantidad);
+
+                    todasLasSalidasGlobales.push(fechaSalida); 
+                });
+
+                // 3. Procesar Solicitudes Online (OPCIONAL - Múltiples archivos CSV/XLS/HTML)
+                const solicitudesFiltradas = {};
+
+                if (filesSolicitudes && filesSolicitudes.length > 0) {
+                    for (let fileSol of filesSolicitudes) {
+                        let datosSolicitudes = [];
+                        
+                        // AHORA ACEPTAMOS CSV, XLS REAL Y XLS-HTML (RadGrid)
+                        if (fileSol.name.toLowerCase().endsWith('.csv')) {
+                            datosSolicitudes = await leerCSV(fileSol);
+                        } else {
+                            datosSolicitudes = await leerExcel(fileSol);
+                        }
+
+                        datosSolicitudes.forEach(row => {
+                            // Filtro: solo registros de Electrico
+                            const rowStr = JSON.stringify(row).toLowerCase();
+                            if (!rowStr.includes('electrico')) return;
+
+                            let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                            if (!codigo) return; codigo = codigo.trim();
+
+                            // Buscar columna de Fecha
+                            let fechaKey = Object.keys(row).find(k => {
+                                let kl = k.toLowerCase().trim();
+                                return kl.includes('fecha') && (kl.includes('doc') || kl.includes('solic'));
+                            });
+                            if (!fechaKey) {
+                                fechaKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha'));
+                            }
+                            let fechaSolRaw = fechaKey ? row[fechaKey] : null;
+                            let fechaSol = parseFechaRobusta(fechaSolRaw);
+                            
+                            if (!fechaSol || isNaN(fechaSol)) return;
+
+                            // Determinar Origen
+                            let origen = "-";
+                            if (rowStr.includes('panamá') || rowStr.includes('panama') || rowStr.includes('extranjero')) {
+                                origen = "Extranjero";
+                            } else {
+                                let cotizKey = Object.keys(row).find(k => k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot'));
+                                if (cotizKey && row[cotizKey] !== undefined && row[cotizKey] !== null && String(row[cotizKey]).trim() !== "") {
+                                    origen = "Local";
+                                } else {
+                                    origen = "Nacional";
+                                }
+                            }
+
+                            // Guardar solo el más reciente
+                            if (!solicitudesFiltradas[codigo] || fechaSol > solicitudesFiltradas[codigo].fecha) {
+                                solicitudesFiltradas[codigo] = { fecha: fechaSol, origen: origen };
+                            }
+                        });
+                    }
+                }
+
+                const qGlobales = obtenerCincoCuartiles(todasLasSalidasGlobales);
+                const limiteInactivo = qGlobales[1]; const limiteActivo = qGlobales[3];   
+
+                // 4. Preparar datos finales consolidando las 3 fuentes
+                let resultadosTabla = [];
+
+                Object.keys(inventarioFiltrado).forEach(codigo => {
+                    const inv = inventarioFiltrado[codigo];
+                    const salidas = (salidasPorCodigo[codigo]?.fechas || []).sort((a, b) => a - b);
+                    const cantidadesSalidas = (salidasPorCodigo[codigo]?.cantidades || []).filter(c => c > 0 && !isNaN(c));
+                    const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
+                    const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
+                    
+                    const sol = solicitudesFiltradas[codigo] || { fecha: null, origen: "-" };
+
+                    let vecesUsado = salidas.length;
+                    let primeraSalida = vecesUsado > 0 ? salidas[0] : null;
+                    let ultimaSalida = vecesUsado > 0 ? salidas[salidas.length - 1] : null;
+
+                    let estado = "Sin movimiento"; let estadoClase = "bg-gray-200 text-gray-700"; 
+                    if (ultimaSalida) {
+                        if (ultimaSalida >= limiteActivo) { estado = "Activo"; estadoClase = "bg-green-100 text-green-800"; } 
+                        else if (ultimaSalida >= limiteInactivo) { estado = "Moderado"; estadoClase = "bg-yellow-100 text-yellow-800"; } 
+                        else { estado = "Inactivo"; estadoClase = "bg-red-100 text-red-800"; }
+                    }
+                    
+                    let diasEntreSalidas = [];
+                    for (let i = 1; i < salidas.length; i++) diasEntreSalidas.push((salidas[i] - salidas[i-1]) / 86400000);
+                    
+                    const qDiasSalidas = obtenerCincoCuartiles(diasEntreSalidas);
+                    let proyeccionMs = ""; let proyeccionTexto = "N/A";
+                    
+                    if (inv.cantidad <= 1 && ultimaSalida && qDiasSalidas[2] !== null) { 
+                        let fechaProyectadaMsLocal = ultimaSalida + (qDiasSalidas[2] * 86400000);
+                        proyeccionMs = fechaProyectadaMsLocal;
+                        proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
+                    }
+
+                    // Calcular demanda anual: (365 / Q2_días) × Q2_cantidad
+                    let demandaAnual = null;
+                    if (qDiasSalidas[2] !== null && qDiasSalidas[2] > 0 && qConsumo[2] !== null && qConsumo[2] > 0) {
+                        const frecuenciaAnual = 365 / qDiasSalidas[2]; // veces al año
+                        demandaAnual = Math.round(frecuenciaAnual * qConsumo[2]); // unidades al año
+                    }
+
+                    resultadosTabla.push({ 
+                        inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, 
+                        ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo,
+                        solFecha: sol.fecha, solOrigen: sol.origen, demandaAnual: demandaAnual
+                    });
+                });
+
+                const datosParaGuardar = {
+                    resultadosTabla,
+                    gruposUnicos: Array.from(setGrupos),
+                    maquinasUnicas: Array.from(setMaquinas)
+                };
+
+                await guardarDatos(datosParaGuardar);
+                inicializarInterfaz(datosParaGuardar);
+                document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
+
+            } catch (error) {
+                console.error("Error crítico durante el procesamiento:", error);
+                alert("Error al procesar: " + (error.message || "Verifica los formatos de columnas. Revisa la consola para más detalles."));
+                document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
+            }
+        });
+
+        document.getElementById('btnBorrarDatos').addEventListener('click', async () => {
+            if(confirm("¿Estás seguro de que quieres borrar los datos guardados de esta sesión?")) {
+                await borrarDatosLocales();
+                location.reload(); 
+            }
+        });
+
+        document.getElementById('btnActualizarApp').addEventListener('click', () => {
+            if(confirm("¿Buscar e instalar una nueva versión de la aplicación? \n\nTus datos guardados NO se perderán.")) {
+                if ('serviceWorker' in navigator && caches) {
+                    caches.keys().then(names => Promise.all(names.map(name => caches.delete(name))))
+                    .then(() => navigator.serviceWorker.getRegistrations())
+                    .then(registrations => Promise.all(registrations.map(r => r.unregister())))
+                    .then(() => { window.location.href = window.location.pathname + '?updated=' + new Date().getTime(); })
+                    .catch(err => { window.location.reload(); });
+                } else {
+                    window.location.href = window.location.pathname + '?updated=' + new Date().getTime();
+                }
+            }
+        });
+
+        document.getElementById('btnMostrarImportar').addEventListener('click', () => {
+            document.getElementById('zonaImportacion').classList.remove('hidden');
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const pantallaCarga = document.getElementById('pantallaCarga');
+            const zonaImportacion = document.getElementById('zonaImportacion');
+            
+            try {
+                const datosGuardados = await cargarDatos();
+                if (datosGuardados && datosGuardados.resultadosTabla && datosGuardados.resultadosTabla.length > 0) {
+                    inicializarInterfaz(datosGuardados);
+                } else {
+                    zonaImportacion.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Error al iniciar la base de datos:", error);
+                zonaImportacion.classList.remove('hidden');
+            } finally {
+                if (pantallaCarga) pantallaCarga.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
