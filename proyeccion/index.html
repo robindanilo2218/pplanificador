@@ -20,6 +20,7 @@
         th { background-color: #f3f4f6; position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .q-col { background-color: #f8fafc; }
         .proj-col { background-color: #ecfdf5; font-weight: bold; }
+        .sol-col { background-color: #fffbeb; } /* Color amarillento para solicitudes */
         .badge { padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-align: center; display: inline-block; width: 100px;}
         .sortable-header { cursor: pointer; user-select: none; transition: background-color 0.2s; }
         .sortable-header:hover { background-color: #d1fae5; }
@@ -93,15 +94,22 @@
         </div>
 
         <div id="zonaImportacion" class="mb-6 transition-all duration-300 no-print hidden">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-                <div class="p-4 border rounded bg-gray-50">
-                    <label class="block font-semibold mb-2 text-sm">1. Base de Inventario (RadGridExport.xlsx)</label>
-                    <input type="file" id="fileExcel" accept=".xlsx, .xls" class="block w-full text-sm">
+            <!-- Ahora son 3 columnas para los 3 archivos -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="p-4 border rounded bg-gray-50 shadow-sm">
+                    <label class="block font-semibold mb-2 text-sm text-blue-800">1. Base Inventario</label>
+                    <input type="file" id="fileExcel" accept=".xlsx, .xls" class="block w-full text-xs cursor-pointer">
                 </div>
                 
-                <div class="p-4 border rounded bg-gray-50">
-                    <label class="block font-semibold mb-2 text-sm">2. Salidas de Bodega (salidas_bodega.csv)</label>
-                    <input type="file" id="fileCsv" accept=".csv" class="block w-full text-sm">
+                <div class="p-4 border rounded bg-gray-50 shadow-sm">
+                    <label class="block font-semibold mb-2 text-sm text-green-800">2. Salidas Bodega</label>
+                    <input type="file" id="fileCsv" accept=".csv" class="block w-full text-xs cursor-pointer">
+                </div>
+
+                <div class="p-4 border rounded bg-yellow-50 shadow-sm border-yellow-200">
+                    <label class="block font-semibold mb-2 text-sm text-yellow-800" title="Archivos de inventario_online">3. Solicitudes (Online) <span class="text-xs font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
+                    <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv" class="block w-full text-xs cursor-pointer">
+                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Darvin/Orozco</p>
                 </div>
             </div>
             <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
@@ -197,6 +205,11 @@
                         <th>No. Parte</th>
                         <th>Descripción</th>
                         <th>Cant.</th>
+                        <!-- Novedad: Solicitudes Online -->
+                        <th class="sol-col" title="Fecha solicitud de compra (Inventario Online)">Fecha Solicitud</th>
+                        <th class="sol-col" title="Local o Extranjero">Origen</th>
+                        <th class="sol-col" title="Cantidad solicitada más reciente">Cant. Solicit.</th>
+                        
                         <th class="q-col" title="Stock Mínimo (Q0 Consumo)">Q0</th>
                         <th class="q-col" title="Stock Límite Inferior (Q1 Consumo)">Q1</th>
                         <th class="q-col" title="Stock Mediano (Q2 Consumo)">Q2</th>
@@ -233,7 +246,6 @@
     </div>
 
     <script>
-        // Registro del Service Worker para funcionamiento Offline PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
@@ -302,7 +314,6 @@
             } catch (error) { console.error("Error borrando en IndexedDB:", error); }
         }
 
-        // --- MATEMÁTICAS Y FORMATO ---
         function calcularCuartil(arr, q) {
             const ordenado = [...arr].sort((a, b) => a - b);
             const pos = (ordenado.length - 1) * q;
@@ -324,7 +335,7 @@
         }
 
         function formatFecha(timestamp) {
-            if (!timestamp) return "N/A";
+            if (!timestamp) return "-";
             const d = new Date(timestamp);
             const localDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
             return localDate.toLocaleDateString('es-GT');
@@ -351,7 +362,7 @@
             });
         }
 
-        // --- SISTEMA DE RENDERIZADO RÁPIDO (LAZY LOADING) EN SEGUNDO PLANO ---
+        // --- SISTEMA DE RENDERIZADO RÁPIDO (LAZY LOADING) ---
         let TODOS_LOS_DATOS = []; 
         let DATOS_FILTRADOS = [];
         let PUNTERO_PAGINA = 0;
@@ -362,7 +373,7 @@
             const bloque = DATOS_FILTRADOS.slice(PUNTERO_PAGINA, PUNTERO_PAGINA + REGISTROS_POR_PAGINA);
             
             bloque.forEach(fila => {
-                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo } = fila;
+                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo, solFecha, solOrigen, solCantidad } = fila;
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-100 transition duration-150";
                 
@@ -371,6 +382,11 @@
                     <td><div class="cell-scroll mw-120 text-xs text-gray-600" title="${inv.noParte || '-'}">${inv.noParte || "-"}</div></td>
                     <td><div class="cell-scroll mw-200 text-xs" title="${inv.descripcion}">${inv.descripcion}</div></td>
                     <td class="text-center font-bold text-blue-900 bg-blue-50">${inv.cantidad}</td>
+                    
+                    <td class="sol-col text-xs text-center">${formatFecha(solFecha)}</td>
+                    <td class="sol-col text-xs text-center font-semibold text-gray-700">${solOrigen}</td>
+                    <td class="sol-col text-center font-bold text-gray-800">${solCantidad}</td>
+                    
                     <td class="q-col text-right text-gray-600">${formatQ(qConsumo[0])}</td>
                     <td class="q-col text-right text-gray-600">${formatQ(qConsumo[1])}</td>
                     <td class="q-col text-right font-bold text-blue-700">${formatQ(qConsumo[2])}</td>
@@ -406,7 +422,6 @@
             }
         }
 
-        // Ejecuta los filtros sobre el Array en memoria, no sobre el HTML (100x más rápido)
         function ejecutarBusqueda() {
             const fBusqueda = document.getElementById('busquedaTexto').value.toLowerCase().trim();
             const tipoBusqueda = document.getElementById('tipoBusqueda').value;
@@ -433,11 +448,9 @@
             DATOS_FILTRADOS = TODOS_LOS_DATOS.filter(fila => {
                 let mostrar = true;
 
-                // 1. Buscador Manual (Texto Libre Multipalabra)
                 if (fBusqueda !== "") {
                     const terminos = fBusqueda.split(/\s+/).filter(t => t.length > 0);
                     const textoFila = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte}`.toLowerCase();
-                    
                     if (tipoBusqueda === 'and') {
                         if (!terminos.every(term => textoFila.includes(term))) mostrar = false;
                     } else {
@@ -445,7 +458,6 @@
                     }
                 }
 
-                // 2. Filtros Desplegables
                 if (mostrar && fGrupo !== 'todos' && fila.inv.grupo !== fGrupo) mostrar = false;
                 if (mostrar && fMaquina !== 'todas' && !fila.maquinasUnicas.toLowerCase().includes(fMaquina.toLowerCase())) mostrar = false;
                 if (mostrar && fEstado !== 'todos' && fila.estado !== fEstado) mostrar = false;
@@ -496,19 +508,16 @@
                 return mostrar;
             });
 
-            // Limpiar la tabla y pintar el primer bloque de resultados
             document.getElementById('tableBody').innerHTML = "";
             PUNTERO_PAGINA = 0;
             renderizarBloqueTabla();
         }
 
-        // Listeners: La búsqueda de texto SOLO se ejecuta al dar Enter o clic en el botón
         document.getElementById('busquedaTexto').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') ejecutarBusqueda();
         });
         document.getElementById('btnEjecutarBusqueda').addEventListener('click', ejecutarBusqueda);
         
-        // Los filtros de menús siguen siendo automáticos
         ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda', 'filtroUltimaSalida', 'filtroSalidaDesde', 'filtroSalidaHasta'].forEach(id => {
             document.getElementById(id).addEventListener('change', ejecutarBusqueda);
         });
@@ -517,7 +526,6 @@
 
         let sortAscendente = true; 
         document.getElementById('thSortProyeccion').addEventListener('click', () => {
-            // Ordenar el arreglo en memoria
             DATOS_FILTRADOS.sort((a, b) => {
                 const valA = a.proyeccionMs;
                 const valB = b.proyeccionMs;
@@ -530,22 +538,21 @@
             sortAscendente = !sortAscendente;
             document.getElementById('sortIcon').innerText = sortAscendente ? '🔼' : '🔽';
             
-            // Repintar desde cero
             document.getElementById('tableBody').innerHTML = "";
             PUNTERO_PAGINA = 0;
             renderizarBloqueTabla();
         });
 
-        // Exportación y PDF
         document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
-            // Exporta TODO lo filtrado, no solo lo visible en la página
-            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            // Actualizado para incluir las columnas de solicitudes online
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Cant. Solicit.', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
             
             DATOS_FILTRADOS.forEach(f => {
                 datosLimpios.push([
                     f.inv.codigo, f.inv.noParte || "-", f.inv.descripcion, f.inv.cantidad,
+                    formatFecha(f.solFecha), f.solOrigen, f.solCantidad,
                     formatQ(f.qConsumo[0]), formatQ(f.qConsumo[1]), formatQ(f.qConsumo[2]), formatQ(f.qConsumo[3]), formatQ(f.qConsumo[4]),
                     f.maquinasUnicas, formatFecha(f.inv.ultimaCompra), f.estado, f.vecesUsado,
                     formatFecha(f.primeraSalida), formatFecha(f.ultimaSalida),
@@ -561,16 +568,14 @@
             XLSX.writeFile(libro, `Analisis_Bodega_${fecha}.xlsx`);
         });
 
-        // Configuración inicial de la interfaz
         function inicializarInterfaz(datos) {
             TODOS_LOS_DATOS = datos.resultadosTabla;
 
-            // PRIORIDAD: Ordenar por fecha de proyección más antigua primero (Urgentes)
             TODOS_LOS_DATOS.sort((a, b) => {
-                if (!a.proyeccionMs && !b.proyeccionMs) return (b.ultimaSalida || 0) - (a.ultimaSalida || 0); // Si no hay proyección, ordenar por última salida
+                if (!a.proyeccionMs && !b.proyeccionMs) return (b.ultimaSalida || 0) - (a.ultimaSalida || 0); 
                 if (!a.proyeccionMs) return 1;
                 if (!b.proyeccionMs) return -1;
-                return a.proyeccionMs - b.proyeccionMs; // Menor a mayor (Fechas viejas arriba)
+                return a.proyeccionMs - b.proyeccionMs; 
             });
 
             const selGrupo = document.getElementById('filtroGrupo');
@@ -588,12 +593,13 @@
             ejecutarBusqueda();
         }
 
-        // --- PROCESAMIENTO DE ARCHIVOS ---
+        // --- PROCESAMIENTO DE LOS 3 ARCHIVOS ---
         document.getElementById('btnProcesar').addEventListener('click', async () => {
             const fileExcel = document.getElementById('fileExcel').files[0];
             const fileCsv = document.getElementById('fileCsv').files[0];
+            const fileSolicitudes = document.getElementById('fileSolicitudes').files[0]; // Nuevo archivo
 
-            if (!fileExcel || !fileCsv) { alert("Por favor, selecciona ambos archivos."); return; }
+            if (!fileExcel || !fileCsv) { alert("Por favor, selecciona los archivos obligatorios de Inventario y Salidas."); return; }
 
             sortAscendente = true;
             document.getElementById('sortIcon').innerText = '↕️';
@@ -604,7 +610,7 @@
                 const setMaquinas = new Set();
                 const todasLasSalidasGlobales = []; 
 
-                // 1. Procesar Excel 
+                // 1. Procesar Excel de Inventario
                 const datosInventario = await leerExcel(fileExcel);
                 let inventarioFiltrado = {};
 
@@ -653,7 +659,7 @@
                     }
                 });
 
-                // 2. Procesar CSV
+                // 2. Procesar CSV Salidas de Bodega
                 const datosSalidas = await leerCSV(fileCsv);
                 let salidasPorCodigo = {};
                 let maquinasPorCodigo = {};
@@ -685,10 +691,56 @@
                     }
                 });
 
+                // 3. Procesar Solicitudes Online (Nuevo filtro Darvin/Orozco)
+                let solicitudesFiltradas = {};
+                if (fileSolicitudes) {
+                    let datosSolicitudes = [];
+                    if (fileSolicitudes.name.toLowerCase().endsWith('.csv')) {
+                        datosSolicitudes = await leerCSV(fileSolicitudes);
+                    } else {
+                        datosSolicitudes = await leerExcel(fileSolicitudes);
+                    }
+
+                    datosSolicitudes.forEach(row => {
+                        // Filtro de usuario: ignorar fila si no contiene Orozco o Darvin
+                        const rowStr = JSON.stringify(row).toLowerCase();
+                        if (!rowStr.includes('orozco') && !rowStr.includes('darvin')) return;
+
+                        let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                        if (!codigo) return; codigo = codigo.trim();
+
+                        let fechaKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha') || k.toLowerCase().includes('date') || k.toLowerCase().includes('solicitud'));
+                        let fechaSolRaw = fechaKey ? row[fechaKey] : null;
+                        let fechaSol = fechaSolRaw ? new Date(fechaSolRaw).getTime() : null;
+                        if (!fechaSol || isNaN(fechaSol)) return; // Necesitamos fecha válida para saber cuál es el más reciente
+
+                        let cantKey = Object.keys(row).find(k => k.toLowerCase().includes('cant') || k.toLowerCase().includes('solicit'));
+                        let cantRaw = cantKey ? row[cantKey] : 0;
+                        let cant = parseFloat(String(cantRaw).replace(/,/g, '').trim());
+                        if (isNaN(cant)) cant = 0;
+
+                        // Determinar Origen (Extranjero si dice Panamá, Local si tiene num cotización)
+                        let origen = "-";
+                        if (rowStr.includes('panamá') || rowStr.includes('panama')) {
+                            origen = "Extranjero";
+                        } else {
+                            let cotizKey = Object.keys(row).find(k => k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot.'));
+                            if (cotizKey && row[cotizKey]) {
+                                origen = "Local";
+                            }
+                        }
+
+                        // Guardar solo el más reciente
+                        if (!solicitudesFiltradas[codigo] || fechaSol > solicitudesFiltradas[codigo].fecha) {
+                            solicitudesFiltradas[codigo] = { fecha: fechaSol, origen: origen, cantidad: cant };
+                        }
+                    });
+                }
+
                 const qGlobales = obtenerCincoCuartiles(todasLasSalidasGlobales);
                 const limiteInactivo = qGlobales[1]; const limiteActivo = qGlobales[3];   
 
-                // 3. Preparar datos
+                // 4. Preparar datos finales consolidando las 3 fuentes
                 let resultadosTabla = [];
 
                 Object.keys(inventarioFiltrado).forEach(codigo => {
@@ -698,6 +750,8 @@
                     const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
                     const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
+                    const sol = solicitudesFiltradas[codigo] || { fecha: null, origen: "-", cantidad: "-" };
+
                     let vecesUsado = salidas.length;
                     let primeraSalida = vecesUsado > 0 ? salidas[0] : null;
                     let ultimaSalida = vecesUsado > 0 ? salidas[salidas.length - 1] : null;
@@ -721,7 +775,11 @@
                         proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
-                    resultadosTabla.push({ inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo });
+                    resultadosTabla.push({ 
+                        inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, 
+                        ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo,
+                        solFecha: sol.fecha, solOrigen: sol.origen, solCantidad: sol.cantidad
+                    });
                 });
 
                 const datosParaGuardar = {
@@ -736,7 +794,7 @@
 
             } catch (error) {
                 console.error(error);
-                alert("Ocurrió un error al procesar los archivos.");
+                alert("Ocurrió un error al procesar los archivos. Verifica los formatos de columnas.");
                 document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
             }
         });
