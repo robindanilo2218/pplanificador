@@ -18,7 +18,7 @@
         table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
         th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; white-space: nowrap; }
         th { background-color: #f3f4f6; position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .q-col { background-color: #f8fafc; }
+        .q-col { background-color: #f8fafc; max-width: 50px; min-width: 40px; text-align: right; padding: 4px; }
         .proj-col { background-color: #ecfdf5; font-weight: bold; }
         .sol-col { background-color: #fffbeb; } /* Color amarillento para solicitudes */
         .badge { padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-align: center; display: inline-block; width: 100px;}
@@ -218,6 +218,7 @@
                         <th>Última Compra</th>
                         <th class="text-center">Estado (Rotación)</th>
                         <th>Veces Usado</th>
+                        <th title="Demanda anual proyectada basada en Q2 de días y cantidades">Demanda Anual</th>
                         <th>Primera Salida</th>
                         <th>Última Salida</th>
                         <th class="q-col" title="Cuartiles de días entre salidas (Mínimo)">Q0</th>
@@ -363,7 +364,7 @@
             return localDate.toLocaleDateString('es-GT');
         }
 
-        const formatQ = (val) => val !== null && val !== undefined ? (Number.isInteger(val) ? val : val.toFixed(1)) : '-';
+        const formatQ = (val) => val !== null && val !== undefined ? Math.round(val) : '-';
 
         function leerExcel(file) {
             return new Promise((resolve, reject) => {
@@ -445,13 +446,14 @@
                     <td class="text-xs font-semibold text-gray-700">${formatFecha(inv.ultimaCompra)}</td>
                     <td class="text-center"><span class="badge ${estadoClase}">${estado}</span></td>
                     <td class="text-center font-bold">${vecesUsado}</td>
+                    <td class="text-center font-bold text-purple-700 bg-purple-50">${fila.demandaAnual || '-'}</td>
                     <td class="text-xs">${formatFecha(primeraSalida)}</td>
                     <td class="text-xs">${formatFecha(ultimaSalida)}</td>
-                    <td class="q-col text-right">${qDiasSalidas[0] !== null ? qDiasSalidas[0].toFixed(1) : '-'}</td>
-                    <td class="q-col text-right">${qDiasSalidas[1] !== null ? qDiasSalidas[1].toFixed(1) : '-'}</td>
-                    <td class="q-col text-right font-bold text-red-600">${qDiasSalidas[2] !== null ? qDiasSalidas[2].toFixed(1) : '-'}</td>
-                    <td class="q-col text-right">${qDiasSalidas[3] !== null ? qDiasSalidas[3].toFixed(1) : '-'}</td>
-                    <td class="q-col text-right">${qDiasSalidas[4] !== null ? qDiasSalidas[4].toFixed(1) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[1] !== null ? Math.round(qDiasSalidas[1]) : '-'}</td>
+                    <td class="q-col text-right font-bold text-red-600">${qDiasSalidas[2] !== null ? Math.round(qDiasSalidas[2]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[3] !== null ? Math.round(qDiasSalidas[3]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[4] !== null ? Math.round(qDiasSalidas[4]) : '-'}</td>
                     <td class="proj-col text-sm no-print" data-val="${proyeccionMs||0}">${proyeccionTexto}</td>
                     <td class="proj-col text-sm hidden print:table-cell">${proyeccionTexto}</td>
                 `;
@@ -595,8 +597,8 @@
         document.getElementById('btnImprimirPdf').addEventListener('click', () => { window.print(); });
 
         document.getElementById('btnExportarExcel').addEventListener('click', () => {
-            // Actualizado para incluir las columnas de solicitudes online
-            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            // Actualizado para incluir las columnas de solicitudes online y demanda anual
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Veces Usado', 'Demanda Anual', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
             
             DATOS_FILTRADOS.forEach(f => {
                 datosLimpios.push([
@@ -604,6 +606,7 @@
                     formatFecha(f.solFecha), f.solOrigen,
                     formatQ(f.qConsumo[0]), formatQ(f.qConsumo[1]), formatQ(f.qConsumo[2]), formatQ(f.qConsumo[3]), formatQ(f.qConsumo[4]),
                     f.maquinasUnicas, formatFecha(f.inv.ultimaCompra), f.estado, f.vecesUsado,
+                    f.demandaAnual || "-",
                     formatFecha(f.primeraSalida), formatFecha(f.ultimaSalida),
                     formatQ(f.qDiasSalidas[0]), formatQ(f.qDiasSalidas[1]), formatQ(f.qDiasSalidas[2]), formatQ(f.qDiasSalidas[3]), formatQ(f.qDiasSalidas[4]),
                     f.proyeccionTexto
@@ -822,7 +825,7 @@
                 Object.keys(inventarioFiltrado).forEach(codigo => {
                     const inv = inventarioFiltrado[codigo];
                     const salidas = (salidasPorCodigo[codigo]?.fechas || []).sort((a, b) => a - b);
-                    const cantidadesSalidas = salidasPorCodigo[codigo]?.cantidades || [];
+                    const cantidadesSalidas = (salidasPorCodigo[codigo]?.cantidades || []).filter(c => c > 0 && !isNaN(c));
                     const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
                     const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
                     
@@ -851,10 +854,17 @@
                         proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
+                    // Calcular demanda anual: (365 / Q2_días) × Q2_cantidad
+                    let demandaAnual = null;
+                    if (qDiasSalidas[2] !== null && qDiasSalidas[2] > 0 && qConsumo[2] !== null && qConsumo[2] > 0) {
+                        const frecuenciaAnual = 365 / qDiasSalidas[2]; // veces al año
+                        demandaAnual = Math.round(frecuenciaAnual * qConsumo[2]); // unidades al año
+                    }
+
                     resultadosTabla.push({ 
                         inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, 
                         ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo,
-                        solFecha: sol.fecha, solOrigen: sol.origen
+                        solFecha: sol.fecha, solOrigen: sol.origen, demandaAnual: demandaAnual
                     });
                 });
 
