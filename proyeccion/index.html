@@ -109,7 +109,7 @@
                 <div class="p-4 border rounded bg-yellow-50 shadow-sm border-yellow-200">
                     <label class="block font-semibold mb-2 text-sm text-yellow-800" title="Archivos de inventario_online">3. Solicitudes (Online) <span class="text-xs font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
                     <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv" class="block w-full text-xs cursor-pointer">
-                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico</p>
+                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Darvin/Orozco</p>
                 </div>
             </div>
             <button id="btnProcesar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
@@ -668,8 +668,21 @@
 
                     let fechaSalidaRaw = row['Fecha'] || row['Date'] || Object.values(row)[1]; 
                     let fechaSalida = new Date(fechaSalidaRaw).getTime();
-                    let maquina = (row['Máquina'] || row['Maquina'] || row['Destino'] || row['Sección'] || row['Seccion'] || row['Área'] || row['Equipo'] || "").trim();
-                    if (maquina) setMaquinas.add(maquina);
+                    
+                    // Extraer todos los destinos (Máquina, Sección, Departamento, etc.)
+                    let destinosEnFila = new Set();
+                    Object.keys(row).forEach(k => {
+                        let kl = k.toLowerCase().trim();
+                        if (kl.includes('maquina') || kl.includes('máquina') || 
+                            kl.includes('seccion') || kl.includes('sección') || 
+                            kl.includes('departamento') || kl.includes('depto') || 
+                            kl.includes('destino') || kl === 'área' || kl === 'area' || kl === 'equipo') {
+                            let val = String(row[k]).trim();
+                            if (val && val !== '-' && val !== '0' && val.toLowerCase() !== 'null') {
+                                destinosEnFila.add(val);
+                            }
+                        }
+                    });
 
                     let cantKey = Object.keys(row).find(k => {
                         let kl = k.toLowerCase().trim();
@@ -685,7 +698,11 @@
                         salidasPorCodigo[codigo].cantidades.push(cantSalida);
                         todasLasSalidasGlobales.push(fechaSalida); 
                         if (!maquinasPorCodigo[codigo]) maquinasPorCodigo[codigo] = new Set();
-                        if (maquina) maquinasPorCodigo[codigo].add(maquina);
+                        
+                        destinosEnFila.forEach(dest => {
+                            setMaquinas.add(dest);
+                            maquinasPorCodigo[codigo].add(dest);
+                        });
                     }
                 });
 
