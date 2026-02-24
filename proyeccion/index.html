@@ -821,6 +821,15 @@
                 const qGlobales = obtenerCincoCuartiles(todasLasSalidasGlobales);
                 const limiteInactivo = qGlobales[1]; const limiteActivo = qGlobales[3];   
 
+                // NUEVO: Calcular el rango total de tiempo del archivo de salidas para una Demanda Anual real
+                let diasGlobalesHistoria = 365; // Por defecto 1 año si no hay datos
+                if (todasLasSalidasGlobales.length > 0) {
+                    let minGlobalMs = Math.min(...todasLasSalidasGlobales);
+                    let maxGlobalMs = Math.max(...todasLasSalidasGlobales);
+                    // Obtenemos cuántos días de historia tiene tu archivo de Salidas en total
+                    diasGlobalesHistoria = Math.max(1, (maxGlobalMs - minGlobalMs) / 86400000);
+                }
+
                 // 4. Preparar datos finales consolidando las 3 fuentes
                 let resultadosTabla = [];
 
@@ -856,19 +865,17 @@
                         proyeccionTexto = formatFecha(fechaProyectadaMsLocal);
                     }
 
-                    // FIX: FÓRMULA DE DEMANDA ANUAL ROBUSTA (Basada en el total histórico real)
+                    // FIX: FÓRMULA DE DEMANDA ANUAL ROBUSTA (Basada en el rango de fechas global)
                     let demandaAnual = null;
                     if (vecesUsado > 0) {
+                        // Sumamos absolutamente todo lo consumido en la historia
                         let totalConsumidoHistorico = cantidadesSalidas.reduce((a, b) => a + b, 0);
                         
-                        if (vecesUsado > 1 && primeraSalida && ultimaSalida && ultimaSalida > primeraSalida) {
-                            let diasDeHistoria = (ultimaSalida - primeraSalida) / 86400000;
-                            // Si sacó X cantidad en Y días de historia, ¿cuánto sacaría en 365 días?
-                            demandaAnual = Math.round((totalConsumidoHistorico / diasDeHistoria) * 365);
-                        } else {
-                            // Si solo lo ha sacado 1 sola vez en la historia (o en un mismo día), usamos ese número como base anual
-                            demandaAnual = Math.round(totalConsumidoHistorico);
-                        }
+                        // Proyectamos el consumo histórico dividiéndolo entre los días totales del archivo y multiplicando por 365
+                        demandaAnual = Math.round((totalConsumidoHistorico / diasGlobalesHistoria) * 365);
+                        
+                        // Si se consumió muy poco (ej. 1 pieza en 5 años), aseguramos que al menos marque 1 para no poner cero
+                        if (demandaAnual === 0 && totalConsumidoHistorico > 0) demandaAnual = 1;
                     }
 
                     resultadosTabla.push({ 
