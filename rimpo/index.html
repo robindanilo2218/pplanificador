@@ -1,506 +1,503 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Settings, 
-  FileText, 
-  PlusCircle, 
-  AlertTriangle, 
-  TrendingDown, 
-  DollarSign, 
-  Clock, 
-  LayoutDashboard,
-  Camera,
-  Save,
-  Trash2,
-  Image as ImageIcon
-} from 'lucide-react';
-
-// --- MAIN COMPONENT ---
-export default function App() {
-  const [activeTab, setActiveTab] = useState('registro');
-  
-  // --- STATE: CONFIGURATION ---
-  const [config, setConfig] = useState({
-    moneda: 'Q',
-    costoHoraProduccion: 0.00,
-    horasProgramadasMes: 0.00,
-    metaCostoMalaOperacion: 1.50,
-    presupuestoMantenimiento: 10000 // Valor base para calcular el KPI %
-  });
-
-  // --- STATE: EVENTS ---
-  const [events, setEvents] = useState([]);
-
-  // --- VIEW: REGISTRO (FORM) ---
-  const [formData, setFormData] = useState({
-    fecha: new Date().toISOString().split('T')[0],
-    equipo: '',
-    jefatura: '',
-    descripcion: '',
-    costoReparacion: '',
-    horasParo: '',
-    fotoBase64: null
-  });
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, fotoBase64: reader.result }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSubmitEvent = (e) => {
-    e.preventDefault();
-    const newEvent = {
-      id: Date.now().toString(),
-      ...formData,
-      costoReparacion: parseFloat(formData.costoReparacion) || 0,
-      horasParo: parseFloat(formData.horasParo) || 0,
-      timestamp: new Date().getTime()
-    };
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Control de Daños y Reportes</title>
     
-    setEvents(prev => [newEvent, ...prev]);
+    <!-- Tailwind CSS para los estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
     
-    // Reset form except date
-    setFormData({
-      fecha: formData.fecha,
-      equipo: '',
-      jefatura: '',
-      descripcion: '',
-      costoReparacion: '',
-      horasParo: '',
-      fotoBase64: null
-    });
-    
-    // Switch to report view to see the new entry
-    setActiveTab('informe');
-  };
+    <!-- Phosphor Icons para los íconos -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-  const deleteEvent = (id) => {
-    setEvents(prev => prev.filter(e => e.id !== id));
-  };
+    <!-- PWA Manifest dinámico -->
+    <script>
+        const manifest = {
+            "name": "Control de Daños Operacionales",
+            "short_name": "Daños PWA",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#f8fafc",
+            "theme_color": "#0f172a",
+            "icons": [{
+                "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2Ij48cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yNDAsMTI4YTExMiwyMDAsMCwxLDEtMTEyLTExMkExMTIsMjAwLDAsMCwxLDI0MCwxMjhaIiBvcGFjaXR5PSIwLjIiLz48cGF0aCBkPSJNMjMyLDEyOEExMDQsMTA0LDAsMSwxLDEyOCwyNEExMDQuMTEwODgsMTA0LjExMDg4LDAsMCwxLDIzMiwxMjhaTTEyOCw0MEExNjksMTY5LDAsMCwwLDEyOCwyMTZBMTY5LDE2OSwwLDAsMCwxMjgsNDBaIi8+PC9zdmc+",
+                "sizes": "192x192",
+                "type": "image/svg+xml"
+            }]
+        };
+        const stringManifest = JSON.stringify(manifest);
+        const blob = new Blob([stringManifest], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(blob);
+        document.write('<link rel="manifest" href="' + manifestURL + '">');
+    </script>
 
-  // --- CALCULATIONS FOR DASHBOARD ---
-  const dashboardStats = useMemo(() => {
-    let totalReparacion = 0;
-    let totalHorasParo = 0;
-    const jefaturasImpacto = {};
-
-    events.forEach(ev => {
-      totalReparacion += ev.costoReparacion;
-      totalHorasParo += ev.horasParo;
-      
-      const perdidaProd = ev.horasParo * config.costoHoraProduccion;
-      const impactoTotal = ev.costoReparacion + perdidaProd;
-
-      if (!jefaturasImpacto[ev.jefatura]) {
-        jefaturasImpacto[ev.jefatura] = 0;
-      }
-      jefaturasImpacto[ev.jefatura] += impactoTotal;
-    });
-
-    const totalPerdidaProduccion = totalHorasParo * config.costoHoraProduccion;
-    const impactoFinancieroTotal = totalReparacion + totalPerdidaProduccion;
-    
-    // KPI Calculation: (Costo Reparación / Presupuesto Mantenimiento) * 100
-    const kpiActual = config.presupuestoMantenimiento > 0 
-      ? (totalReparacion / config.presupuestoMantenimiento) * 100 
-      : 0;
-
-    // Sort Jefaturas by highest impact
-    const topJefaturas = Object.keys(jefaturasImpacto)
-      .map(key => ({ name: key, value: jefaturasImpacto[key] }))
-      .sort((a, b) => b.value - a.value);
-
-    return {
-      totalReparacion,
-      totalHorasParo,
-      totalPerdidaProduccion,
-      impactoFinancieroTotal,
-      kpiActual,
-      topJefaturas
-    };
-  }, [events, config]);
-
-  // --- RENDERERS ---
-
-  const renderConfig = () => (
-    <div className="p-4 max-w-lg mx-auto pb-24 space-y-6 fade-in">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-slate-100 rounded-lg text-slate-700">
-            <Settings size={24} />
-          </div>
-          <h2 className="text-xl font-bold text-slate-800">Parámetros del Indicador</h2>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Moneda</label>
-            <select 
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              value={config.moneda}
-              onChange={(e) => setConfig({...config, moneda: e.target.value})}
-            >
-              <option value="Q">Quetzales (Q)</option>
-              <option value="USD">Dólares (USD)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Costo Hora Producción ({config.moneda}/h)</label>
-            <input 
-              type="number" step="0.01"
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              value={config.costoHoraProduccion}
-              onChange={(e) => setConfig({...config, costoHoraProduccion: parseFloat(e.target.value) || 0})}
-            />
-            <p className="text-xs text-slate-500 mt-1">Se usa para calcular la pérdida financiera por horas de paro.</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Horas Programadas Mes (Opcional)</label>
-            <input 
-              type="number" step="1"
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              value={config.horasProgramadasMes}
-              onChange={(e) => setConfig({...config, horasProgramadasMes: parseFloat(e.target.value) || 0})}
-            />
-          </div>
-
-          <div className="pt-4 border-t border-slate-100">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Presupuesto Mantenimiento Mensual ({config.moneda})</label>
-            <input 
-              type="number" step="100"
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              value={config.presupuestoMantenimiento}
-              onChange={(e) => setConfig({...config, presupuestoMantenimiento: parseFloat(e.target.value) || 0})}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Meta % Costo Mala Operación / Mantenimiento</label>
-            <div className="relative">
-              <input 
-                type="number" step="0.1"
-                className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all pr-10"
-                value={config.metaCostoMalaOperacion}
-                onChange={(e) => setConfig({...config, metaCostoMalaOperacion: parseFloat(e.target.value) || 0})}
-              />
-              <span className="absolute right-4 top-3 text-slate-400 font-bold">%</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Límite sugerido para el indicador (Ej. 1.50%).</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderRegistro = () => (
-    <div className="p-4 max-w-lg mx-auto pb-24 fade-in">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-red-100 rounded-lg text-red-600">
-            <AlertTriangle size={24} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-800">Reportar Incidente</h2>
-            <p className="text-sm text-slate-500">Mala práctica operacional</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmitEvent} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Fecha del Evento</label>
-            <input 
-              type="date" required
-              name="fecha" value={formData.fecha} onChange={handleInputChange}
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Equipo o Área Afectada</label>
-            <input 
-              type="text" required placeholder="Ej. Imprenta 02, Rodillo principal"
-              name="equipo" value={formData.equipo} onChange={handleInputChange}
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Jefatura Responsable (Cargo)</label>
-            <select 
-              required
-              name="jefatura" value={formData.jefatura} onChange={handleInputChange}
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
-            >
-              <option value="" disabled>Seleccionar área...</option>
-              <option value="Producción">Producción</option>
-              <option value="Empaque">Empaque</option>
-              <option value="Logística">Logística / Bodega</option>
-              <option value="Mantenimiento">Mantenimiento (Auto-infligido)</option>
-              <option value="Calidad">Calidad</option>
-              <option value="Otros">Otros</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Descripción de Mala Práctica</label>
-            <textarea 
-              required rows="3" placeholder="Ej. Se dejó caer un pedazo de hierro accidentalmente..."
-              name="descripcion" value={formData.descripcion} onChange={handleInputChange}
-              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all resize-none"
-            ></textarea>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Costo Reparación</label>
-              <div className="relative">
-                <span className="absolute left-3 top-3 text-slate-400">{config.moneda}</span>
-                <input 
-                  type="number" step="0.01" required min="0" placeholder="0.00"
-                  name="costoReparacion" value={formData.costoReparacion} onChange={handleInputChange}
-                  className="w-full p-3 pl-8 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Horas de Paro</label>
-              <div className="relative">
-                <input 
-                  type="number" step="0.1" required min="0" placeholder="0.0"
-                  name="horasParo" value={formData.horasParo} onChange={handleInputChange}
-                  className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all pr-10"
-                />
-                <span className="absolute right-4 top-3 text-slate-400">hrs</span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-             <label className="block text-sm font-medium text-slate-700 mb-1">Evidencia (Foto / Hallazgo)</label>
-             <div className="relative border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer text-center overflow-hidden">
-                <input 
-                  type="file" accept="image/*" capture="environment"
-                  onChange={handlePhotoUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                />
-                {formData.fotoBase64 ? (
-                  <img src={formData.fotoBase64} alt="Evidencia" className="w-full h-40 object-cover" />
-                ) : (
-                  <div className="py-8 flex flex-col items-center justify-center text-slate-500 pointer-events-none">
-                    <Camera size={32} className="mb-2 text-slate-400" />
-                    <span className="text-sm font-medium">Tocar para tomar foto</span>
-                    <span className="text-xs mt-1">o seleccionar de la galería</span>
-                  </div>
-                )}
-             </div>
-          </div>
-
-          <button 
-            type="submit" 
-            className="w-full mt-6 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-red-200 flex items-center justify-center gap-2 transition-all active:scale-95"
-          >
-            <Save size={20} />
-            Registrar Incidente y Cargar a Jefatura
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-
-  const renderInforme = () => {
-    const isOverKPI = dashboardStats.kpiActual > config.metaCostoMalaOperacion;
-
-    return (
-      <div className="p-4 max-w-lg mx-auto pb-24 space-y-4 fade-in">
-        
-        {/* KPI Alert Banner */}
-        <div className={`p-4 rounded-2xl flex items-start gap-3 shadow-sm border ${isOverKPI ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
-          <div className={`p-2 rounded-full ${isOverKPI ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-            <TrendingDown size={20} />
-          </div>
-          <div>
-            <h3 className="font-bold text-sm">KPI % Costo Mala Operación</h3>
-            <p className="text-2xl font-black mt-1">
-              {dashboardStats.kpiActual.toFixed(2)}% <span className="text-sm font-normal opacity-75">/ Meta {config.metaCostoMalaOperacion}%</span>
-            </p>
-            <p className="text-xs mt-1 opacity-80">
-              {isOverKPI ? '¡Alerta! Se ha superado la meta de gastos por malas prácticas.' : 'Excelente. Los costos están dentro del margen aceptable.'}
-            </p>
-          </div>
-        </div>
-
-        {/* Financial Impact Summary */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-            <div className="flex items-center gap-2 text-slate-500 mb-2">
-              <AlertTriangle size={16} />
-              <span className="text-xs font-bold uppercase tracking-wider">Costo Reparación</span>
-            </div>
-            <p className="text-xl font-bold text-slate-800">{config.moneda} {dashboardStats.totalReparacion.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
-          </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-            <div className="flex items-center gap-2 text-slate-500 mb-2">
-              <Clock size={16} />
-              <span className="text-xs font-bold uppercase tracking-wider">Pérdida Prod.</span>
-            </div>
-            <p className="text-xl font-bold text-slate-800">{config.moneda} {dashboardStats.totalPerdidaProduccion.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
-            <p className="text-xs text-slate-400 mt-1">{dashboardStats.totalHorasParo} horas de paro</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 text-white p-5 rounded-2xl shadow-lg flex items-center justify-between">
-           <div>
-              <p className="text-slate-300 text-xs font-bold uppercase tracking-wider mb-1">Impacto Financiero Total</p>
-              <h2 className="text-3xl font-black">{config.moneda} {dashboardStats.impactoFinancieroTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}</h2>
-           </div>
-           <DollarSign size={40} className="text-slate-600" />
-        </div>
-
-        {/* Cost distribution by Department */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mt-6">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <LayoutDashboard size={18} className="text-blue-500"/>
-            Cargos por Jefatura Responsable
-          </h3>
-          {dashboardStats.topJefaturas.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-4">No hay datos registrados este mes.</p>
-          ) : (
-            <div className="space-y-3">
-              {dashboardStats.topJefaturas.map((jef, idx) => (
-                <div key={idx} className="flex items-center justify-between border-b border-slate-50 pb-3 last:border-0 last:pb-0">
-                  <span className="font-medium text-slate-700">{jef.name}</span>
-                  <span className="font-bold text-red-600">{config.moneda} {jef.value.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Detailed Event List */}
-        <div className="mt-6">
-          <h3 className="font-bold text-slate-800 mb-4 px-1">Detalle de Incidentes</h3>
-          {events.length === 0 ? (
-            <div className="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500">
-              <FileText size={32} className="mx-auto mb-2 opacity-50" />
-              <p>No hay incidentes registrados.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {events.map((ev) => (
-                <div key={ev.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                  {ev.fotoBase64 && (
-                    <div className="h-32 w-full bg-slate-100 relative">
-                      <img src={ev.fotoBase64} alt="Evidencia" className="w-full h-full object-cover" />
-                      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md flex items-center gap-1">
-                        <ImageIcon size={12} /> Evidencia
-                      </div>
-                    </div>
-                  )}
-                  <div className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{ev.jefatura}</span>
-                        <p className="text-xs text-slate-400 mt-2">{ev.fecha}</p>
-                      </div>
-                      <button onClick={() => deleteEvent(ev.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                    <h4 className="font-bold text-slate-800">{ev.equipo}</h4>
-                    <p className="text-sm text-slate-600 mt-1 line-clamp-2">{ev.descripcion}</p>
-                    
-                    <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-50">
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400">Reparación</p>
-                        <p className="text-sm font-bold text-slate-800">{config.moneda} {ev.costoReparacion.toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400">Paro</p>
-                        <p className="text-sm font-bold text-slate-800">{ev.horasParo} h</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
-    );
-  };
-
-  // --- APP SHELL ---
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-red-200">
-      
-      {/* Top Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 py-4 shadow-sm">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <div className="bg-slate-900 text-white p-2 rounded-xl">
-            <TrendingDown size={24} />
-          </div>
-          <div>
-            <h1 className="font-black text-lg leading-tight text-slate-900">Control Daños</h1>
-            <p className="text-xs text-slate-500 font-medium">Auditoría Operacional</p>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main>
-        {activeTab === 'config' && renderConfig()}
-        {activeTab === 'registro' && renderRegistro()}
-        {activeTab === 'informe' && renderInforme()}
-      </main>
-
-      {/* Bottom Navigation PWA style */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 pb-safe z-50">
-        <div className="max-w-lg mx-auto flex justify-between items-center">
-          <button 
-            onClick={() => setActiveTab('registro')}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'registro' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <PlusCircle size={24} className={activeTab === 'registro' ? 'fill-red-50' : ''} />
-            <span className="text-[10px] font-bold">Registrar</span>
-          </button>
-          
-          <button 
-            onClick={() => setActiveTab('informe')}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'informe' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <FileText size={24} className={activeTab === 'informe' ? 'fill-blue-50' : ''} />
-            <span className="text-[10px] font-bold">Informe</span>
-          </button>
-          
-          <button 
-            onClick={() => setActiveTab('config')}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'config' ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <Settings size={24} className={activeTab === 'config' ? 'fill-slate-100' : ''} />
-            <span className="text-[10px] font-bold">Ajustes</span>
-          </button>
-        </div>
-      </nav>
-
-      {/* Global styles for animations */}
-      <style dangerouslySetInnerHTML={{__html: `
+    <style>
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .pb-safe { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
-      `}} />
-    </div>
-  );
-}
+        
+        /* Ocultar pestañas inactivas */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-red-200 pb-20">
+
+    <!-- Top Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 py-4 shadow-sm">
+        <div class="max-w-lg mx-auto flex items-center gap-3">
+            <div class="bg-slate-900 text-white p-2 rounded-xl">
+                <i class="ph ph-trend-down text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="font-black text-lg leading-tight text-slate-900">Control Daños</h1>
+                <p class="text-xs text-slate-500 font-medium">Auditoría Operacional</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-lg mx-auto w-full">
+        <!-- VISTA: REGISTRO -->
+        <div id="view-registro" class="tab-content active p-4 fade-in">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="p-2 bg-red-100 rounded-lg text-red-600">
+                        <i class="ph ph-warning text-2xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">Reportar Incidente</h2>
+                        <p class="text-sm text-slate-500">Mala práctica operacional</p>
+                    </div>
+                </div>
+
+                <form id="form-registro" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Fecha del Evento</label>
+                        <input type="date" id="input-fecha" required class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Equipo o Área Afectada</label>
+                        <input type="text" id="input-equipo" required placeholder="Ej. Imprenta 02, Rodillo principal" class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Jefatura Responsable (Cargo)</label>
+                        <select id="input-jefatura" required class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all">
+                            <option value="" disabled selected>Seleccionar área...</option>
+                            <option value="Producción">Producción</option>
+                            <option value="Empaque">Empaque</option>
+                            <option value="Logística">Logística / Bodega</option>
+                            <option value="Mantenimiento">Mantenimiento (Auto-infligido)</option>
+                            <option value="Calidad">Calidad</option>
+                            <option value="Otros">Otros</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Descripción de Mala Práctica</label>
+                        <textarea id="input-descripcion" required rows="3" placeholder="Ej. Se dejó caer un pedazo de hierro accidentalmente..." class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all resize-none"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Costo Reparación</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-3 text-slate-400 moneda-label">Q</span>
+                                <input type="number" id="input-costo" step="0.01" required min="0" placeholder="0.00" class="w-full p-3 pl-8 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Horas de Paro</label>
+                            <div class="relative">
+                                <input type="number" id="input-horas" step="0.1" required min="0" placeholder="0.0" class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all pr-10">
+                                <span class="absolute right-4 top-3 text-slate-400">hrs</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Evidencia (Foto)</label>
+                        <div class="relative border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer text-center overflow-hidden">
+                            <input type="file" id="input-foto" accept="image/*" capture="environment" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                            <div id="foto-preview-container" class="hidden">
+                                <img id="foto-preview" src="" alt="Evidencia" class="w-full h-40 object-cover">
+                            </div>
+                            <div id="foto-placeholder" class="py-8 flex flex-col items-center justify-center text-slate-500 pointer-events-none">
+                                <i class="ph ph-camera text-3xl mb-2 text-slate-400"></i>
+                                <span class="text-sm font-medium">Tocar para tomar foto</span>
+                                <span class="text-xs mt-1">o seleccionar de la galería</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full mt-6 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-red-200 flex items-center justify-center gap-2 transition-all active:scale-95">
+                        <i class="ph ph-floppy-disk text-xl"></i>
+                        Registrar Incidente
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- VISTA: INFORME -->
+        <div id="view-informe" class="tab-content p-4 space-y-4 fade-in">
+            <div id="informe-dashboard">
+                <!-- Se llenará con JavaScript -->
+            </div>
+            
+            <div class="mt-6">
+                <h3 class="font-bold text-slate-800 mb-4 px-1">Detalle de Incidentes</h3>
+                <div id="informe-lista-eventos" class="space-y-4">
+                    <!-- Se llenará con JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA: CONFIGURACIÓN -->
+        <div id="view-config" class="tab-content p-4 fade-in">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="p-2 bg-slate-100 rounded-lg text-slate-700">
+                        <i class="ph ph-gear text-2xl"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-slate-800">Parámetros</h2>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Moneda</label>
+                        <select id="config-moneda" class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 outline-none">
+                            <option value="Q">Quetzales (Q)</option>
+                            <option value="USD">Dólares (USD)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Costo Hora Prod. (<span class="moneda-label">Q</span>/h)</label>
+                        <input type="number" id="config-costo-hora" step="0.01" class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Horas Programadas Mes</label>
+                        <input type="number" id="config-horas-mes" step="1" class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 outline-none">
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-100">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Presupuesto Mantenimiento (<span class="moneda-label">Q</span>)</label>
+                        <input type="number" id="config-presupuesto" step="100" class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Meta % Costo Mala Operación</label>
+                        <input type="number" id="config-meta" step="0.1" class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 outline-none">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 pb-safe z-50">
+        <div class="max-w-lg mx-auto flex justify-between items-center">
+            <button onclick="changeTab('registro')" id="btn-tab-registro" class="flex flex-col items-center gap-1 transition-colors text-red-600">
+                <i class="ph-fill ph-plus-circle text-2xl"></i>
+                <span class="text-[10px] font-bold">Registrar</span>
+            </button>
+            
+            <button onclick="changeTab('informe')" id="btn-tab-informe" class="flex flex-col items-center gap-1 transition-colors text-slate-400 hover:text-slate-600">
+                <i class="ph ph-file-text text-2xl"></i>
+                <span class="text-[10px] font-bold">Informe</span>
+            </button>
+            
+            <button onclick="changeTab('config')" id="btn-tab-config" class="flex flex-col items-center gap-1 transition-colors text-slate-400 hover:text-slate-600">
+                <i class="ph ph-gear text-2xl"></i>
+                <span class="text-[10px] font-bold">Ajustes</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- LOGICA DE LA APLICACIÓN -->
+    <script>
+        // ESTADO DE LA APLICACIÓN (Se guarda en LocalStorage para ser Offline First)
+        let config = JSON.parse(localStorage.getItem('daños_config')) || {
+            moneda: 'Q',
+            costoHoraProduccion: 0.00,
+            horasProgramadasMes: 0.00,
+            metaCostoMalaOperacion: 1.50,
+            presupuestoMantenimiento: 10000
+        };
+
+        let events = JSON.parse(localStorage.getItem('daños_events')) || [];
+        let fotoBase64Actual = null;
+
+        // INICIALIZACIÓN
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('input-fecha').valueAsDate = new Date();
+            loadConfigToForm();
+            updateLabels();
+            renderInforme();
+            
+            // Listeners para la configuración
+            const configInputs = ['moneda', 'costo-hora', 'horas-mes', 'presupuesto', 'meta'];
+            configInputs.forEach(id => {
+                document.getElementById(`config-${id}`).addEventListener('change', saveConfig);
+            });
+        });
+
+        // NAVEGACIÓN DE PESTAÑAS
+        function changeTab(tabName) {
+            // Ocultar todas
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            // Mostrar seleccionada
+            document.getElementById(`view-${tabName}`).classList.add('active');
+
+            // Actualizar iconos de navegación
+            const tabs = ['registro', 'informe', 'config'];
+            const colors = { registro: 'text-red-600', informe: 'text-blue-600', config: 'text-slate-800' };
+            const icons = { registro: 'ph-plus-circle', informe: 'ph-file-text', config: 'ph-gear' };
+
+            tabs.forEach(t => {
+                const btn = document.getElementById(`btn-tab-${t}`);
+                const icon = btn.querySelector('i');
+                
+                btn.className = `flex flex-col items-center gap-1 transition-colors ${t === tabName ? colors[t] : 'text-slate-400 hover:text-slate-600'}`;
+                
+                if (t === tabName) {
+                    icon.className = `ph-fill ${icons[t]} text-2xl`;
+                } else {
+                    icon.className = `ph ${icons[t]} text-2xl`;
+                }
+            });
+
+            if(tabName === 'informe') renderInforme();
+        }
+
+        // CARGA DE FOTOS
+        document.getElementById('input-foto').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    fotoBase64Actual = reader.result;
+                    document.getElementById('foto-preview').src = fotoBase64Actual;
+                    document.getElementById('foto-preview-container').classList.remove('hidden');
+                    document.getElementById('foto-placeholder').classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // REGISTRAR EVENTO
+        document.getElementById('form-registro').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const newEvent = {
+                id: Date.now().toString(),
+                fecha: document.getElementById('input-fecha').value,
+                equipo: document.getElementById('input-equipo').value,
+                jefatura: document.getElementById('input-jefatura').value,
+                descripcion: document.getElementById('input-descripcion').value,
+                costoReparacion: parseFloat(document.getElementById('input-costo').value) || 0,
+                horasParo: parseFloat(document.getElementById('input-horas').value) || 0,
+                fotoBase64: fotoBase64Actual
+            };
+
+            events.unshift(newEvent); // Agregar al inicio
+            localStorage.setItem('daños_events', JSON.stringify(events));
+
+            // Limpiar formulario (excepto fecha)
+            document.getElementById('input-equipo').value = '';
+            document.getElementById('input-jefatura').value = '';
+            document.getElementById('input-descripcion').value = '';
+            document.getElementById('input-costo').value = '';
+            document.getElementById('input-horas').value = '';
+            
+            // Limpiar foto
+            fotoBase64Actual = null;
+            document.getElementById('input-foto').value = '';
+            document.getElementById('foto-preview-container').classList.add('hidden');
+            document.getElementById('foto-placeholder').classList.remove('hidden');
+
+            changeTab('informe');
+        });
+
+        // ELIMINAR EVENTO
+        function deleteEvent(id) {
+            if(confirm("¿Seguro que deseas eliminar este registro?")) {
+                events = events.filter(e => e.id !== id);
+                localStorage.setItem('daños_events', JSON.stringify(events));
+                renderInforme();
+            }
+        }
+
+        // GUARDAR CONFIGURACIÓN
+        function saveConfig() {
+            config = {
+                moneda: document.getElementById('config-moneda').value,
+                costoHoraProduccion: parseFloat(document.getElementById('config-costo-hora').value) || 0,
+                horasProgramadasMes: parseFloat(document.getElementById('config-horas-mes').value) || 0,
+                presupuestoMantenimiento: parseFloat(document.getElementById('config-presupuesto').value) || 0,
+                metaCostoMalaOperacion: parseFloat(document.getElementById('config-meta').value) || 0
+            };
+            localStorage.setItem('daños_config', JSON.stringify(config));
+            updateLabels();
+            renderInforme();
+        }
+
+        function loadConfigToForm() {
+            document.getElementById('config-moneda').value = config.moneda;
+            document.getElementById('config-costo-hora').value = config.costoHoraProduccion;
+            document.getElementById('config-horas-mes').value = config.horasProgramadasMes;
+            document.getElementById('config-presupuesto').value = config.presupuestoMantenimiento;
+            document.getElementById('config-meta').value = config.metaCostoMalaOperacion;
+        }
+
+        function updateLabels() {
+            document.querySelectorAll('.moneda-label').forEach(el => el.textContent = config.moneda);
+        }
+
+        // RENDERIZAR INFORME Y DASHBOARD
+        function renderInforme() {
+            let totalReparacion = 0;
+            let totalHorasParo = 0;
+            const jefaturasImpacto = {};
+
+            events.forEach(ev => {
+                totalReparacion += ev.costoReparacion;
+                totalHorasParo += ev.horasParo;
+                
+                const perdidaProd = ev.horasParo * config.costoHoraProduccion;
+                const impactoTotal = ev.costoReparacion + perdidaProd;
+
+                if (!jefaturasImpacto[ev.jefatura]) jefaturasImpacto[ev.jefatura] = 0;
+                jefaturasImpacto[ev.jefatura] += impactoTotal;
+            });
+
+            const totalPerdidaProduccion = totalHorasParo * config.costoHoraProduccion;
+            const impactoFinancieroTotal = totalReparacion + totalPerdidaProduccion;
+            
+            const kpiActual = config.presupuestoMantenimiento > 0 
+                ? (totalReparacion / config.presupuestoMantenimiento) * 100 : 0;
+            
+            const isOverKPI = kpiActual > config.metaCostoMalaOperacion;
+
+            const topJefaturas = Object.keys(jefaturasImpacto)
+                .map(key => ({ name: key, value: jefaturasImpacto[key] }))
+                .sort((a, b) => b.value - a.value);
+
+            // Generar HTML del Dashboard
+            const dashboardHTML = `
+                <!-- KPI Banner -->
+                <div class="p-4 rounded-2xl flex items-start gap-3 shadow-sm border ${isOverKPI ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}">
+                    <div class="p-2 rounded-full ${isOverKPI ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}">
+                        <i class="ph ph-trend-down text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm">KPI % Costo Mala Operación</h3>
+                        <p class="text-2xl font-black mt-1">
+                            ${kpiActual.toFixed(2)}% <span class="text-sm font-normal opacity-75">/ Meta ${config.metaCostoMalaOperacion}%</span>
+                        </p>
+                        <p class="text-xs mt-1 opacity-80">
+                            ${isOverKPI ? '¡Alerta! Se superó la meta de gastos por malas prácticas.' : 'Excelente. Costos dentro del margen aceptable.'}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Resumen Financiero -->
+                <div class="grid grid-cols-2 gap-4 mt-4">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                        <div class="flex items-center gap-2 text-slate-500 mb-2">
+                            <i class="ph ph-warning text-base"></i>
+                            <span class="text-xs font-bold uppercase tracking-wider">Costo Reparación</span>
+                        </div>
+                        <p class="text-xl font-bold text-slate-800">${config.moneda} ${totalReparacion.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                        <div class="flex items-center gap-2 text-slate-500 mb-2">
+                            <i class="ph ph-clock text-base"></i>
+                            <span class="text-xs font-bold uppercase tracking-wider">Pérdida Prod.</span>
+                        </div>
+                        <p class="text-xl font-bold text-slate-800">${config.moneda} ${totalPerdidaProduccion.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                        <p class="text-xs text-slate-400 mt-1">${totalHorasParo} horas de paro</p>
+                    </div>
+                </div>
+
+                <!-- Impacto Total -->
+                <div class="bg-slate-800 text-white p-5 rounded-2xl shadow-lg flex items-center justify-between mt-4">
+                    <div>
+                        <p class="text-slate-300 text-xs font-bold uppercase tracking-wider mb-1">Impacto Financiero Total</p>
+                        <h2 class="text-3xl font-black">${config.moneda} ${impactoFinancieroTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}</h2>
+                    </div>
+                    <i class="ph ph-currency-dollar text-4xl text-slate-600"></i>
+                </div>
+
+                <!-- Jefaturas -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mt-6">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <i class="ph ph-chart-pie-slice text-blue-500 text-lg"></i>
+                        Cargos por Jefatura Responsable
+                    </h3>
+                    ${topJefaturas.length === 0 ? '<p class="text-sm text-slate-500 text-center py-4">No hay datos registrados.</p>' : ''}
+                    <div class="space-y-3">
+                        ${topJefaturas.map(jef => `
+                            <div class="flex items-center justify-between border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                                <span class="font-medium text-slate-700">${jef.name}</span>
+                                <span class="font-bold text-red-600">${config.moneda} ${jef.value.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            document.getElementById('informe-dashboard').innerHTML = dashboardHTML;
+
+            // Generar HTML de la lista de eventos
+            const listaEventosEl = document.getElementById('informe-lista-eventos');
+            if (events.length === 0) {
+                listaEventosEl.innerHTML = `
+                    <div class="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500">
+                        <i class="ph ph-file-text text-3xl mx-auto mb-2 opacity-50"></i>
+                        <p>No hay incidentes registrados.</p>
+                    </div>`;
+            } else {
+                listaEventosEl.innerHTML = events.map(ev => `
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                        ${ev.fotoBase64 ? `
+                        <div class="h-32 w-full bg-slate-100 relative">
+                            <img src="${ev.fotoBase64}" alt="Evidencia" class="w-full h-full object-cover" />
+                            <div class="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md flex items-center gap-1">
+                                <i class="ph ph-image"></i> Evidencia
+                            </div>
+                        </div>` : ''}
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">${ev.jefatura}</span>
+                                    <p class="text-xs text-slate-400 mt-2">${ev.fecha}</p>
+                                </div>
+                                <button onclick="deleteEvent('${ev.id}')" class="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                                    <i class="ph ph-trash text-lg"></i>
+                                </button>
+                            </div>
+                            <h4 class="font-bold text-slate-800">${ev.equipo}</h4>
+                            <p class="text-sm text-slate-600 mt-1 line-clamp-2">${ev.descripcion}</p>
+                            
+                            <div class="flex items-center gap-4 mt-4 pt-4 border-t border-slate-50">
+                                <div>
+                                    <p class="text-[10px] uppercase font-bold text-slate-400">Reparación</p>
+                                    <p class="text-sm font-bold text-slate-800">${config.moneda} ${ev.costoReparacion.toFixed(2)}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] uppercase font-bold text-slate-400">Paro</p>
+                                    <p class="text-sm font-bold text-slate-800">${ev.horasParo} h</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+    </script>
+</body>
+</html>
