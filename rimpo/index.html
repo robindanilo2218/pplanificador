@@ -1,0 +1,506 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  Settings, 
+  FileText, 
+  PlusCircle, 
+  AlertTriangle, 
+  TrendingDown, 
+  DollarSign, 
+  Clock, 
+  LayoutDashboard,
+  Camera,
+  Save,
+  Trash2,
+  Image as ImageIcon
+} from 'lucide-react';
+
+// --- MAIN COMPONENT ---
+export default function App() {
+  const [activeTab, setActiveTab] = useState('registro');
+  
+  // --- STATE: CONFIGURATION ---
+  const [config, setConfig] = useState({
+    moneda: 'Q',
+    costoHoraProduccion: 0.00,
+    horasProgramadasMes: 0.00,
+    metaCostoMalaOperacion: 1.50,
+    presupuestoMantenimiento: 10000 // Valor base para calcular el KPI %
+  });
+
+  // --- STATE: EVENTS ---
+  const [events, setEvents] = useState([]);
+
+  // --- VIEW: REGISTRO (FORM) ---
+  const [formData, setFormData] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    equipo: '',
+    jefatura: '',
+    descripcion: '',
+    costoReparacion: '',
+    horasParo: '',
+    fotoBase64: null
+  });
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, fotoBase64: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmitEvent = (e) => {
+    e.preventDefault();
+    const newEvent = {
+      id: Date.now().toString(),
+      ...formData,
+      costoReparacion: parseFloat(formData.costoReparacion) || 0,
+      horasParo: parseFloat(formData.horasParo) || 0,
+      timestamp: new Date().getTime()
+    };
+    
+    setEvents(prev => [newEvent, ...prev]);
+    
+    // Reset form except date
+    setFormData({
+      fecha: formData.fecha,
+      equipo: '',
+      jefatura: '',
+      descripcion: '',
+      costoReparacion: '',
+      horasParo: '',
+      fotoBase64: null
+    });
+    
+    // Switch to report view to see the new entry
+    setActiveTab('informe');
+  };
+
+  const deleteEvent = (id) => {
+    setEvents(prev => prev.filter(e => e.id !== id));
+  };
+
+  // --- CALCULATIONS FOR DASHBOARD ---
+  const dashboardStats = useMemo(() => {
+    let totalReparacion = 0;
+    let totalHorasParo = 0;
+    const jefaturasImpacto = {};
+
+    events.forEach(ev => {
+      totalReparacion += ev.costoReparacion;
+      totalHorasParo += ev.horasParo;
+      
+      const perdidaProd = ev.horasParo * config.costoHoraProduccion;
+      const impactoTotal = ev.costoReparacion + perdidaProd;
+
+      if (!jefaturasImpacto[ev.jefatura]) {
+        jefaturasImpacto[ev.jefatura] = 0;
+      }
+      jefaturasImpacto[ev.jefatura] += impactoTotal;
+    });
+
+    const totalPerdidaProduccion = totalHorasParo * config.costoHoraProduccion;
+    const impactoFinancieroTotal = totalReparacion + totalPerdidaProduccion;
+    
+    // KPI Calculation: (Costo Reparación / Presupuesto Mantenimiento) * 100
+    const kpiActual = config.presupuestoMantenimiento > 0 
+      ? (totalReparacion / config.presupuestoMantenimiento) * 100 
+      : 0;
+
+    // Sort Jefaturas by highest impact
+    const topJefaturas = Object.keys(jefaturasImpacto)
+      .map(key => ({ name: key, value: jefaturasImpacto[key] }))
+      .sort((a, b) => b.value - a.value);
+
+    return {
+      totalReparacion,
+      totalHorasParo,
+      totalPerdidaProduccion,
+      impactoFinancieroTotal,
+      kpiActual,
+      topJefaturas
+    };
+  }, [events, config]);
+
+  // --- RENDERERS ---
+
+  const renderConfig = () => (
+    <div className="p-4 max-w-lg mx-auto pb-24 space-y-6 fade-in">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-slate-100 rounded-lg text-slate-700">
+            <Settings size={24} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800">Parámetros del Indicador</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Moneda</label>
+            <select 
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              value={config.moneda}
+              onChange={(e) => setConfig({...config, moneda: e.target.value})}
+            >
+              <option value="Q">Quetzales (Q)</option>
+              <option value="USD">Dólares (USD)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Costo Hora Producción ({config.moneda}/h)</label>
+            <input 
+              type="number" step="0.01"
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              value={config.costoHoraProduccion}
+              onChange={(e) => setConfig({...config, costoHoraProduccion: parseFloat(e.target.value) || 0})}
+            />
+            <p className="text-xs text-slate-500 mt-1">Se usa para calcular la pérdida financiera por horas de paro.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Horas Programadas Mes (Opcional)</label>
+            <input 
+              type="number" step="1"
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              value={config.horasProgramadasMes}
+              onChange={(e) => setConfig({...config, horasProgramadasMes: parseFloat(e.target.value) || 0})}
+            />
+          </div>
+
+          <div className="pt-4 border-t border-slate-100">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Presupuesto Mantenimiento Mensual ({config.moneda})</label>
+            <input 
+              type="number" step="100"
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              value={config.presupuestoMantenimiento}
+              onChange={(e) => setConfig({...config, presupuestoMantenimiento: parseFloat(e.target.value) || 0})}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Meta % Costo Mala Operación / Mantenimiento</label>
+            <div className="relative">
+              <input 
+                type="number" step="0.1"
+                className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all pr-10"
+                value={config.metaCostoMalaOperacion}
+                onChange={(e) => setConfig({...config, metaCostoMalaOperacion: parseFloat(e.target.value) || 0})}
+              />
+              <span className="absolute right-4 top-3 text-slate-400 font-bold">%</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Límite sugerido para el indicador (Ej. 1.50%).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderRegistro = () => (
+    <div className="p-4 max-w-lg mx-auto pb-24 fade-in">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-red-100 rounded-lg text-red-600">
+            <AlertTriangle size={24} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">Reportar Incidente</h2>
+            <p className="text-sm text-slate-500">Mala práctica operacional</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmitEvent} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Fecha del Evento</label>
+            <input 
+              type="date" required
+              name="fecha" value={formData.fecha} onChange={handleInputChange}
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Equipo o Área Afectada</label>
+            <input 
+              type="text" required placeholder="Ej. Imprenta 02, Rodillo principal"
+              name="equipo" value={formData.equipo} onChange={handleInputChange}
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Jefatura Responsable (Cargo)</label>
+            <select 
+              required
+              name="jefatura" value={formData.jefatura} onChange={handleInputChange}
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
+            >
+              <option value="" disabled>Seleccionar área...</option>
+              <option value="Producción">Producción</option>
+              <option value="Empaque">Empaque</option>
+              <option value="Logística">Logística / Bodega</option>
+              <option value="Mantenimiento">Mantenimiento (Auto-infligido)</option>
+              <option value="Calidad">Calidad</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Descripción de Mala Práctica</label>
+            <textarea 
+              required rows="3" placeholder="Ej. Se dejó caer un pedazo de hierro accidentalmente..."
+              name="descripcion" value={formData.descripcion} onChange={handleInputChange}
+              className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all resize-none"
+            ></textarea>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Costo Reparación</label>
+              <div className="relative">
+                <span className="absolute left-3 top-3 text-slate-400">{config.moneda}</span>
+                <input 
+                  type="number" step="0.01" required min="0" placeholder="0.00"
+                  name="costoReparacion" value={formData.costoReparacion} onChange={handleInputChange}
+                  className="w-full p-3 pl-8 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Horas de Paro</label>
+              <div className="relative">
+                <input 
+                  type="number" step="0.1" required min="0" placeholder="0.0"
+                  name="horasParo" value={formData.horasParo} onChange={handleInputChange}
+                  className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none transition-all pr-10"
+                />
+                <span className="absolute right-4 top-3 text-slate-400">hrs</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+             <label className="block text-sm font-medium text-slate-700 mb-1">Evidencia (Foto / Hallazgo)</label>
+             <div className="relative border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer text-center overflow-hidden">
+                <input 
+                  type="file" accept="image/*" capture="environment"
+                  onChange={handlePhotoUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                {formData.fotoBase64 ? (
+                  <img src={formData.fotoBase64} alt="Evidencia" className="w-full h-40 object-cover" />
+                ) : (
+                  <div className="py-8 flex flex-col items-center justify-center text-slate-500 pointer-events-none">
+                    <Camera size={32} className="mb-2 text-slate-400" />
+                    <span className="text-sm font-medium">Tocar para tomar foto</span>
+                    <span className="text-xs mt-1">o seleccionar de la galería</span>
+                  </div>
+                )}
+             </div>
+          </div>
+
+          <button 
+            type="submit" 
+            className="w-full mt-6 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-red-200 flex items-center justify-center gap-2 transition-all active:scale-95"
+          >
+            <Save size={20} />
+            Registrar Incidente y Cargar a Jefatura
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+
+  const renderInforme = () => {
+    const isOverKPI = dashboardStats.kpiActual > config.metaCostoMalaOperacion;
+
+    return (
+      <div className="p-4 max-w-lg mx-auto pb-24 space-y-4 fade-in">
+        
+        {/* KPI Alert Banner */}
+        <div className={`p-4 rounded-2xl flex items-start gap-3 shadow-sm border ${isOverKPI ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+          <div className={`p-2 rounded-full ${isOverKPI ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+            <TrendingDown size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm">KPI % Costo Mala Operación</h3>
+            <p className="text-2xl font-black mt-1">
+              {dashboardStats.kpiActual.toFixed(2)}% <span className="text-sm font-normal opacity-75">/ Meta {config.metaCostoMalaOperacion}%</span>
+            </p>
+            <p className="text-xs mt-1 opacity-80">
+              {isOverKPI ? '¡Alerta! Se ha superado la meta de gastos por malas prácticas.' : 'Excelente. Los costos están dentro del margen aceptable.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Financial Impact Summary */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex items-center gap-2 text-slate-500 mb-2">
+              <AlertTriangle size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">Costo Reparación</span>
+            </div>
+            <p className="text-xl font-bold text-slate-800">{config.moneda} {dashboardStats.totalReparacion.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex items-center gap-2 text-slate-500 mb-2">
+              <Clock size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">Pérdida Prod.</span>
+            </div>
+            <p className="text-xl font-bold text-slate-800">{config.moneda} {dashboardStats.totalPerdidaProduccion.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+            <p className="text-xs text-slate-400 mt-1">{dashboardStats.totalHorasParo} horas de paro</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 text-white p-5 rounded-2xl shadow-lg flex items-center justify-between">
+           <div>
+              <p className="text-slate-300 text-xs font-bold uppercase tracking-wider mb-1">Impacto Financiero Total</p>
+              <h2 className="text-3xl font-black">{config.moneda} {dashboardStats.impactoFinancieroTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}</h2>
+           </div>
+           <DollarSign size={40} className="text-slate-600" />
+        </div>
+
+        {/* Cost distribution by Department */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mt-6">
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <LayoutDashboard size={18} className="text-blue-500"/>
+            Cargos por Jefatura Responsable
+          </h3>
+          {dashboardStats.topJefaturas.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-4">No hay datos registrados este mes.</p>
+          ) : (
+            <div className="space-y-3">
+              {dashboardStats.topJefaturas.map((jef, idx) => (
+                <div key={idx} className="flex items-center justify-between border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                  <span className="font-medium text-slate-700">{jef.name}</span>
+                  <span className="font-bold text-red-600">{config.moneda} {jef.value.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Detailed Event List */}
+        <div className="mt-6">
+          <h3 className="font-bold text-slate-800 mb-4 px-1">Detalle de Incidentes</h3>
+          {events.length === 0 ? (
+            <div className="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500">
+              <FileText size={32} className="mx-auto mb-2 opacity-50" />
+              <p>No hay incidentes registrados.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {events.map((ev) => (
+                <div key={ev.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                  {ev.fotoBase64 && (
+                    <div className="h-32 w-full bg-slate-100 relative">
+                      <img src={ev.fotoBase64} alt="Evidencia" className="w-full h-full object-cover" />
+                      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md flex items-center gap-1">
+                        <ImageIcon size={12} /> Evidencia
+                      </div>
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{ev.jefatura}</span>
+                        <p className="text-xs text-slate-400 mt-2">{ev.fecha}</p>
+                      </div>
+                      <button onClick={() => deleteEvent(ev.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                    <h4 className="font-bold text-slate-800">{ev.equipo}</h4>
+                    <p className="text-sm text-slate-600 mt-1 line-clamp-2">{ev.descripcion}</p>
+                    
+                    <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-50">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Reparación</p>
+                        <p className="text-sm font-bold text-slate-800">{config.moneda} {ev.costoReparacion.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Paro</p>
+                        <p className="text-sm font-bold text-slate-800">{ev.horasParo} h</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </div>
+    );
+  };
+
+  // --- APP SHELL ---
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-red-200">
+      
+      {/* Top Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 py-4 shadow-sm">
+        <div className="max-w-lg mx-auto flex items-center gap-3">
+          <div className="bg-slate-900 text-white p-2 rounded-xl">
+            <TrendingDown size={24} />
+          </div>
+          <div>
+            <h1 className="font-black text-lg leading-tight text-slate-900">Control Daños</h1>
+            <p className="text-xs text-slate-500 font-medium">Auditoría Operacional</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main>
+        {activeTab === 'config' && renderConfig()}
+        {activeTab === 'registro' && renderRegistro()}
+        {activeTab === 'informe' && renderInforme()}
+      </main>
+
+      {/* Bottom Navigation PWA style */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 pb-safe z-50">
+        <div className="max-w-lg mx-auto flex justify-between items-center">
+          <button 
+            onClick={() => setActiveTab('registro')}
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'registro' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <PlusCircle size={24} className={activeTab === 'registro' ? 'fill-red-50' : ''} />
+            <span className="text-[10px] font-bold">Registrar</span>
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('informe')}
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'informe' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <FileText size={24} className={activeTab === 'informe' ? 'fill-blue-50' : ''} />
+            <span className="text-[10px] font-bold">Informe</span>
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('config')}
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'config' ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Settings size={24} className={activeTab === 'config' ? 'fill-slate-100' : ''} />
+            <span className="text-[10px] font-bold">Ajustes</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* Global styles for animations */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .pb-safe { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+      `}} />
+    </div>
+  );
+}
