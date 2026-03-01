@@ -323,10 +323,20 @@
                     // 2. Bodega / Costos Parse (Formato salidas_bodega.csv)
                     let valorSalida = getVal('valor salida') || getVal('costo') || getVal('gasto');
                     if (valorSalida) {
-                        let costNum = parseLatamNumber(valorSalida);
-                        if (costNum > 0 && maqVal !== 'Sin Asignar') {
-                            costsData[maqVal] = (costsData[maqVal] || 0) + costNum;
-                            totalCost += costNum;
+                        // FILTRO: Solo considerar "Darvin Orozco" o "Electrico"
+                        const encargado = String(getVal('encargado') || '').toLowerCase();
+                        const depto = String(getVal('departamento') || '').toLowerCase();
+                        const autorizador = String(getVal('nombre autorizador') || '').toLowerCase();
+                        
+                        const isDarvin = encargado.includes('darvin') || encargado.includes('orozco') || autorizador.includes('darvin') || autorizador.includes('orozco');
+                        const isElectrico = depto.includes('electrico') || depto.includes('eléctrico');
+
+                        if (isDarvin || isElectrico) {
+                            let costNum = parseLatamNumber(valorSalida);
+                            if (costNum > 0 && maqVal !== 'Sin Asignar') {
+                                costsData[maqVal] = (costsData[maqVal] || 0) + costNum;
+                                totalCost += costNum;
+                            }
                         }
                     }
                 });
@@ -403,7 +413,7 @@
             };
 
             const layoutCosts = {
-                title: { text: `<b>Consumo de Materiales por Activo - Año ${selectedYear}</b>`, font: { size: 18 } },
+                title: { text: `<b>Consumo de Materiales (Eléctrico / Darvin) - Año ${selectedYear}</b>`, font: { size: 18 } },
                 xaxis: { title: 'Maquinaria', tickangle: -45, automargin: true },
                 yaxis: { title: 'Gasto Monetario (GTQ)', gridcolor: '#e2e8f0', zeroline: false },
                 margin: { b: 120, t: 50, l: 80, r: 20 },
