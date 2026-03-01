@@ -75,6 +75,16 @@
                 </h2>
                 <p class="text-xs text-industrial-600 mb-4">Sube un archivo a cualquier ranura. Soporta: <b>CSV, XLS, XLSX, HTML</b>.</p>
                 
+                <!-- NUEVO: Selector de Año Inteligente -->
+                <div class="mb-4 bg-industrial-50 p-3 rounded-lg border border-industrial-200 shadow-sm">
+                    <label for="year-selector" class="block text-sm font-bold text-industrial-800 mb-1">Año a analizar:</label>
+                    <select id="year-selector" class="w-full p-2 rounded border border-gray-300 text-sm font-semibold bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                    </select>
+                </div>
+
                 <div class="space-y-3">
                     <div class="file-input-wrapper bg-blue-50 border border-blue-200 text-brand-blue rounded-lg p-3 text-center cursor-pointer" id="wrapper-ot">
                         <span class="font-semibold text-sm block" id="label-ot">1. Órdenes de Trabajo</span>
@@ -114,14 +124,23 @@
                     <span class="text-industrial-600">Alerta (Bajo Q1):</span> 
                     <span id="res-peor-maq" class="font-bold text-brand-red truncate max-w-[100px] text-right">--</span>
                 </div>
+                <!-- NUEVO: Gasto Anual Total -->
+                <div class="flex justify-between text-sm items-center mt-3 pt-2 border-t border-gray-200">
+                    <span class="text-industrial-600">Gasto Mat. (Año):</span> 
+                    <span id="res-gasto-total" class="font-bold text-brand-red text-md truncate text-right">Q0.00</span>
+                </div>
             </div>
         </aside>
 
-        <!-- Chart Area: La Vela Maestra -->
-        <section class="w-full lg:w-3/4 xl:w-4/5 bg-industrial-100 p-4 lg:p-6 flex flex-col relative overflow-y-auto">
-            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-1 flex flex-col p-2 relative h-full">
-                <!-- Contenedor Plotly -->
-                <div id="master-candle-chart"></div>
+        <!-- Chart Area: La Vela Maestra y Gráfica de Costos -->
+        <section class="w-full lg:w-3/4 xl:w-4/5 bg-industrial-100 p-4 lg:p-6 flex flex-col gap-5 relative overflow-y-auto">
+            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-none flex flex-col p-2 relative h-[600px] min-h-[600px]">
+                <!-- Contenedor Plotly OEE -->
+                <div id="master-candle-chart" class="w-full h-full"></div>
+            </div>
+            <!-- NUEVO: Contenedor Gráfica de Costos -->
+            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-none flex flex-col p-2 relative h-[450px] min-h-[450px]">
+                <div id="costs-bar-chart" class="w-full h-full"></div>
             </div>
         </section>
 
@@ -173,13 +192,56 @@
         });
 
         // ----------------------------------------------------
-        // 2. PARSEO DE ARCHIVOS (EXCEL/CSV/HTML)
+        // 2. PARSEO DE ARCHIVOS (EXCEL/CSV/HTML) Y FILTROS
         // ----------------------------------------------------
+        
+        // Función para parsear formatos numéricos (ej. 3.125,01 -> 3125.01)
+        const parseLatamNumber = (str) => {
+            if (!str) return 0;
+            if (typeof str === 'number') return str;
+            const cleanStr = String(str).replace(/\./g, '').replace(',', '.');
+            return parseFloat(cleanStr) || 0;
+        };
+
+        // Función para formato de moneda Q
+        const formatCurrency = (val) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(val);
+
+        // Extractor de Fecha y Mes de archivos como salidas_bodega
+        const parseDateInfo = (dateStr) => {
+            if(!dateStr) return null;
+            const parts = String(dateStr).split(/[\/\-]/); // Separa por / o -
+            if(parts.length >= 3) {
+                const m = parseInt(parts[1]) - 1; // Asume DD/MM/YYYY
+                let y = parts[2];
+                if (y.length > 4) y = y.substring(0,4);
+                const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+                if (m >= 0 && m <= 11) return { month: months[m], year: y.toString() };
+            }
+            return null;
+        };
+
         const demoData = {
             machines: { 'Iny-01': 88.2, 'Iny-02': 79.5, 'Prensa-H': 84.1, 'Troquel': 72.8, 'Comp-P': 91.5, 'Extru-05': 81.2 },
-            months: { 'Ene': 71.5, 'Feb': 73.8, 'Mar': 70.2, 'Abr': 78.5, 'May': 82.1, 'Jun': 83.4, 'Jul': 86.9, 'Ago': 85.2, 'Sep': 77.8, 'Oct': 89.5, 'Nov': 92.2, 'Dic': 90.4 }
+            months: { 'Ene': 71.5, 'Feb': 73.8, 'Mar': 70.2, 'Abr': 78.5, 'May': 82.1, 'Jun': 83.4, 'Jul': 86.9, 'Ago': 85.2, 'Sep': 77.8, 'Oct': 89.5, 'Nov': 92.2, 'Dic': 90.4 },
+            costs: { 'Iny-01': 15000, 'Iny-02': 22500, 'Prensa-H': 8000, 'Troquel': 45000, 'Comp-P': 3000, 'Extru-05': 12000 }
         };
-        let appData = { ot: [], mat: [], mo: [], otros: [], processedMachines: {...demoData.machines}, processedMonths: {...demoData.months} };
+        
+        let appData = { ot: [], mat: [], mo: [], otros: [], processedMachines: {...demoData.machines}, processedMonths: {...demoData.months}, processedCosts: {...demoData.costs} };
+        const availableYears = new Set(['2025', '2024', '2023']);
+
+        // Actualiza el listado de años del filtro
+        const updateYearSelector = () => {
+            const selector = document.getElementById('year-selector');
+            const currentSelected = selector.value;
+            selector.innerHTML = '';
+            
+            [...availableYears].sort().reverse().forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y; opt.text = y;
+                selector.appendChild(opt);
+            });
+            if(availableYears.has(currentSelected)) selector.value = currentSelected;
+        };
 
         const setupFileInput = (inputId, labelId, wrapperId, storageKey) => {
             document.getElementById(inputId).addEventListener('change', function(e) {
@@ -192,7 +254,20 @@
                     try {
                         const data = new Uint8Array(evt.target.result);
                         const workbook = XLSX.read(data, {type: 'array'});
-                        appData[storageKey] = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                        appData[storageKey] = jsonData;
+
+                        // Extraer años dinámicamente de Fechas
+                        jsonData.forEach(row => {
+                            const getVal = (kStr) => { const k = Object.keys(row).find(k => k.toString().trim().toLowerCase() === kStr.toLowerCase()); return k ? row[k] : null; };
+                            const fecha = getVal('fecha contabilizacion') || getVal('fecha');
+                            if (fecha) {
+                                const dInfo = parseDateInfo(fecha);
+                                if (dInfo) availableYears.add(dInfo.year);
+                            }
+                        });
+                        updateYearSelector();
+
                     } catch (err) { alert(`Error al leer ${file.name}`); console.error(err); }
                 };
                 reader.readAsArrayBuffer(file);
@@ -203,40 +278,79 @@
         setupFileInput('file-mo', 'label-mo', 'wrapper-mo', 'mo');
         setupFileInput('file-otros', 'label-otros', 'wrapper-otros', 'otros');
 
+        // Escuchar el cambio en el selector de año
+        document.getElementById('year-selector').addEventListener('change', processAndDrawCharts);
+
         // ----------------------------------------------------
-        // 3. MOTOR DE GRÁFICAS (LA VELA MAESTRA)
+        // 3. MOTOR DE GRÁFICAS (OEE + COSTOS)
         // ----------------------------------------------------
-        function drawMasterCandle() {
+        function processAndDrawCharts() {
+            const selectedYear = document.getElementById('year-selector').value;
+            
             let machinesData = appData.processedMachines;
             let monthsData = appData.processedMonths;
+            let costsData = {};
+            let totalCost = 0;
+
             const allUploadedData = [...appData.ot, ...appData.mat, ...appData.mo, ...appData.otros];
 
             if (allUploadedData.length > 0) {
                 const maqsObj = {}, mesesObj = {};
-                let validRows = 0;
+                let validOeeRows = 0;
+                
                 allUploadedData.forEach(row => {
                     const getVal = (kStr) => { const k = Object.keys(row).find(k => k.toString().trim().toLowerCase() === kStr.toLowerCase()); return k ? row[k] : null; };
-                    const m = getVal('maquina'); const mes = getVal('mes'); 
+                    
+                    const maqVal = getVal('maquinaria') || getVal('maquina') || 'Sin Asignar'; 
+                    const mes = getVal('mes'); 
+                    const fecha = getVal('fecha contabilizacion') || getVal('fecha');
+                    
+                    let dateInfo = parseDateInfo(fecha);
+                    let rowYear = dateInfo ? dateInfo.year : null;
+                    let rowMonth = dateInfo ? dateInfo.month : mes;
+
+                    // Si la fila tiene año (como salidas_bodega) y no es el que el usuario eligió, la saltamos.
+                    if (rowYear && rowYear !== selectedYear) return;
+
+                    // 1. OEE Parse
                     let oeeVal = parseFloat(String(getVal('oee')).replace(',','.').replace('%',''));
                     if (!isNaN(oeeVal)) { 
-                        if (m) { maqsObj[m] = maqsObj[m] || []; maqsObj[m].push(oeeVal); }
-                        if (mes) { mesesObj[mes] = mesesObj[mes] || []; mesesObj[mes].push(oeeVal); }
-                        if (m || mes) validRows++; 
+                        if (maqVal !== 'Sin Asignar') { maqsObj[maqVal] = maqsObj[maqVal] || []; maqsObj[maqVal].push(oeeVal); }
+                        if (rowMonth) { mesesObj[rowMonth] = mesesObj[rowMonth] || []; mesesObj[rowMonth].push(oeeVal); }
+                        validOeeRows++; 
+                    }
+
+                    // 2. Bodega / Costos Parse (Formato salidas_bodega.csv)
+                    let valorSalida = getVal('valor salida') || getVal('costo') || getVal('gasto');
+                    if (valorSalida) {
+                        let costNum = parseLatamNumber(valorSalida);
+                        if (costNum > 0 && maqVal !== 'Sin Asignar') {
+                            costsData[maqVal] = (costsData[maqVal] || 0) + costNum;
+                            totalCost += costNum;
+                        }
                     }
                 });
-                if(validRows > 0) {
+
+                if(validOeeRows > 0) {
                     const calcAvg = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.reduce((a,b)=>a+b,0)/v.length]));
                     machinesData = calcAvg(maqsObj); monthsData = calcAvg(mesesObj);
-                    appData.processedMachines = machinesData; appData.processedMonths = monthsData;
                 }
+                
+                if (Object.keys(costsData).length === 0) costsData = demoData.costs;
+            } else {
+                costsData = demoData.costs;
+                totalCost = Object.values(costsData).reduce((a,b)=>a+b, 0);
             }
 
+            // Actualizar Tarjeta de Gasto
+            document.getElementById('res-gasto-total').innerText = formatCurrency(totalCost);
+
+            // ---- DIBUJAR VELA MAESTRA (OEE) ----
             const machNames = Object.keys(machinesData), machVals = Object.values(machinesData);
             const monthNames = Object.keys(monthsData), monthVals = Object.values(monthsData);
             if(machVals.length === 0 || monthVals.length === 0) return;
             const allVals = [...machVals, ...monthVals];
 
-            // Cuartiles
             const sorted = [...allVals].sort((a,b)=>a-b);
             const q1 = sorted[Math.floor(sorted.length * 0.25)], q2 = sorted[Math.floor(sorted.length * 0.5)], q3 = sorted[Math.floor(sorted.length * 0.75)];
 
@@ -246,7 +360,6 @@
             document.getElementById('res-mejor-maq').innerText = `${bestMach} (${machinesData[bestMach].toFixed(1)}%)`;
             document.getElementById('res-peor-maq').innerText = `${worstMach} (${machinesData[worstMach].toFixed(1)}%)`;
 
-            // Anti-colisión
             const getCleanY = (vDict, dist = 2.0) => {
                 let sItems = Object.entries(vDict).sort((a,b) => a[1] - b[1]);
                 let lastY = -999;
@@ -254,13 +367,12 @@
             };
             const cleanMach = getCleanY(machinesData, 2.5), cleanMonth = getCleanY(monthsData, 2.5);
 
-            // Trazos
             const traceBox = { y: allVals, type: 'box', name: '', boxpoints: false, marker: { color: '#E3F2FD' }, line: { color: '#1E3A8A', width: 2.5 }, fillcolor: '#E3F2FD', width: 0.25 };
             const traceMachines = { x: cleanMach.map(() => -0.35), y: cleanMach.map(d => d.plotY), text: cleanMach.map(d => `<b>${d.name}</b> (${d.val.toFixed(1)}%) →`), mode: 'text+markers', textposition: 'middle left', marker: { size: 9, color: '#B91C1C', symbol: 'square' }, textfont: { size: 11, color: '#991B1B' }, hoverinfo: 'none' };
             const traceMonths = { x: cleanMonth.map(() => 0.35), y: cleanMonth.map(d => d.plotY), text: cleanMonth.map(d => `← <b>${d.name}</b> (${d.val.toFixed(1)}%)`), mode: 'text+markers', textposition: 'middle right', marker: { size: 9, color: '#15803D', symbol: 'circle' }, textfont: { size: 11, color: '#166534' }, hoverinfo: 'none' };
 
-            const layout = {
-                title: { text: '<b>Vela Maestra OEE 2025</b><br><span style="font-size:14px; color:gray">Distribución de Activos vs. Línea de Tiempo</span>', font: { size: 22 }, y: 0.95 },
+            const layoutOEE = {
+                title: { text: `<b>Vela Maestra OEE - Año ${selectedYear}</b><br><span style="font-size:14px; color:gray">Distribución de Activos vs. Línea de Tiempo</span>`, font: { size: 22 }, y: 0.95 },
                 showlegend: false,
                 xaxis: { range: [-1, 1], showgrid: false, zeroline: false, showticklabels: false, fixedrange: true },
                 yaxis: { title: 'Nivel de OEE (%)', range: [Math.min(...allVals) - 5, Math.max(...allVals) + 5], gridcolor: '#f1f5f9', zeroline: false },
@@ -272,71 +384,87 @@
                 margin: { l: 70, r: 70, t: 90, b: 40 }, plot_bgcolor: 'transparent', paper_bgcolor: 'transparent', shapes: []
             };
 
-            const addGuideLine = (arr, x0, x1, col) => { arr.forEach(d => { if(Math.abs(d.plotY - d.val) > 0.2) layout.shapes.push({type: 'line', x0: x0, y0: d.plotY, x1: x1, y1: d.val, line: {color: col, width: 0.5, dash: 'dot'}}); }); };
+            const addGuideLine = (arr, x0, x1, col) => { arr.forEach(d => { if(Math.abs(d.plotY - d.val) > 0.2) layoutOEE.shapes.push({type: 'line', x0: x0, y0: d.plotY, x1: x1, y1: d.val, line: {color: col, width: 0.5, dash: 'dot'}}); }); };
             addGuideLine(cleanMach, -0.33, -0.15, '#B91C1C'); addGuideLine(cleanMonth, 0.33, 0.15, '#15803D');  
 
-            Plotly.newPlot('master-candle-chart', [traceBox, traceMachines, traceMonths], layout, { responsive: true, displayModeBar: false });
+            Plotly.newPlot('master-candle-chart', [traceBox, traceMachines, traceMonths], layoutOEE, { responsive: true, displayModeBar: false });
+
+            // ---- DIBUJAR GRÁFICA COSTOS DE BODEGA ----
+            const sortedCosts = Object.entries(costsData).sort((a,b) => b[1] - a[1]); // Mayor a menor
+            
+            const traceCosts = {
+                x: sortedCosts.map(item => item[0]),
+                y: sortedCosts.map(item => item[1]),
+                type: 'bar',
+                text: sortedCosts.map(item => formatCurrency(item[1])),
+                textposition: 'auto',
+                marker: { color: '#B91C1C', opacity: 0.8 },
+                hoverinfo: 'x'
+            };
+
+            const layoutCosts = {
+                title: { text: `<b>Consumo de Materiales por Activo - Año ${selectedYear}</b>`, font: { size: 18 } },
+                xaxis: { title: 'Maquinaria', tickangle: -45, automargin: true },
+                yaxis: { title: 'Gasto Monetario (GTQ)', gridcolor: '#e2e8f0', zeroline: false },
+                margin: { b: 120, t: 50, l: 80, r: 20 },
+                plot_bgcolor: 'transparent', paper_bgcolor: 'transparent'
+            };
+
+            Plotly.newPlot('costs-bar-chart', [traceCosts], layoutCosts, { responsive: true, displayModeBar: false });
+            appData.exportCosts = costsData; // Guardar para CSV
         }
 
         // ----------------------------------------------------
         // 4. EXPORTACIÓN A GOOGLE SLIDES (PPTX) Y CSV
         // ----------------------------------------------------
         
-        // Exportar a PPTX (Presentación compatible con Google Slides)
         document.getElementById('btn-export-slides').addEventListener('click', () => {
-            const chartDiv = document.getElementById('master-candle-chart');
+            const chartOEE = document.getElementById('master-candle-chart');
+            const chartCosts = document.getElementById('costs-bar-chart');
             const btn = document.getElementById('btn-export-slides');
             const originalText = btn.innerHTML;
-            btn.innerHTML = "Generando Slide...";
+            btn.innerHTML = "Generando Slides...";
 
-            // 1. Plotly convierte la gráfica a una imagen de alta calidad
-            Plotly.toImage(chartDiv, {format: 'png', width: 1280, height: 720}).then(function(base64Image) {
-                // 2. Usamos PptxGenJS para armar una diapositiva en memoria
+            Promise.all([
+                Plotly.toImage(chartOEE, {format: 'png', width: 1280, height: 720}),
+                Plotly.toImage(chartCosts, {format: 'png', width: 1280, height: 720})
+            ]).then(function([imgOEE, imgCosts]) {
                 let pptx = new PptxGenJS();
-                pptx.layout = 'LAYOUT_16x9'; // Formato panorámico ideal para Google Slides
+                pptx.layout = 'LAYOUT_16x9'; 
+                let year = document.getElementById('year-selector').value;
                 
-                let slide = pptx.addSlide();
-                
-                // Título de la presentación
-                slide.addText("Reporte de Mantenimiento y Operaciones 2025", { 
-                    x: 0.5, y: 0.3, w: '90%', h: 0.5, 
-                    fontSize: 24, bold: true, color: '1E3A8A' 
-                });
-                
-                // Fecha de exportación
-                let today = new Date().toLocaleDateString();
-                slide.addText(`Datos generados el: ${today}`, { 
-                    x: 0.5, y: 0.8, w: '90%', h: 0.3, 
-                    fontSize: 12, color: '666666' 
-                });
+                // Diapositiva 1: OEE
+                let slide1 = pptx.addSlide();
+                slide1.addText(`Reporte de Mantenimiento y Operaciones ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: '1E3A8A' });
+                slide1.addText(`Datos generados el: ${new Date().toLocaleDateString()}`, { x: 0.5, y: 0.8, w: '90%', h: 0.3, fontSize: 12, color: '666666' });
+                slide1.addImage({ data: imgOEE, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
 
-                // Pegamos la imagen de la Vela Maestra en la diapositiva
-                slide.addImage({ data: base64Image, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
+                // Diapositiva 2: Costos Bodega
+                let slide2 = pptx.addSlide();
+                slide2.addText(`Gasto en Repuestos y Materiales ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: 'B91C1C' });
+                slide2.addImage({ data: imgCosts, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
                 
-                // 3. Descargamos el archivo .pptx
-                pptx.writeFile({ fileName: "Presentacion_OEE_2025.pptx" }).then(() => {
-                    btn.innerHTML = originalText;
-                });
+                pptx.writeFile({ fileName: `Presentacion_Mant_${year}.pptx` }).then(() => { btn.innerHTML = originalText; });
             }).catch(err => {
-                console.error(err);
-                btn.innerHTML = originalText;
-                alert("Error al generar la diapositiva.");
+                console.error(err); btn.innerHTML = originalText; alert("Error al generar las diapositivas.");
             });
         });
 
-        // Exportar CSV consolidado
         document.getElementById('btn-export-csv').addEventListener('click', () => {
-            let csvContent = "data:text/csv;charset=utf-8,Categoria,Identificador,OEE_Promedio\n";
-            Object.entries(appData.processedMachines).forEach(([k, v]) => csvContent += `Maquina,${k},${v.toFixed(2)}\n`);
-            Object.entries(appData.processedMonths).forEach(([k, v]) => csvContent += `Mes,${k},${v.toFixed(2)}\n`);
+            let csvContent = "data:text/csv;charset=utf-8,Categoria,Identificador,Valor\n";
+            Object.entries(appData.processedMachines).forEach(([k, v]) => csvContent += `Maquina (OEE%),${k},${v.toFixed(2)}\n`);
+            Object.entries(appData.processedMonths).forEach(([k, v]) => csvContent += `Mes (OEE%),${k},${v.toFixed(2)}\n`);
+            if(appData.exportCosts) {
+                Object.entries(appData.exportCosts).forEach(([k, v]) => csvContent += `Gasto Materiales,${k},${v.toFixed(2)}\n`);
+            }
             const link = document.createElement("a");
             link.setAttribute("href", encodeURI(csvContent));
-            link.setAttribute("download", "Consolidado_OEE_VelaMaestra.csv");
+            link.setAttribute("download", `Consolidado_Mantenimiento_${document.getElementById('year-selector').value}.csv`);
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
         });
 
-        document.getElementById('btn-process').addEventListener('click', () => { setTimeout(drawMasterCandle, 200); });
-        window.onload = drawMasterCandle;
+        document.getElementById('btn-process').addEventListener('click', () => { setTimeout(processAndDrawCharts, 200); });
+        window.onload = processAndDrawCharts;
 
     </script>
 </body>
