@@ -38,6 +38,10 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .chart-container { width: 100%; height: 100%; min-height: 550px; }
+        
+        /* Custom scrollbar para las listas de checkboxes */
+        .checkbox-list::-webkit-scrollbar { width: 6px; }
+        .checkbox-list::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 3px; }
     </style>
 </head>
 <body class="text-industrial-800 h-screen flex flex-col">
@@ -121,19 +125,25 @@
                     <span id="res-mediana" class="font-bold text-brand-blue text-lg bg-blue-100 px-2 rounded">--%</span>
                 </div>
                 <div class="flex justify-between text-sm items-center mt-3 pt-2 border-t border-gray-200">
-                    <span class="text-industrial-600">Gasto Anual Total:</span> 
+                    <span class="text-industrial-600">Gasto Anual Mto:</span> 
                     <span id="res-gasto-total" class="font-bold text-brand-red text-md truncate text-right">Q0.00</span>
                 </div>
+                <div class="flex justify-between text-sm items-center mt-1">
+                    <span class="text-industrial-600">Gasto Proyectos:</span> 
+                    <span id="res-gasto-proyectos" class="font-bold text-brand-orange text-md truncate text-right">Q0.00</span>
+                </div>
             </div>
+
+            <button onclick="openDataTableModal()" class="w-full bg-industrial-600 hover:bg-industrial-700 text-white py-2 rounded-lg font-bold shadow-md transition-all flex justify-center items-center gap-2">
+                📋 Ver Tabla y Extraer Proyectos
+            </button>
         </aside>
 
         <!-- Chart Area -->
         <section class="w-full lg:w-3/4 xl:w-4/5 bg-industrial-100 p-4 lg:p-6 flex flex-col xl:flex-row gap-5 relative overflow-y-auto">
-            <!-- Gráfica 1: OEE -->
             <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-1 flex flex-col p-2 relative min-h-[550px]">
                 <div id="master-candle-chart" class="chart-container"></div>
             </div>
-            <!-- Gráfica 2: Costos (Vela Maestra 2) -->
             <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-1 flex flex-col p-2 relative min-h-[550px]">
                 <div id="costs-candle-chart" class="chart-container"></div>
             </div>
@@ -151,32 +161,40 @@
             
             <div class="p-6 overflow-y-auto flex-1 space-y-6">
                 
-                <!-- Filtro Expreso de Máquinas -->
+                <!-- SELECCIÓN INTELIGENTE DE MÁQUINAS -->
                 <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg">
-                    <label class="block text-sm font-bold text-brand-blue mb-1">Filtrar Máquinas a Mostrar en las Gráficas</label>
-                    <p class="text-xs text-blue-700 mb-2">Escribe los nombres separados por coma. Déjalo en blanco para mostrar todas las máquinas.</p>
-                    <input type="text" id="map-maquinas-filter" class="w-full p-2 border border-blue-300 rounded text-sm" placeholder="Ej: Inyectora 01, Prensa 03">
+                    <label class="block text-sm font-bold text-brand-blue mb-1">Activos a Incluir en Gráficas</label>
+                    <p class="text-xs text-blue-700 mb-2">Selecciona en la lista las máquinas que deseas mostrar. Esta lista se genera sola leyendo tu archivo.</p>
+                    
+                    <div id="map-maquinas-checkboxes" class="checkbox-list w-full max-h-40 overflow-y-auto border border-blue-300 rounded p-2 bg-white grid grid-cols-1 md:grid-cols-2 gap-x-2 gap-y-1 text-sm shadow-inner">
+                        <!-- Checkboxes inyectados por JS -->
+                    </div>
+                    
+                    <div class="mt-2 flex gap-4">
+                        <button onclick="selectAllMachines(true)" class="text-xs font-bold text-brand-blue hover:text-blue-900 flex items-center gap-1"><span class="text-lg leading-none">✓</span> Marcar Todas</button>
+                        <button onclick="selectAllMachines(false)" class="text-xs font-bold text-brand-red hover:text-red-900 flex items-center gap-1"><span class="text-lg leading-none">✗</span> Desmarcar Todas</button>
+                    </div>
                 </div>
 
                 <!-- Sección 1: Mapeo de Columnas -->
                 <div>
-                    <h3 class="font-bold text-industrial-800 border-b pb-2 mb-3">1. Asignar Columnas de Datos</h3>
+                    <h3 class="font-bold text-industrial-800 border-b pb-2 mb-3">1. Asignar Columnas Principales</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Activo/Máquina:</label>
-                            <select id="map-maquina" class="w-full p-2 border rounded text-sm"></select>
+                            <select id="map-maquina" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Fecha/Mes:</label>
-                            <select id="map-fecha" class="w-full p-2 border rounded text-sm"></select>
+                            <select id="map-fecha" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Valor OEE (%)</label>
-                            <select id="map-oee" class="w-full p-2 border rounded text-sm"></select>
+                            <select id="map-oee" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Costo/Gasto Monetario</label>
-                            <select id="map-costo" class="w-full p-2 border rounded text-sm"></select>
+                            <select id="map-costo" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
                         </div>
                     </div>
                 </div>
@@ -200,6 +218,38 @@
         </div>
     </div>
 
+    <!-- MODAL DE TABLA DE DATOS PARA PROYECTOS -->
+    <div id="data-table-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="bg-industrial-800 text-white p-4 flex justify-between items-center">
+                <h2 class="font-bold text-lg">Revisión de Gastos y Asignación de Proyectos</h2>
+                <button onclick="closeDataTableModal()" class="text-gray-300 hover:text-white font-bold text-xl">&times;</button>
+            </div>
+            <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
+                <p class="text-sm text-gray-600">Marca la casilla <b>"Es Proyecto"</b> para excluir un gasto del presupuesto general de mantenimiento (Gráfica Vela).</p>
+            </div>
+            <div class="overflow-y-auto flex-1 p-0">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-100 text-gray-700 sticky top-0 shadow-sm">
+                        <tr>
+                            <th class="p-3 border-b">Máquina</th>
+                            <th class="p-3 border-b">Fecha</th>
+                            <th class="p-3 border-b">Detalle / Artículo</th>
+                            <th class="p-3 border-b text-right">Costo (GTQ)</th>
+                            <th class="p-3 border-b text-center">¿Es Proyecto?</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table-body" class="divide-y divide-gray-200">
+                        <!-- Las filas se inyectan aquí con JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="bg-gray-50 p-4 border-t flex justify-end gap-3">
+                <button onclick="closeDataTableModal()" class="px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded font-bold text-sm shadow">Cerrar y Actualizar Gráficas</button>
+            </div>
+        </div>
+    </div>
+
     <!-- LÓGICA JAVASCRIPT Y PWA -->
     <script>
         // --- PWA Initialization ---
@@ -209,7 +259,7 @@
         document.head.appendChild(linkManifest);
 
         if ('serviceWorker' in navigator) {
-            const swCode = `self.addEventListener('install', e => e.waitUntil(caches.open('oee-dash-v5').then(c => c.addAll([location.href])))); self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));`;
+            const swCode = `self.addEventListener('install', e => e.waitUntil(caches.open('oee-dash-v6').then(c => c.addAll([location.href])))); self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));`;
             const swBlob = new Blob([swCode], {type: 'application/javascript'});
             navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(console.error);
         }
@@ -223,7 +273,8 @@
                 otros: { data: [], config: null, filename: '', headers: [] }
             },
             processedMachinesOEE: {}, processedMonthsOEE: {},
-            processedMachinesCost: {}, processedMonthsCost: {}
+            processedMachinesCost: {}, processedMonthsCost: {},
+            currentCostRows: []
         };
         
         let currentModalKey = null; 
@@ -290,7 +341,7 @@
                             mapFecha: findMatch(['fecha', 'mes', 'date', 'contabilizacion']),
                             mapOee: findMatch(['oee', 'eficiencia', 'rendimiento']),
                             mapCosto: findMatch(['valor salida', 'costo', 'gasto', 'monto', 'total']),
-                            machineFilter: '',
+                            selectedMachines: null, // null = Mostrar todas
                             filters: []
                         };
 
@@ -316,6 +367,44 @@
         setupFileInput('file-otros', 'label-otros', 'wrapper-otros', 'otros', 'config-otros');
 
         // --- MODAL Y FILTROS LOGIC ---
+        function renderMachineCheckboxes(key) {
+            const fileObj = appData.files[key];
+            const col = document.getElementById('map-maquina').value;
+            const container = document.getElementById('map-maquinas-checkboxes');
+            
+            if (!col) {
+                container.innerHTML = '<div class="text-gray-500 italic col-span-2 text-center py-4">Asigna la columna de "Activo/Máquina" abajo para ver las opciones aquí.</div>';
+                return;
+            }
+
+            // Extraer nombres únicos de la columna seleccionada
+            const uniqueMachines = [...new Set(fileObj.data.map(row => {
+                const v = String(row[col] || '').trim();
+                return v ? v : 'Sin Asignar';
+            }))].sort();
+
+            let selected = fileObj.config.selectedMachines;
+            let html = '';
+            
+            uniqueMachines.forEach(m => {
+                // Si selected es null, significa que es la primera vez y todas van marcadas por defecto
+                const isChecked = (selected === null || selected.includes(m)) ? 'checked' : '';
+                const escapedM = m.replace(/"/g, '&quot;'); // Prevenir inyecciones en el HTML
+                
+                html += `
+                    <label class="flex items-center space-x-2 cursor-pointer hover:bg-blue-100 p-1.5 rounded transition-colors border border-transparent hover:border-blue-200">
+                        <input type="checkbox" value="${escapedM}" class="mach-checkbox w-4 h-4 text-brand-blue rounded focus:ring-brand-blue" ${isChecked}>
+                        <span class="truncate text-gray-700 font-medium" title="${escapedM}">${escapedM}</span>
+                    </label>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function selectAllMachines(checkStatus) {
+            document.querySelectorAll('.mach-checkbox').forEach(cb => cb.checked = checkStatus);
+        }
+
         function openMappingModal(key) {
             currentModalKey = key;
             const fileObj = appData.files[key];
@@ -330,11 +419,17 @@
                 });
             });
 
+            // Asignar mapeos guardados
             document.getElementById('map-maquina').value = fileObj.config.mapMaquina;
             document.getElementById('map-fecha').value = fileObj.config.mapFecha;
             document.getElementById('map-oee').value = fileObj.config.mapOee;
             document.getElementById('map-costo').value = fileObj.config.mapCosto;
-            document.getElementById('map-maquinas-filter').value = fileObj.config.machineFilter || '';
+
+            // Al cambiar la columna de máquina, actualizar la lista de checkboxes
+            document.getElementById('map-maquina').onchange = () => renderMachineCheckboxes(currentModalKey);
+            
+            // Generar los checkboxes para la máquina actual
+            renderMachineCheckboxes(currentModalKey);
 
             document.getElementById('filters-container').innerHTML = '';
             fileObj.config.filters.forEach(f => addFilterRow(f.col, f.op, f.val));
@@ -376,7 +471,10 @@
             conf.mapFecha = document.getElementById('map-fecha').value;
             conf.mapOee = document.getElementById('map-oee').value;
             conf.mapCosto = document.getElementById('map-costo').value;
-            conf.machineFilter = document.getElementById('map-maquinas-filter').value;
+            
+            // Guardar checkboxes seleccionados en el arreglo
+            const checkedBoxes = Array.from(document.querySelectorAll('.mach-checkbox:checked')).map(cb => cb.value);
+            conf.selectedMachines = checkedBoxes;
 
             conf.filters = [];
             document.querySelectorAll('#filters-container > div').forEach(row => {
@@ -396,7 +494,8 @@
             
             let mOeeData = {}; let moOeeData = {}; 
             let mCostData = {}; let moCostData = {}; 
-            let totalCost = 0; let hasData = false;
+            let totalCost = 0; let totalProjectCost = 0; let hasData = false;
+            appData.currentCostRows = []; 
 
             Object.values(appData.files).forEach(fileObj => {
                 if (!fileObj.data || fileObj.data.length === 0 || !fileObj.config) return;
@@ -404,7 +503,7 @@
 
                 fileObj.data.forEach(row => {
                     let passFilter = true;
-                    // 1. Aplicar Filtros Dinámicos (Ej: Encargado -> Orozco)
+                    // 1. Filtros Dinámicos
                     for(let f of fileObj.config.filters) {
                         const rowValue = String(row[f.col] || '').toLowerCase();
                         const searchTerms = f.val.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
@@ -419,15 +518,13 @@
                     }
                     if (!passFilter) return;
 
-                    // 2. Extraer Máquina
-                    const maqVal = fileObj.config.mapMaquina ? (row[fileObj.config.mapMaquina] || 'Sin Asignar') : 'Sin Asignar';
+                    // 2. Extraer Máquina (Normalizada)
+                    const rawMaq = String(fileObj.config.mapMaquina ? row[fileObj.config.mapMaquina] : '').trim();
+                    const maqVal = rawMaq ? rawMaq : 'Sin Asignar';
                     
-                    // 3. Aplicar Filtro Expreso de Máquina
-                    if (fileObj.config.machineFilter) {
-                        const allowedMachs = fileObj.config.machineFilter.split(',').map(s=>s.trim().toLowerCase()).filter(s=>s);
-                        if (allowedMachs.length > 0 && !allowedMachs.some(allowed => maqVal.toLowerCase().includes(allowed))) {
-                            return; // Ignorar esta fila
-                        }
+                    // 3. Aplicar Filtro de Checkboxes de Máquinas
+                    if (fileObj.config.selectedMachines !== null) {
+                        if (!fileObj.config.selectedMachines.includes(maqVal)) return; // Ignorar si no fue marcada
                     }
 
                     // 4. Extraer Año y Mes
@@ -448,31 +545,95 @@
                         }
                     }
 
-                    // 6. Acumular Costos (Suma total)
+                    // 6. Acumular Costos y Filtrar Proyectos
                     if (fileObj.config.mapCosto && row[fileObj.config.mapCosto] !== undefined && row[fileObj.config.mapCosto] !== "") {
                         let costNum = parseLatamNumber(row[fileObj.config.mapCosto]);
                         if (costNum > 0 && maqVal !== 'Sin Asignar') {
-                            mCostData[maqVal] = (mCostData[maqVal] || 0) + costNum;
-                            if(rowMonth) { moCostData[rowMonth] = (moCostData[rowMonth] || 0) + costNum; }
-                            totalCost += costNum;
+                            
+                            const getVal = (kStr) => { const k = Object.keys(row).find(k => k.toString().trim().toLowerCase() === kStr.toLowerCase()); return k ? row[k] : null; };
+                            let desc = getVal('descripcion') || getVal('articulo') || getVal('comentario') || getVal('detalle') || '-';
+
+                            appData.currentCostRows.push({
+                                ref: row, 
+                                maquina: maqVal,
+                                fecha: row[fileObj.config.mapFecha] || '',
+                                desc: desc,
+                                costo: costNum,
+                                isProject: !!row._isProject 
+                            });
+
+                            if (row._isProject) {
+                                totalProjectCost += costNum; 
+                            } else {
+                                mCostData[maqVal] = (mCostData[maqVal] || 0) + costNum;
+                                if(rowMonth) { moCostData[rowMonth] = (moCostData[rowMonth] || 0) + costNum; }
+                                totalCost += costNum; 
+                            }
                         }
                     }
                 });
             });
 
-            // Promediar Arrays de OEE
             const calcAvg = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.reduce((a,b)=>a+b,0)/v.length]));
             appData.processedMachinesOEE = calcAvg(mOeeData);
             appData.processedMonthsOEE = calcAvg(moOeeData);
-            
-            // Costos ya están sumados
             appData.processedMachinesCost = mCostData;
             appData.processedMonthsCost = moCostData;
 
             document.getElementById('res-gasto-total').innerText = formatCurrency(totalCost);
+            document.getElementById('res-gasto-proyectos').innerText = formatCurrency(totalProjectCost);
 
             drawCandleChart('master-candle-chart', appData.processedMachinesOEE, appData.processedMonthsOEE, selectedYear, 'OEE (%)', '#1E3A8A', '#E3F2FD', true);
             drawCandleChart('costs-candle-chart', appData.processedMachinesCost, appData.processedMonthsCost, selectedYear, 'Consumos (GTQ)', '#E65100', '#FFF3E0', false);
+        }
+
+        // --- LÓGICA DE TABLA DE DATOS Y PROYECTOS ---
+        function openDataTableModal() {
+            const tbody = document.getElementById('data-table-body');
+            tbody.innerHTML = '';
+            
+            if (!appData.currentCostRows || appData.currentCostRows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500 font-semibold">Procesa un archivo con Costos Monetarios para ver los datos aquí.</td></tr>';
+            } else {
+                let html = '';
+                const maxRows = Math.min(appData.currentCostRows.length, 3000);
+                for(let i=0; i<maxRows; i++) {
+                    const r = appData.currentCostRows[i];
+                    html += `
+                        <tr class="hover:bg-blue-50 transition-colors ${r.isProject ? 'bg-orange-50' : ''}" id="row-${i}">
+                            <td class="p-3">${r.maquina}</td>
+                            <td class="p-3">${r.fecha}</td>
+                            <td class="p-3 text-xs text-gray-600 truncate max-w-xs" title="${r.desc}">${r.desc}</td>
+                            <td class="p-3 text-right font-semibold">${formatCurrency(r.costo)}</td>
+                            <td class="p-3 text-center">
+                                <input type="checkbox" class="w-5 h-5 cursor-pointer accent-brand-orange" 
+                                    ${r.isProject ? 'checked' : ''} 
+                                    onchange="toggleProjectRow(${i}, this.checked)">
+                            </td>
+                        </tr>
+                    `;
+                }
+                tbody.innerHTML = html;
+            }
+            document.getElementById('data-table-modal').classList.remove('hidden');
+        }
+
+        function closeDataTableModal() {
+            document.getElementById('data-table-modal').classList.add('hidden');
+            processAndDrawCharts();
+        }
+
+        function toggleProjectRow(index, isChecked) {
+            const rowData = appData.currentCostRows[index];
+            if (rowData && rowData.ref) {
+                rowData.ref._isProject = isChecked;
+                rowData.isProject = isChecked;
+                const tr = document.getElementById('row-' + index);
+                if (tr) {
+                    if (isChecked) tr.classList.add('bg-orange-50');
+                    else tr.classList.remove('bg-orange-50');
+                }
+            }
         }
 
         // --- RENDERIZADO PLOTLY (GENÉRICO PARA AMBAS VELAS) ---
@@ -492,9 +653,8 @@
 
             if(isOEE) document.getElementById('res-mediana').innerText = `${q2.toFixed(1)}%`;
 
-            // Algoritmo Anti-Colisión Dinámico (Calcula la separación según la escala de los números)
             const range = Math.max(...allVals) - Math.min(...allVals);
-            const minDistance = range > 0 ? range * 0.04 : (isOEE ? 2 : 100); // 4% del rango total
+            const minDistance = range > 0 ? range * 0.04 : (isOEE ? 2 : 100); 
 
             const getCleanY = (vDict) => {
                 let sItems = Object.entries(vDict).sort((a,b) => a[1] - b[1]);
@@ -554,6 +714,16 @@
                 }
                 pptx.writeFile({ fileName: `Presentacion_Mant_${year}.pptx` }).then(() => { btn.innerHTML = originalText; });
             }).catch(err => { console.error(err); btn.innerHTML = originalText; alert("Error al generar diapositivas."); });
+        });
+
+        document.getElementById('btn-export-csv').addEventListener('click', () => {
+            let csvContent = "data:text/csv;charset=utf-8,Categoria,Identificador,Valor\n";
+            Object.entries(appData.processedMachinesOEE).forEach(([k, v]) => csvContent += `Maquina (OEE%),${k},${v.toFixed(2)}\n`);
+            Object.entries(appData.processedMonthsOEE).forEach(([k, v]) => csvContent += `Mes (OEE%),${k},${v.toFixed(2)}\n`);
+            Object.entries(appData.processedMachinesCost).forEach(([k, v]) => csvContent += `Gasto Materiales,${k},${v.toFixed(2)}\n`);
+            const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", `Consolidado_Mantenimiento_${document.getElementById('year-selector').value}.csv`);
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
         });
 
         document.getElementById('year-selector').addEventListener('change', processAndDrawCharts);
