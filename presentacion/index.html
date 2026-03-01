@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard OEE - Mantenimiento 2025</title>
+    <!-- Tailwind CSS para diseño UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Plotly.js para la Vela Maestra -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- SheetJS para leer Excel, CSV, HTML localmente -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- PptxGenJS para exportar a Presentaciones (Compatible con Google Slides) -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        industrial: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 600: '#475569', 800: '#1e293b', 900: '#0f172a' },
+                        brand: { blue: '#1E3A8A', red: '#B91C1C', green: '#15803D', lightBlue: '#E3F2FD', slides: '#F4B400' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: #f1f5f9; }
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; transition: all 0.3s ease; }
+        .file-input-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; height: 100%; width: 100%; }
+        .file-input-wrapper:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .file-loaded { background-color: #f0fdf4 !important; border-color: #86efac !important; color: #166534 !important; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        #master-candle-chart { width: 100%; height: 100%; min-height: 600px; }
+    </style>
+</head>
+<body class="text-industrial-800 h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="bg-industrial-900 text-white p-4 shadow-md flex justify-between items-center z-10 shrink-0">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight">OEE Master Dashboard</h1>
+            <p class="text-sm text-industrial-200 opacity-80">Mantenimiento 2025 - Modo Offline First</p>
+        </div>
+        <div class="flex gap-2 flex-wrap justify-end">
+            <!-- Botón de Slides (Nuevo) -->
+            <button id="btn-export-slides" class="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path></svg>
+                Exportar a Slides
+            </button>
+            <button id="btn-export-csv" class="bg-industrial-600 hover:bg-industrial-500 px-3 py-2 rounded font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Exportar CSV
+            </button>
+            <button id="btn-install" class="hidden bg-brand-green hover:bg-green-600 px-3 py-2 rounded font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm">
+                Instalar App
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        
+        <!-- Sidebar: Importación de Datos y Resumen -->
+        <aside class="w-full lg:w-1/4 xl:w-1/5 bg-white border-r border-industrial-200 p-5 overflow-y-auto shadow-inner flex flex-col gap-5 shrink-0">
+            
+            <div class="border-b border-industrial-100 pb-4">
+                <h2 class="font-bold text-lg mb-1 text-industrial-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                    Importar Datos
+                </h2>
+                <p class="text-xs text-industrial-600 mb-4">Sube un archivo a cualquier ranura. Soporta: <b>CSV, XLS, XLSX, HTML</b>.</p>
+                
+                <div class="space-y-3">
+                    <div class="file-input-wrapper bg-blue-50 border border-blue-200 text-brand-blue rounded-lg p-3 text-center cursor-pointer" id="wrapper-ot">
+                        <span class="font-semibold text-sm block" id="label-ot">1. Órdenes de Trabajo</span>
+                        <input type="file" id="file-ot" accept=".csv,.xls,.xlsx,.html">
+                    </div>
+                    <div class="file-input-wrapper bg-industrial-50 border border-industrial-200 text-industrial-600 rounded-lg p-3 text-center cursor-pointer" id="wrapper-mat">
+                        <span class="font-semibold text-sm block" id="label-mat">2. Consumo Materiales</span>
+                        <input type="file" id="file-mat" accept=".csv,.xls,.xlsx,.html">
+                    </div>
+                    <div class="file-input-wrapper bg-industrial-50 border border-industrial-200 text-industrial-600 rounded-lg p-3 text-center cursor-pointer" id="wrapper-mo">
+                        <span class="font-semibold text-sm block" id="label-mo">3. Mano de Obra (MO)</span>
+                        <input type="file" id="file-mo" accept=".csv,.xls,.xlsx,.html">
+                    </div>
+                    <div class="file-input-wrapper bg-industrial-50 border border-industrial-200 text-industrial-600 rounded-lg p-3 text-center cursor-pointer" id="wrapper-otros">
+                        <span class="font-semibold text-sm block" id="label-otros">4. Otros Datos</span>
+                        <input type="file" id="file-otros" accept=".csv,.xls,.xlsx,.html">
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-process" class="w-full bg-brand-blue hover:bg-blue-800 text-white py-3 rounded-lg font-bold shadow-md transition-all flex justify-center items-center gap-2">
+                Procesar y Graficar
+            </button>
+
+            <!-- Resumen Rápido -->
+            <div class="bg-industrial-50 border border-industrial-200 p-4 rounded-lg mt-auto shadow-sm">
+                <h3 class="font-bold text-sm mb-3 text-industrial-800 border-b pb-1">Análisis Rápido OEE</h3>
+                <div class="flex justify-between text-sm mb-2 items-center">
+                    <span class="text-industrial-600">Mediana Anual:</span> 
+                    <span id="res-mediana" class="font-bold text-brand-blue text-lg bg-blue-100 px-2 rounded">--%</span>
+                </div>
+                <div class="flex justify-between text-sm mb-2 items-center">
+                    <span class="text-industrial-600">Mejor Activo:</span> 
+                    <span id="res-mejor-maq" class="font-bold text-brand-green truncate max-w-[100px] text-right">--</span>
+                </div>
+                <div class="flex justify-between text-sm items-center">
+                    <span class="text-industrial-600">Alerta (Bajo Q1):</span> 
+                    <span id="res-peor-maq" class="font-bold text-brand-red truncate max-w-[100px] text-right">--</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Chart Area: La Vela Maestra -->
+        <section class="w-full lg:w-3/4 xl:w-4/5 bg-industrial-100 p-4 lg:p-6 flex flex-col relative overflow-y-auto">
+            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-1 flex flex-col p-2 relative h-full">
+                <!-- Contenedor Plotly -->
+                <div id="master-candle-chart"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==========================================
+         LÓGICA JAVASCRIPT Y PWA
+         ========================================== -->
+    <script>
+        // ----------------------------------------------------
+        // 1. INYECCIÓN PWA (Service Worker y Manifest dinámicos)
+        // ----------------------------------------------------
+        const manifestJSON = {
+            "name": "OEE Dashboard 2025",
+            "short_name": "OEEDash",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#f8fafc",
+            "theme_color": "#0f172a",
+            "description": "Dashboard Offline-First para visualización de OEE.",
+            "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzBmMTcyYSIgcng9IjIwIi8+PHRleHQgeD0iNTAiIHk9IjY1IiBmb250LXNpemU9IjUwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk88L3RleHQ+PC9zdmc+", "sizes": "512x512", "type": "image/svg+xml"}]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifestJSON)], {type: 'application/json'});
+        const linkManifest = document.createElement('link'); linkManifest.rel = 'manifest'; linkManifest.href = URL.createObjectURL(manifestBlob);
+        document.head.appendChild(linkManifest);
+
+        const swCode = `
+            const CACHE_NAME = 'oee-dash-v3';
+            const ASSETS = [
+                location.href,
+                'https://cdn.tailwindcss.com',
+                'https://cdn.plot.ly/plotly-2.27.0.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+            ];
+            self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))); });
+            self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(res => res || fetch(e.request))); });
+        `;
+        const swBlob = new Blob([swCode], {type: 'application/javascript'});
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(console.error);
+
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault(); deferredPrompt = e;
+            document.getElementById('btn-install').classList.remove('hidden');
+        });
+        document.getElementById('btn-install').addEventListener('click', async () => {
+            if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; document.getElementById('btn-install').classList.add('hidden'); }
+        });
+
+        // ----------------------------------------------------
+        // 2. PARSEO DE ARCHIVOS (EXCEL/CSV/HTML)
+        // ----------------------------------------------------
+        const demoData = {
+            machines: { 'Iny-01': 88.2, 'Iny-02': 79.5, 'Prensa-H': 84.1, 'Troquel': 72.8, 'Comp-P': 91.5, 'Extru-05': 81.2 },
+            months: { 'Ene': 71.5, 'Feb': 73.8, 'Mar': 70.2, 'Abr': 78.5, 'May': 82.1, 'Jun': 83.4, 'Jul': 86.9, 'Ago': 85.2, 'Sep': 77.8, 'Oct': 89.5, 'Nov': 92.2, 'Dic': 90.4 }
+        };
+        let appData = { ot: [], mat: [], mo: [], otros: [], processedMachines: {...demoData.machines}, processedMonths: {...demoData.months} };
+
+        const setupFileInput = (inputId, labelId, wrapperId, storageKey) => {
+            document.getElementById(inputId).addEventListener('change', function(e) {
+                const file = e.target.files[0]; if (!file) return;
+                document.getElementById(labelId).innerHTML = `✓ ${file.name}`;
+                document.getElementById(wrapperId).classList.add('file-loaded');
+                
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const data = new Uint8Array(evt.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        appData[storageKey] = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                    } catch (err) { alert(`Error al leer ${file.name}`); console.error(err); }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        };
+        setupFileInput('file-ot', 'label-ot', 'wrapper-ot', 'ot');
+        setupFileInput('file-mat', 'label-mat', 'wrapper-mat', 'mat');
+        setupFileInput('file-mo', 'label-mo', 'wrapper-mo', 'mo');
+        setupFileInput('file-otros', 'label-otros', 'wrapper-otros', 'otros');
+
+        // ----------------------------------------------------
+        // 3. MOTOR DE GRÁFICAS (LA VELA MAESTRA)
+        // ----------------------------------------------------
+        function drawMasterCandle() {
+            let machinesData = appData.processedMachines;
+            let monthsData = appData.processedMonths;
+            const allUploadedData = [...appData.ot, ...appData.mat, ...appData.mo, ...appData.otros];
+
+            if (allUploadedData.length > 0) {
+                const maqsObj = {}, mesesObj = {};
+                let validRows = 0;
+                allUploadedData.forEach(row => {
+                    const getVal = (kStr) => { const k = Object.keys(row).find(k => k.toString().trim().toLowerCase() === kStr.toLowerCase()); return k ? row[k] : null; };
+                    const m = getVal('maquina'); const mes = getVal('mes'); 
+                    let oeeVal = parseFloat(String(getVal('oee')).replace(',','.').replace('%',''));
+                    if (!isNaN(oeeVal)) { 
+                        if (m) { maqsObj[m] = maqsObj[m] || []; maqsObj[m].push(oeeVal); }
+                        if (mes) { mesesObj[mes] = mesesObj[mes] || []; mesesObj[mes].push(oeeVal); }
+                        if (m || mes) validRows++; 
+                    }
+                });
+                if(validRows > 0) {
+                    const calcAvg = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.reduce((a,b)=>a+b,0)/v.length]));
+                    machinesData = calcAvg(maqsObj); monthsData = calcAvg(mesesObj);
+                    appData.processedMachines = machinesData; appData.processedMonths = monthsData;
+                }
+            }
+
+            const machNames = Object.keys(machinesData), machVals = Object.values(machinesData);
+            const monthNames = Object.keys(monthsData), monthVals = Object.values(monthsData);
+            if(machVals.length === 0 || monthVals.length === 0) return;
+            const allVals = [...machVals, ...monthVals];
+
+            // Cuartiles
+            const sorted = [...allVals].sort((a,b)=>a-b);
+            const q1 = sorted[Math.floor(sorted.length * 0.25)], q2 = sorted[Math.floor(sorted.length * 0.5)], q3 = sorted[Math.floor(sorted.length * 0.75)];
+
+            document.getElementById('res-mediana').innerText = `${q2.toFixed(1)}%`;
+            const bestMach = machNames.reduce((a,b) => machinesData[a] > machinesData[b] ? a : b);
+            const worstMach = machNames.reduce((a,b) => machinesData[a] < machinesData[b] ? a : b);
+            document.getElementById('res-mejor-maq').innerText = `${bestMach} (${machinesData[bestMach].toFixed(1)}%)`;
+            document.getElementById('res-peor-maq').innerText = `${worstMach} (${machinesData[worstMach].toFixed(1)}%)`;
+
+            // Anti-colisión
+            const getCleanY = (vDict, dist = 2.0) => {
+                let sItems = Object.entries(vDict).sort((a,b) => a[1] - b[1]);
+                let lastY = -999;
+                return sItems.map(([name, val]) => { let plotY = Math.max(val, lastY + dist); lastY = plotY; return { name, val, plotY }; });
+            };
+            const cleanMach = getCleanY(machinesData, 2.5), cleanMonth = getCleanY(monthsData, 2.5);
+
+            // Trazos
+            const traceBox = { y: allVals, type: 'box', name: '', boxpoints: false, marker: { color: '#E3F2FD' }, line: { color: '#1E3A8A', width: 2.5 }, fillcolor: '#E3F2FD', width: 0.25 };
+            const traceMachines = { x: cleanMach.map(() => -0.35), y: cleanMach.map(d => d.plotY), text: cleanMach.map(d => `<b>${d.name}</b> (${d.val.toFixed(1)}%) →`), mode: 'text+markers', textposition: 'middle left', marker: { size: 9, color: '#B91C1C', symbol: 'square' }, textfont: { size: 11, color: '#991B1B' }, hoverinfo: 'none' };
+            const traceMonths = { x: cleanMonth.map(() => 0.35), y: cleanMonth.map(d => d.plotY), text: cleanMonth.map(d => `← <b>${d.name}</b> (${d.val.toFixed(1)}%)`), mode: 'text+markers', textposition: 'middle right', marker: { size: 9, color: '#15803D', symbol: 'circle' }, textfont: { size: 11, color: '#166534' }, hoverinfo: 'none' };
+
+            const layout = {
+                title: { text: '<b>Vela Maestra OEE 2025</b><br><span style="font-size:14px; color:gray">Distribución de Activos vs. Línea de Tiempo</span>', font: { size: 22 }, y: 0.95 },
+                showlegend: false,
+                xaxis: { range: [-1, 1], showgrid: false, zeroline: false, showticklabels: false, fixedrange: true },
+                yaxis: { title: 'Nivel de OEE (%)', range: [Math.min(...allVals) - 5, Math.max(...allVals) + 5], gridcolor: '#f1f5f9', zeroline: false },
+                annotations: [
+                    { x: 0, y: q3, text: `<b>Q3: ${q3.toFixed(1)}%</b>`, showarrow: false, yanchor: 'bottom', font: {size: 11}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2},
+                    { x: 0, y: q2, text: `<b>MEDIANA: ${q2.toFixed(1)}%</b>`, showarrow: false, yanchor: 'middle', font: {size: 13, color: '#1E3A8A'}, bgcolor: 'rgba(255,255,255,0.95)', bordercolor: '#1E3A8A', borderpad: 4, borderwidth: 1},
+                    { x: 0, y: q1, text: `<b>Q1: ${q1.toFixed(1)}%</b>`, showarrow: false, yanchor: 'top', font: {size: 11}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2}
+                ],
+                margin: { l: 70, r: 70, t: 90, b: 40 }, plot_bgcolor: 'transparent', paper_bgcolor: 'transparent', shapes: []
+            };
+
+            const addGuideLine = (arr, x0, x1, col) => { arr.forEach(d => { if(Math.abs(d.plotY - d.val) > 0.2) layout.shapes.push({type: 'line', x0: x0, y0: d.plotY, x1: x1, y1: d.val, line: {color: col, width: 0.5, dash: 'dot'}}); }); };
+            addGuideLine(cleanMach, -0.33, -0.15, '#B91C1C'); addGuideLine(cleanMonth, 0.33, 0.15, '#15803D');  
+
+            Plotly.newPlot('master-candle-chart', [traceBox, traceMachines, traceMonths], layout, { responsive: true, displayModeBar: false });
+        }
+
+        // ----------------------------------------------------
+        // 4. EXPORTACIÓN A GOOGLE SLIDES (PPTX) Y CSV
+        // ----------------------------------------------------
+        
+        // Exportar a PPTX (Presentación compatible con Google Slides)
+        document.getElementById('btn-export-slides').addEventListener('click', () => {
+            const chartDiv = document.getElementById('master-candle-chart');
+            const btn = document.getElementById('btn-export-slides');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "Generando Slide...";
+
+            // 1. Plotly convierte la gráfica a una imagen de alta calidad
+            Plotly.toImage(chartDiv, {format: 'png', width: 1280, height: 720}).then(function(base64Image) {
+                // 2. Usamos PptxGenJS para armar una diapositiva en memoria
+                let pptx = new PptxGenJS();
+                pptx.layout = 'LAYOUT_16x9'; // Formato panorámico ideal para Google Slides
+                
+                let slide = pptx.addSlide();
+                
+                // Título de la presentación
+                slide.addText("Reporte de Mantenimiento y Operaciones 2025", { 
+                    x: 0.5, y: 0.3, w: '90%', h: 0.5, 
+                    fontSize: 24, bold: true, color: '1E3A8A' 
+                });
+                
+                // Fecha de exportación
+                let today = new Date().toLocaleDateString();
+                slide.addText(`Datos generados el: ${today}`, { 
+                    x: 0.5, y: 0.8, w: '90%', h: 0.3, 
+                    fontSize: 12, color: '666666' 
+                });
+
+                // Pegamos la imagen de la Vela Maestra en la diapositiva
+                slide.addImage({ data: base64Image, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
+                
+                // 3. Descargamos el archivo .pptx
+                pptx.writeFile({ fileName: "Presentacion_OEE_2025.pptx" }).then(() => {
+                    btn.innerHTML = originalText;
+                });
+            }).catch(err => {
+                console.error(err);
+                btn.innerHTML = originalText;
+                alert("Error al generar la diapositiva.");
+            });
+        });
+
+        // Exportar CSV consolidado
+        document.getElementById('btn-export-csv').addEventListener('click', () => {
+            let csvContent = "data:text/csv;charset=utf-8,Categoria,Identificador,OEE_Promedio\n";
+            Object.entries(appData.processedMachines).forEach(([k, v]) => csvContent += `Maquina,${k},${v.toFixed(2)}\n`);
+            Object.entries(appData.processedMonths).forEach(([k, v]) => csvContent += `Mes,${k},${v.toFixed(2)}\n`);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", "Consolidado_OEE_VelaMaestra.csv");
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        });
+
+        document.getElementById('btn-process').addEventListener('click', () => { setTimeout(drawMasterCandle, 200); });
+        window.onload = drawMasterCandle;
+
+    </script>
+</body>
+</html>
