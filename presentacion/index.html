@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard OEE - Mantenimiento 2025</title>
+    <title>Dashboard OEE y Costos - Mantenimiento 2025</title>
     <!-- Tailwind CSS para diseño UI -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Plotly.js para la Vela Maestra -->
@@ -19,7 +19,7 @@
                 extend: {
                     colors: {
                         industrial: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 600: '#475569', 800: '#1e293b', 900: '#0f172a' },
-                        brand: { blue: '#1E3A8A', red: '#B91C1C', green: '#15803D', lightBlue: '#E3F2FD', slides: '#F4B400' }
+                        brand: { blue: '#1E3A8A', red: '#B91C1C', green: '#15803D', lightBlue: '#E3F2FD', orange: '#E65100', lightOrange: '#FFF3E0' }
                     }
                 }
             }
@@ -37,7 +37,7 @@
         ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        #master-candle-chart { width: 100%; height: 100%; min-height: 600px; }
+        .chart-container { width: 100%; height: 100%; min-height: 550px; }
     </style>
 </head>
 <body class="text-industrial-800 h-screen flex flex-col">
@@ -74,7 +74,7 @@
                     <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
                     Importar y Mapear
                 </h2>
-                <p class="text-xs text-industrial-600 mb-4">Sube tus archivos. Podrás configurar columnas y filtros dinámicamente.</p>
+                <p class="text-xs text-industrial-600 mb-4">Sube tus archivos. Usa el ⚙️ para aplicar los filtros (ej. Orozco).</p>
                 
                 <div class="mb-4 bg-industrial-50 p-3 rounded-lg border border-industrial-200 shadow-sm">
                     <label for="year-selector" class="block text-sm font-bold text-industrial-800 mb-1">Año a analizar:</label>
@@ -117,31 +117,25 @@
             <div class="bg-industrial-50 border border-industrial-200 p-4 rounded-lg mt-auto shadow-sm">
                 <h3 class="font-bold text-sm mb-3 text-industrial-800 border-b pb-1">Análisis Global</h3>
                 <div class="flex justify-between text-sm mb-2 items-center">
-                    <span class="text-industrial-600">Mediana Anual:</span> 
+                    <span class="text-industrial-600">Mediana OEE:</span> 
                     <span id="res-mediana" class="font-bold text-brand-blue text-lg bg-blue-100 px-2 rounded">--%</span>
                 </div>
-                <div class="flex justify-between text-sm mb-2 items-center">
-                    <span class="text-industrial-600">Mejor Activo:</span> 
-                    <span id="res-mejor-maq" class="font-bold text-brand-green truncate max-w-[100px] text-right">--</span>
-                </div>
-                <div class="flex justify-between text-sm items-center">
-                    <span class="text-industrial-600">Alerta (Bajo Q1):</span> 
-                    <span id="res-peor-maq" class="font-bold text-brand-red truncate max-w-[100px] text-right">--</span>
-                </div>
                 <div class="flex justify-between text-sm items-center mt-3 pt-2 border-t border-gray-200">
-                    <span class="text-industrial-600">Gasto Mat. (Año):</span> 
+                    <span class="text-industrial-600">Gasto Anual Total:</span> 
                     <span id="res-gasto-total" class="font-bold text-brand-red text-md truncate text-right">Q0.00</span>
                 </div>
             </div>
         </aside>
 
         <!-- Chart Area -->
-        <section class="w-full lg:w-3/4 xl:w-4/5 bg-industrial-100 p-4 lg:p-6 flex flex-col gap-5 relative overflow-y-auto">
-            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-none flex flex-col p-2 relative h-[600px] min-h-[600px]">
-                <div id="master-candle-chart" class="w-full h-full"></div>
+        <section class="w-full lg:w-3/4 xl:w-4/5 bg-industrial-100 p-4 lg:p-6 flex flex-col xl:flex-row gap-5 relative overflow-y-auto">
+            <!-- Gráfica 1: OEE -->
+            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-1 flex flex-col p-2 relative min-h-[550px]">
+                <div id="master-candle-chart" class="chart-container"></div>
             </div>
-            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-none flex flex-col p-2 relative h-[450px] min-h-[450px]">
-                <div id="costs-bar-chart" class="w-full h-full"></div>
+            <!-- Gráfica 2: Costos (Vela Maestra 2) -->
+            <div class="bg-white rounded-xl shadow-md border border-industrial-200 flex-1 flex flex-col p-2 relative min-h-[550px]">
+                <div id="costs-candle-chart" class="chart-container"></div>
             </div>
         </section>
 
@@ -156,6 +150,14 @@
             </div>
             
             <div class="p-6 overflow-y-auto flex-1 space-y-6">
+                
+                <!-- Filtro Expreso de Máquinas -->
+                <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                    <label class="block text-sm font-bold text-brand-blue mb-1">Filtrar Máquinas a Mostrar en las Gráficas</label>
+                    <p class="text-xs text-blue-700 mb-2">Escribe los nombres separados por coma. Déjalo en blanco para mostrar todas las máquinas.</p>
+                    <input type="text" id="map-maquinas-filter" class="w-full p-2 border border-blue-300 rounded text-sm" placeholder="Ej: Inyectora 01, Prensa 03">
+                </div>
+
                 <!-- Sección 1: Mapeo de Columnas -->
                 <div>
                     <h3 class="font-bold text-industrial-800 border-b pb-2 mb-3">1. Asignar Columnas de Datos</h3>
@@ -169,11 +171,11 @@
                             <select id="map-fecha" class="w-full p-2 border rounded text-sm"></select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Valor OEE (%) - <span class="text-gray-400 font-normal">Opcional</span></label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Valor OEE (%)</label>
                             <select id="map-oee" class="w-full p-2 border rounded text-sm"></select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Costo/Gasto - <span class="text-gray-400 font-normal">Opcional</span></label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Costo/Gasto Monetario</label>
                             <select id="map-costo" class="w-full p-2 border rounded text-sm"></select>
                         </div>
                     </div>
@@ -182,10 +184,9 @@
                 <!-- Sección 2: Filtros Dinámicos -->
                 <div>
                     <h3 class="font-bold text-industrial-800 border-b pb-2 mb-3 flex justify-between items-center">
-                        <span>2. Filtros Dinámicos (Opcional)</span>
+                        <span>2. Filtros Adicionales (Ej. Solo Darvin o Eléctrico)</span>
                         <button onclick="addFilterRow()" class="text-xs bg-brand-green hover:bg-green-700 text-white px-2 py-1 rounded">+ Añadir Regla</button>
                     </h3>
-                    <p class="text-xs text-gray-500 mb-3">Ej: Si quieres Orozco o Eléctrico, usa: "Contiene cualquier" y escribe "Orozco, Electrico".</p>
                     <div id="filters-container" class="space-y-2">
                         <!-- Las reglas de filtros aparecerán aquí -->
                     </div>
@@ -202,31 +203,18 @@
     <!-- LÓGICA JAVASCRIPT Y PWA -->
     <script>
         // --- PWA Initialization ---
-        const manifestJSON = {
-            "name": "OEE Dashboard 2025", "short_name": "OEEDash", "start_url": ".", "display": "standalone",
-            "background_color": "#f8fafc", "theme_color": "#0f172a", "description": "Offline-First Dashboard"
-        };
+        const manifestJSON = { "name": "OEE Dashboard 2025", "short_name": "OEEDash", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#0f172a" };
         const manifestBlob = new Blob([JSON.stringify(manifestJSON)], {type: 'application/json'});
         const linkManifest = document.createElement('link'); linkManifest.rel = 'manifest'; linkManifest.href = URL.createObjectURL(manifestBlob);
         document.head.appendChild(linkManifest);
 
         if ('serviceWorker' in navigator) {
-            const swCode = `
-                self.addEventListener('install', e => e.waitUntil(caches.open('oee-dash-v4').then(c => c.addAll([location.href]))));
-                self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
-            `;
+            const swCode = `self.addEventListener('install', e => e.waitUntil(caches.open('oee-dash-v5').then(c => c.addAll([location.href])))); self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));`;
             const swBlob = new Blob([swCode], {type: 'application/javascript'});
             navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(console.error);
         }
 
         // --- CORE DATA STRUCTURE ---
-        const demoData = {
-            machines: { 'Iny-01': 88.2, 'Iny-02': 79.5, 'Prensa-H': 84.1, 'Troquel': 72.8, 'Comp-P': 91.5, 'Extru-05': 81.2 },
-            months: { 'Ene': 71.5, 'Feb': 73.8, 'Mar': 70.2, 'Abr': 78.5, 'May': 82.1, 'Jun': 83.4, 'Jul': 86.9, 'Ago': 85.2, 'Sep': 77.8, 'Oct': 89.5, 'Nov': 92.2, 'Dic': 90.4 },
-            costs: { 'Iny-01': 15000, 'Iny-02': 22500, 'Prensa-H': 8000, 'Troquel': 45000, 'Comp-P': 3000, 'Extru-05': 12000 }
-        };
-
-        // Nueva estructura por archivo para manejar configuraciones independientes
         let appData = {
             files: {
                 ot: { data: [], config: null, filename: '', headers: [] },
@@ -234,13 +222,11 @@
                 mo: { data: [], config: null, filename: '', headers: [] },
                 otros: { data: [], config: null, filename: '', headers: [] }
             },
-            processedMachines: {...demoData.machines},
-            processedMonths: {...demoData.months},
-            processedCosts: {...demoData.costs},
-            exportCosts: null
+            processedMachinesOEE: {}, processedMonthsOEE: {},
+            processedMachinesCost: {}, processedMonthsCost: {}
         };
         
-        let currentModalKey = null; // Saber qué archivo estamos configurando
+        let currentModalKey = null; 
         const availableYears = new Set(['2025', '2024', '2023']);
 
         // --- UTILS ---
@@ -251,6 +237,7 @@
             return parseFloat(cleanStr) || 0;
         };
         const formatCurrency = (val) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(val);
+        const formatNumberShort = (val) => new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 }).format(val);
         const parseDateInfo = (dateStr) => {
             if(!dateStr) return null;
             const parts = String(dateStr).split(/[\/\-]/); 
@@ -293,22 +280,20 @@
 
                         const headers = Object.keys(jsonData[0]);
                         
-                        // Guardar en la nueva estructura
                         appData.files[storageKey].data = jsonData;
                         appData.files[storageKey].filename = file.name;
                         appData.files[storageKey].headers = headers;
 
-                        // Auto-detectar columnas probables
                         const findMatch = (keywords) => headers.find(h => keywords.some(k => h.toLowerCase().includes(k))) || '';
                         appData.files[storageKey].config = {
-                            mapMaquina: findMatch(['maquinaria', 'maquina', 'equipo', 'activo', 'machine']),
+                            mapMaquina: findMatch(['maquinaria', 'maquina', 'equipo', 'activo']),
                             mapFecha: findMatch(['fecha', 'mes', 'date', 'contabilizacion']),
                             mapOee: findMatch(['oee', 'eficiencia', 'rendimiento']),
                             mapCosto: findMatch(['valor salida', 'costo', 'gasto', 'monto', 'total']),
+                            machineFilter: '',
                             filters: []
                         };
 
-                        // Extraer años dinámicamente
                         jsonData.forEach(row => {
                             const fechaCol = appData.files[storageKey].config.mapFecha;
                             if (fechaCol && row[fechaCol]) {
@@ -317,8 +302,6 @@
                             }
                         });
                         updateYearSelector();
-
-                        // Abrir modal automáticamente para confirmar mapeo
                         openMappingModal(storageKey);
 
                     } catch (err) { alert(`Error al leer ${file.name}`); console.error(err); }
@@ -338,7 +321,6 @@
             const fileObj = appData.files[key];
             document.getElementById('modal-filename').innerText = fileObj.filename;
             
-            // Llenar selects
             const selects = ['map-maquina', 'map-fecha', 'map-oee', 'map-costo'];
             selects.forEach(selId => {
                 const el = document.getElementById(selId);
@@ -348,13 +330,12 @@
                 });
             });
 
-            // Asignar valores guardados
             document.getElementById('map-maquina').value = fileObj.config.mapMaquina;
             document.getElementById('map-fecha').value = fileObj.config.mapFecha;
             document.getElementById('map-oee').value = fileObj.config.mapOee;
             document.getElementById('map-costo').value = fileObj.config.mapCosto;
+            document.getElementById('map-maquinas-filter').value = fileObj.config.machineFilter || '';
 
-            // Renderizar Filtros
             document.getElementById('filters-container').innerHTML = '';
             fileObj.config.filters.forEach(f => addFilterRow(f.col, f.op, f.val));
 
@@ -368,8 +349,7 @@
 
         function addFilterRow(col = '', op = 'contains', val = '') {
             const container = document.getElementById('filters-container');
-            const rowId = 'filter-' + Date.now() + Math.random().toString(36).substr(2, 5);
-            
+            const rowId = 'filter-' + Date.now();
             const fileObj = appData.files[currentModalKey];
             let colOptions = fileObj.headers.map(h => `<option value="${h}" ${h===col?'selected':''}>${h}</option>`).join('');
 
@@ -382,7 +362,7 @@
                         <option value="not_contains" ${op==='not_contains'?'selected':''}>NO contiene (,)</option>
                     </select>
                     <input type="text" class="filter-val flex-1 p-1 border rounded text-sm" placeholder="Valor(es)..." value="${val}">
-                    <button onclick="document.getElementById('${rowId}').remove()" class="text-red-500 hover:text-red-700 font-bold px-2">X</button>
+                    <button onclick="document.getElementById('${rowId}').remove()" class="text-red-500 font-bold px-2">X</button>
                 </div>
             `;
             container.insertAdjacentHTML('beforeend', html);
@@ -396,8 +376,8 @@
             conf.mapFecha = document.getElementById('map-fecha').value;
             conf.mapOee = document.getElementById('map-oee').value;
             conf.mapCosto = document.getElementById('map-costo').value;
+            conf.machineFilter = document.getElementById('map-maquinas-filter').value;
 
-            // Guardar filtros
             conf.filters = [];
             document.querySelectorAll('#filters-container > div').forEach(row => {
                 const col = row.querySelector('.filter-col').value;
@@ -407,33 +387,29 @@
             });
 
             closeMappingModal();
-            // Disparar renderizado automático al guardar config
             processAndDrawCharts(); 
         }
 
-        // --- MOTOR DE PROCESAMIENTO CON REGLAS (OEE + COSTOS) ---
+        // --- MOTOR DE PROCESAMIENTO (OEE + COSTOS) ---
         function processAndDrawCharts() {
             const selectedYear = document.getElementById('year-selector').value;
             
-            let machinesData = {}; let monthsData = {}; let costsData = {};
-            let validOeeRows = 0; let totalCost = 0;
-            let hasRealData = false;
+            let mOeeData = {}; let moOeeData = {}; 
+            let mCostData = {}; let moCostData = {}; 
+            let totalCost = 0; let hasData = false;
 
-            // Recorrer los 4 slots de archivos
             Object.values(appData.files).forEach(fileObj => {
                 if (!fileObj.data || fileObj.data.length === 0 || !fileObj.config) return;
-                hasRealData = true;
+                hasData = true;
 
                 fileObj.data.forEach(row => {
-                    // 1. EVALUAR FILTROS DE ESTE ARCHIVO
                     let passFilter = true;
+                    // 1. Aplicar Filtros Dinámicos (Ej: Encargado -> Orozco)
                     for(let f of fileObj.config.filters) {
                         const rowValue = String(row[f.col] || '').toLowerCase();
-                        // Valores separados por coma (ej: Darvin, Electrico)
                         const searchTerms = f.val.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
                         
                         if (f.op === 'contains') {
-                            // Cumple si contiene al menos uno (OR interno)
                             if (!searchTerms.some(term => rowValue.includes(term))) passFilter = false;
                         } else if (f.op === 'not_contains') {
                             if (searchTerms.some(term => rowValue.includes(term))) passFilter = false;
@@ -443,35 +419,41 @@
                     }
                     if (!passFilter) return;
 
-                    // 2. EXTRAER DATOS MAPEADOS
+                    // 2. Extraer Máquina
                     const maqVal = fileObj.config.mapMaquina ? (row[fileObj.config.mapMaquina] || 'Sin Asignar') : 'Sin Asignar';
                     
-                    // Extraer Año y Mes
+                    // 3. Aplicar Filtro Expreso de Máquina
+                    if (fileObj.config.machineFilter) {
+                        const allowedMachs = fileObj.config.machineFilter.split(',').map(s=>s.trim().toLowerCase()).filter(s=>s);
+                        if (allowedMachs.length > 0 && !allowedMachs.some(allowed => maqVal.toLowerCase().includes(allowed))) {
+                            return; // Ignorar esta fila
+                        }
+                    }
+
+                    // 4. Extraer Año y Mes
                     let rowYear = null, rowMonth = null;
                     if (fileObj.config.mapFecha && row[fileObj.config.mapFecha]) {
                         const dInfo = parseDateInfo(row[fileObj.config.mapFecha]);
                         if (dInfo) { rowYear = dInfo.year; rowMonth = dInfo.month; }
-                        else { rowMonth = row[fileObj.config.mapFecha]; } // Fallback si es solo texto del mes
+                        else { rowMonth = row[fileObj.config.mapFecha]; } 
                     }
-
-                    // Filtrar globalmente por año si se encontró un año en la fila
                     if (rowYear && rowYear !== selectedYear) return;
 
-                    // Acumular OEE
+                    // 5. Acumular OEE
                     if (fileObj.config.mapOee && row[fileObj.config.mapOee] !== undefined && row[fileObj.config.mapOee] !== "") {
                         let oeeVal = parseFloat(String(row[fileObj.config.mapOee]).replace(',','.').replace('%',''));
                         if (!isNaN(oeeVal)) {
-                            if (maqVal !== 'Sin Asignar') { machinesData[maqVal] = machinesData[maqVal] || []; machinesData[maqVal].push(oeeVal); }
-                            if (rowMonth) { monthsData[rowMonth] = monthsData[rowMonth] || []; monthsData[rowMonth].push(oeeVal); }
-                            validOeeRows++;
+                            if (maqVal !== 'Sin Asignar') { mOeeData[maqVal] = mOeeData[maqVal] || []; mOeeData[maqVal].push(oeeVal); }
+                            if (rowMonth) { moOeeData[rowMonth] = moOeeData[rowMonth] || []; moOeeData[rowMonth].push(oeeVal); }
                         }
                     }
 
-                    // Acumular Costos
+                    // 6. Acumular Costos (Suma total)
                     if (fileObj.config.mapCosto && row[fileObj.config.mapCosto] !== undefined && row[fileObj.config.mapCosto] !== "") {
                         let costNum = parseLatamNumber(row[fileObj.config.mapCosto]);
                         if (costNum > 0 && maqVal !== 'Sin Asignar') {
-                            costsData[maqVal] = (costsData[maqVal] || 0) + costNum;
+                            mCostData[maqVal] = (mCostData[maqVal] || 0) + costNum;
+                            if(rowMonth) { moCostData[rowMonth] = (moCostData[rowMonth] || 0) + costNum; }
                             totalCost += costNum;
                         }
                     }
@@ -479,135 +461,104 @@
             });
 
             // Promediar Arrays de OEE
-            if (validOeeRows > 0) {
-                const calcAvg = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.reduce((a,b)=>a+b,0)/v.length]));
-                appData.processedMachines = calcAvg(machinesData);
-                appData.processedMonths = calcAvg(monthsData);
-            } else if (!hasRealData) {
-                appData.processedMachines = {...demoData.machines};
-                appData.processedMonths = {...demoData.months};
-            } else {
-                appData.processedMachines = {}; appData.processedMonths = {}; // Real pero sin datos de OEE
-            }
+            const calcAvg = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.reduce((a,b)=>a+b,0)/v.length]));
+            appData.processedMachinesOEE = calcAvg(mOeeData);
+            appData.processedMonthsOEE = calcAvg(moOeeData);
+            
+            // Costos ya están sumados
+            appData.processedMachinesCost = mCostData;
+            appData.processedMonthsCost = moCostData;
 
-            if (Object.keys(costsData).length > 0) {
-                appData.processedCosts = costsData;
-            } else if (!hasRealData) {
-                appData.processedCosts = {...demoData.costs};
-                totalCost = Object.values(appData.processedCosts).reduce((a,b)=>a+b,0);
-            } else {
-                appData.processedCosts = {};
-            }
-
-            appData.exportCosts = appData.processedCosts;
             document.getElementById('res-gasto-total').innerText = formatCurrency(totalCost);
 
-            drawCharts(selectedYear);
+            drawCandleChart('master-candle-chart', appData.processedMachinesOEE, appData.processedMonthsOEE, selectedYear, 'OEE (%)', '#1E3A8A', '#E3F2FD', true);
+            drawCandleChart('costs-candle-chart', appData.processedMachinesCost, appData.processedMonthsCost, selectedYear, 'Consumos (GTQ)', '#E65100', '#FFF3E0', false);
         }
 
-        // --- RENDERIZADO PLOTLY ---
-        function drawCharts(selectedYear) {
-            const mData = appData.processedMachines;
-            const moData = appData.processedMonths;
-            const machNames = Object.keys(mData), machVals = Object.values(mData);
-            const monthNames = Object.keys(moData), monthVals = Object.values(moData);
+        // --- RENDERIZADO PLOTLY (GENÉRICO PARA AMBAS VELAS) ---
+        function drawCandleChart(divId, dataMach, dataMonth, year, titleVal, colorDark, colorLight, isOEE) {
+            const machNames = Object.keys(dataMach), machVals = Object.values(dataMach);
+            const monthNames = Object.keys(dataMonth), monthVals = Object.values(dataMonth);
             const allVals = [...machVals, ...monthVals];
 
-            if(allVals.length > 0) {
-                const sorted = [...allVals].sort((a,b)=>a-b);
-                const q1 = sorted[Math.floor(sorted.length * 0.25)], q2 = sorted[Math.floor(sorted.length * 0.5)], q3 = sorted[Math.floor(sorted.length * 0.75)];
-
-                document.getElementById('res-mediana').innerText = `${q2.toFixed(1)}%`;
-                const bestMach = machNames.reduce((a,b) => mData[a] > mData[b] ? a : b);
-                const worstMach = machNames.reduce((a,b) => mData[a] < mData[b] ? a : b);
-                document.getElementById('res-mejor-maq').innerText = `${bestMach} (${mData[bestMach].toFixed(1)}%)`;
-                document.getElementById('res-peor-maq').innerText = `${worstMach} (${mData[worstMach].toFixed(1)}%)`;
-
-                const getCleanY = (vDict, dist = 2.0) => {
-                    let sItems = Object.entries(vDict).sort((a,b) => a[1] - b[1]);
-                    let lastY = -999;
-                    return sItems.map(([name, val]) => { let plotY = Math.max(val, lastY + dist); lastY = plotY; return { name, val, plotY }; });
-                };
-                const cleanMach = getCleanY(mData, 2.5), cleanMonth = getCleanY(moData, 2.5);
-
-                const traceBox = { y: allVals, type: 'box', name: '', boxpoints: false, marker: { color: '#E3F2FD' }, line: { color: '#1E3A8A', width: 2.5 }, fillcolor: '#E3F2FD', width: 0.25 };
-                const traceMachines = { x: cleanMach.map(() => -0.35), y: cleanMach.map(d => d.plotY), text: cleanMach.map(d => `<b>${d.name}</b> (${d.val.toFixed(1)}%) →`), mode: 'text+markers', textposition: 'middle left', marker: { size: 9, color: '#B91C1C', symbol: 'square' }, textfont: { size: 11, color: '#991B1B' }, hoverinfo: 'none' };
-                const traceMonths = { x: cleanMonth.map(() => 0.35), y: cleanMonth.map(d => d.plotY), text: cleanMonth.map(d => `← <b>${d.name}</b> (${d.val.toFixed(1)}%)`), mode: 'text+markers', textposition: 'middle right', marker: { size: 9, color: '#15803D', symbol: 'circle' }, textfont: { size: 11, color: '#166534' }, hoverinfo: 'none' };
-
-                const layoutOEE = {
-                    title: { text: `<b>Vela Maestra OEE - Año ${selectedYear}</b><br><span style="font-size:14px; color:gray">Distribución de Activos vs. Línea de Tiempo</span>`, font: { size: 22 }, y: 0.95 },
-                    showlegend: false, xaxis: { range: [-1, 1], showgrid: false, zeroline: false, showticklabels: false, fixedrange: true },
-                    yaxis: { title: 'Nivel de OEE (%)', range: [Math.min(...allVals) - 5, Math.max(...allVals) + 5], gridcolor: '#f1f5f9', zeroline: false },
-                    annotations: [
-                        { x: 0, y: q3, text: `<b>Q3: ${q3.toFixed(1)}%</b>`, showarrow: false, yanchor: 'bottom', font: {size: 11}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2},
-                        { x: 0, y: q2, text: `<b>MEDIANA: ${q2.toFixed(1)}%</b>`, showarrow: false, yanchor: 'middle', font: {size: 13, color: '#1E3A8A'}, bgcolor: 'rgba(255,255,255,0.95)', bordercolor: '#1E3A8A', borderpad: 4, borderwidth: 1},
-                        { x: 0, y: q1, text: `<b>Q1: ${q1.toFixed(1)}%</b>`, showarrow: false, yanchor: 'top', font: {size: 11}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2}
-                    ],
-                    margin: { l: 70, r: 70, t: 90, b: 40 }, plot_bgcolor: 'transparent', paper_bgcolor: 'transparent', shapes: []
-                };
-
-                cleanMach.forEach(d => { if(Math.abs(d.plotY - d.val) > 0.2) layoutOEE.shapes.push({type: 'line', x0: -0.33, y0: d.plotY, x1: -0.15, y1: d.val, line: {color: '#B91C1C', width: 0.5, dash: 'dot'}}); });
-                cleanMonth.forEach(d => { if(Math.abs(d.plotY - d.val) > 0.2) layoutOEE.shapes.push({type: 'line', x0: 0.33, y0: d.plotY, x1: 0.15, y1: d.val, line: {color: '#15803D', width: 0.5, dash: 'dot'}}); });
-                
-                Plotly.newPlot('master-candle-chart', [traceBox, traceMachines, traceMonths], layoutOEE, { responsive: true, displayModeBar: false });
-            } else {
-                document.getElementById('master-candle-chart').innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">No hay datos OEE para mostrar con estos filtros.</div>';
+            if(allVals.length === 0) {
+                document.getElementById(divId).innerHTML = `<div class="flex h-full items-center justify-center text-gray-400 font-bold">No hay datos de ${titleVal} con estos filtros.</div>`;
+                if(isOEE) document.getElementById('res-mediana').innerText = '--%';
+                return;
             }
 
-            // Gráfica de Costos
-            const cData = appData.processedCosts;
-            if(Object.keys(cData).length > 0) {
-                const sortedCosts = Object.entries(cData).sort((a,b) => b[1] - a[1]);
-                const traceCosts = { x: sortedCosts.map(i => i[0]), y: sortedCosts.map(i => i[1]), type: 'bar', text: sortedCosts.map(i => formatCurrency(i[1])), textposition: 'auto', marker: { color: '#B91C1C', opacity: 0.8 }, hoverinfo: 'x' };
-                const layoutCosts = { title: { text: `<b>Gasto Financiero Consolidado - Año ${selectedYear}</b>`, font: { size: 18 } }, xaxis: { tickangle: -45, automargin: true }, yaxis: { title: 'Monto (GTQ)', gridcolor: '#e2e8f0', zeroline: false }, margin: { b: 120, t: 50, l: 80, r: 20 }, plot_bgcolor: 'transparent', paper_bgcolor: 'transparent' };
-                Plotly.newPlot('costs-bar-chart', [traceCosts], layoutCosts, { responsive: true, displayModeBar: false });
-            } else {
-                document.getElementById('costs-bar-chart').innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">No hay gastos reportados con los filtros actuales.</div>';
-            }
+            const sorted = [...allVals].sort((a,b)=>a-b);
+            const q1 = sorted[Math.floor(sorted.length * 0.25)], q2 = sorted[Math.floor(sorted.length * 0.5)], q3 = sorted[Math.floor(sorted.length * 0.75)];
+
+            if(isOEE) document.getElementById('res-mediana').innerText = `${q2.toFixed(1)}%`;
+
+            // Algoritmo Anti-Colisión Dinámico (Calcula la separación según la escala de los números)
+            const range = Math.max(...allVals) - Math.min(...allVals);
+            const minDistance = range > 0 ? range * 0.04 : (isOEE ? 2 : 100); // 4% del rango total
+
+            const getCleanY = (vDict) => {
+                let sItems = Object.entries(vDict).sort((a,b) => a[1] - b[1]);
+                let lastY = -99999999;
+                return sItems.map(([name, val]) => { let plotY = Math.max(val, lastY + minDistance); lastY = plotY; return { name, val, plotY }; });
+            };
+            const cleanMach = getCleanY(dataMach), cleanMonth = getCleanY(dataMonth);
+
+            const formatVal = (v) => isOEE ? `${v.toFixed(1)}%` : `Q${formatNumberShort(v)}`;
+
+            const traceBox = { y: allVals, type: 'box', name: '', boxpoints: false, marker: { color: colorLight }, line: { color: colorDark, width: 2.5 }, fillcolor: colorLight, width: 0.25 };
+            const traceMachines = { x: cleanMach.map(() => -0.35), y: cleanMach.map(d => d.plotY), text: cleanMach.map(d => `<b>${d.name}</b> (${formatVal(d.val)}) →`), mode: 'text+markers', textposition: 'middle left', marker: { size: 9, color: '#B91C1C', symbol: 'square' }, textfont: { size: 10, color: '#991B1B' }, hoverinfo: 'none' };
+            const traceMonths = { x: cleanMonth.map(() => 0.35), y: cleanMonth.map(d => d.plotY), text: cleanMonth.map(d => `← <b>${d.name}</b> (${formatVal(d.val)})`), mode: 'text+markers', textposition: 'middle right', marker: { size: 9, color: '#15803D', symbol: 'circle' }, textfont: { size: 10, color: '#166534' }, hoverinfo: 'none' };
+
+            const layout = {
+                title: { text: `<b>Vela de ${titleVal} - ${year}</b>`, font: { size: 18 }, y: 0.95 },
+                showlegend: false, xaxis: { range: [-1, 1], showgrid: false, zeroline: false, showticklabels: false, fixedrange: true },
+                yaxis: { title: titleVal, range: [Math.min(...allVals) - (range*0.1), Math.max(...allVals) + (range*0.1)], gridcolor: '#f1f5f9', zeroline: false },
+                annotations: [
+                    { x: 0, y: q3, text: `<b>Q3: ${formatVal(q3)}</b>`, showarrow: false, yanchor: 'bottom', font: {size: 10}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2},
+                    { x: 0, y: q2, text: `<b>MED: ${formatVal(q2)}</b>`, showarrow: false, yanchor: 'middle', font: {size: 12, color: colorDark}, bgcolor: 'rgba(255,255,255,0.95)', bordercolor: colorDark, borderpad: 3, borderwidth: 1},
+                    { x: 0, y: q1, text: `<b>Q1: ${formatVal(q1)}</b>`, showarrow: false, yanchor: 'top', font: {size: 10}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2}
+                ],
+                margin: { l: 80, r: 80, t: 70, b: 30 }, plot_bgcolor: 'transparent', paper_bgcolor: 'transparent', shapes: []
+            };
+
+            const addGuideLine = (arr, x0, x1, col) => { arr.forEach(d => { if(Math.abs(d.plotY - d.val) > (range*0.01)) layout.shapes.push({type: 'line', x0: x0, y0: d.plotY, x1: x1, y1: d.val, line: {color: col, width: 0.5, dash: 'dot'}}); }); };
+            addGuideLine(cleanMach, -0.33, -0.15, '#B91C1C'); addGuideLine(cleanMonth, 0.33, 0.15, '#15803D');  
+            
+            Plotly.newPlot(divId, [traceBox, traceMachines, traceMonths], layout, { responsive: true, displayModeBar: false });
         }
 
         // --- EXPORTACIÓN ---
         document.getElementById('btn-export-slides').addEventListener('click', () => {
             const chartOEE = document.getElementById('master-candle-chart');
-            const chartCosts = document.getElementById('costs-bar-chart');
+            const chartCosts = document.getElementById('costs-candle-chart');
             const btn = document.getElementById('btn-export-slides');
             const originalText = btn.innerHTML;
             btn.innerHTML = "Generando Slides...";
 
             Promise.all([
-                Plotly.toImage(chartOEE, {format: 'png', width: 1280, height: 720}),
+                Plotly.toImage(chartOEE, {format: 'png', width: 1280, height: 720}).catch(()=>null),
                 Plotly.toImage(chartCosts, {format: 'png', width: 1280, height: 720}).catch(()=>null)
             ]).then(function([imgOEE, imgCosts]) {
                 let pptx = new PptxGenJS(); pptx.layout = 'LAYOUT_16x9'; 
                 let year = document.getElementById('year-selector').value;
                 
-                let slide1 = pptx.addSlide();
-                slide1.addText(`Reporte de Mantenimiento y Operaciones ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: '1E3A8A' });
-                slide1.addImage({ data: imgOEE, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
-
+                if(imgOEE) {
+                    let slide1 = pptx.addSlide();
+                    slide1.addText(`Análisis OEE ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: '1E3A8A' });
+                    slide1.addImage({ data: imgOEE, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
+                }
                 if(imgCosts) {
                     let slide2 = pptx.addSlide();
-                    slide2.addText(`Gasto Financiero ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: 'B91C1C' });
+                    slide2.addText(`Análisis de Consumos y Gastos ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: 'E65100' });
                     slide2.addImage({ data: imgCosts, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
                 }
-                
                 pptx.writeFile({ fileName: `Presentacion_Mant_${year}.pptx` }).then(() => { btn.innerHTML = originalText; });
             }).catch(err => { console.error(err); btn.innerHTML = originalText; alert("Error al generar diapositivas."); });
         });
 
-        document.getElementById('btn-export-csv').addEventListener('click', () => {
-            let csvContent = "data:text/csv;charset=utf-8,Categoria,Identificador,Valor\n";
-            Object.entries(appData.processedMachines).forEach(([k, v]) => csvContent += `Maquina (OEE%),${k},${v.toFixed(2)}\n`);
-            Object.entries(appData.processedMonths).forEach(([k, v]) => csvContent += `Mes (OEE%),${k},${v.toFixed(2)}\n`);
-            if(appData.exportCosts) Object.entries(appData.exportCosts).forEach(([k, v]) => csvContent += `Gasto Materiales,${k},${v.toFixed(2)}\n`);
-            const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent));
-            link.setAttribute("download", `Consolidado_Mantenimiento_${document.getElementById('year-selector').value}.csv`);
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        });
-
         document.getElementById('year-selector').addEventListener('change', processAndDrawCharts);
         document.getElementById('btn-process').addEventListener('click', () => { setTimeout(processAndDrawCharts, 200); });
-        window.onload = processAndDrawCharts;
+        window.onload = () => { document.getElementById('master-candle-chart').innerHTML = '<div class="flex h-full items-center justify-center text-gray-400 font-bold">Por favor, importa un archivo para comenzar.</div>'; document.getElementById('costs-candle-chart').innerHTML = '<div class="flex h-full items-center justify-center text-gray-400 font-bold">Por favor, importa un archivo para comenzar.</div>'; };
 
     </script>
 </body>
