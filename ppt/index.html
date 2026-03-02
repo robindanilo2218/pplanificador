@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Vela - Mantenimiento</title>
+    
+    <!-- PWA Manifest (Injected via JS below for single-file support) -->
+    <link rel="manifest" id="manifest-link">
+    <meta name="theme-color" content="#1e293b">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS/dist/pptxgen.bundle.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: #f8fafc; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .vela-bar { transition: width 0.5s ease-in-out; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const KEYWORDS = ['impresora', 'imprenta', 'corrugadora'];
+
+        function App() {
+            const [rawData, setRawData] = useState([]);
+            const [years, setYears] = useState([]);
+            const [selectedYear, setSelectedYear] = useState('');
+            const [allMachines, setAllMachines] = useState([]);
+            const [selectedExceptions, setSelectedExceptions] = useState([]);
+            const [isMenuOpen, setIsMenuOpen] = useState(false);
+            
+            const exportRef = useRef(null);
+
+            // Inyectar Iconos
+            useEffect(() => {
+                lucide.createIcons();
+            });
+
+            // Procesar Archivo CSV
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const parsedData = [];
+                        const availableYears = new Set();
+                        const machinesSet = new Set();
+
+                        results.data.forEach(row => {
+                            if (!row['Fecha Contabilizacion'] || !row['Valor Salida']) return;
+
+                            // Formato de fecha esperado: DD/MM/YYYY
+                            const dateParts = row['Fecha Contabilizacion'].split('/');
+                            if(dateParts.length !== 3) return;
+                            
+                            const month = parseInt(dateParts[1], 10) - 1;
+                            let year = dateParts[2];
+                            if(year.length === 2) year = '20' + year; // Por si viene en 2 digitos
+
+                            // Limpiar y parsear moneda (Ej: "3.125,01" o "66,310002")
+                            let valStr = row['Valor Salida'].toString();
+                            valStr = valStr.replace(/\./g, '').replace(',', '.');
+                            const val = parseFloat(valStr) || 0;
+
+                            const machine = row['Maquinaria'] ? row['Maquinaria'].trim() : 'Desconocido';
+
+                            availableYears.add(year);
+                            machinesSet.add(machine);
+
+                            parsedData.push({
+                                year,
+                                month,
+                                machine,
+                                value: val
+                            });
+                        });
+
+                        const sortedYears = Array.from(availableYears).sort((a,b)=>b-a);
+                        setRawData(parsedData);
+                        setYears(sortedYears);
+                        setSelectedYear(sortedYears[0] || '');
+                        
+                        // Encontrar maquinas que NO son principales para el menu de excepciones
+                        const otherMachines = Array.from(machinesSet).filter(m => 
+                            !KEYWORDS.some(k => m.toLowerCase().includes(k))
+                        ).sort();
+                        setAllMachines(otherMachines);
+                    }
+                });
+            };
+
+            const toggleException = (machine) => {
+                if (selectedExceptions.includes(machine)) {
+                    setSelectedExceptions(selectedExceptions.filter(m => m !== machine));
+                } else {
+                    setSelectedExceptions([...selectedExceptions, machine]);
+                }
+            };
+
+            // Filtrar y agrupar datos según selecciones
+            const processedData = useMemo(() => {
+                if (!rawData.length || !selectedYear) return null;
+
+                const filtered = rawData.filter(d => d.year === selectedYear);
+                
+                let grandTotal = 0;
+                const machineTotals = {};
+                const monthTotals = Array(12).fill(0);
+                
+                // Matriz para la tabla: filas=maquinas, cols=meses
+                const matrix = {};
+
+                filtered.forEach(d => {
+                    const isMain = KEYWORDS.some(k => d.machine.toLowerCase().includes(k)) || selectedExceptions.includes(d.machine);
+                    const groupedMachine = isMain ? d.machine : 'Terceros procesos';
+
+                    if (!machineTotals[groupedMachine]) machineTotals[groupedMachine] = 0;
+                    if (!matrix[groupedMachine]) matrix[groupedMachine] = Array(12).fill(0);
+
+                    machineTotals[groupedMachine] += d.value;
+                    monthTotals[d.month] += d.value;
+                    matrix[groupedMachine][d.month] += d.value;
+                    grandTotal += d.value;
+                });
+
+                // Convertir a arrays para renderizar
+                const machineArr = Object.keys(machineTotals).map(k => ({
+                    name: k,
+                    value: machineTotals[k],
+                    percent: grandTotal > 0 ? (machineTotals[k] / grandTotal) * 100 : 0
+                })).sort((a, b) => b.value - a.value); // Orden mayor a menor
+
+                const monthArr = monthTotals.map((val, i) => ({
+                    name: MONTH_NAMES[i],
+                    value: val,
+                    percent: grandTotal > 0 ? (val / grandTotal) * 100 : 0
+                }));
+
+                // Calcular % maximo para la escala de la vela (eje centrado)
+                const maxMachinePct = Math.max(...machineArr.map(m => m.percent), 0);
+                const maxMonthPct = Math.max(...monthArr.map(m => m.percent), 0);
+                const maxScale = Math.max(maxMachinePct, maxMonthPct, 10); // minimo 10% de escala
+
+                return { machineArr, monthArr, grandTotal, maxScale, matrix };
+
+            }, [rawData, selectedYear, selectedExceptions]);
+
+
+            // Exportaciones
+            const formatMoney = (val) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(val);
+            
+            const getTableDataArray = () => {
+                if(!processedData) return [];
+                const headers = ['Maquinaria', ...MONTH_NAMES, 'Total Anual'];
+                const rows = processedData.machineArr.map(m => {
+                    const monthVals = processedData.matrix[m.name];
+                    return [m.name, ...monthVals.map(v => v.toFixed(2)), m.value.toFixed(2)];
+                });
+                return [headers, ...rows];
+            };
+
+            const exportCSV = () => {
+                const data = getTableDataArray();
+                const csv = Papa.unparse(data);
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `Reporte_${selectedYear}.csv`;
+                link.click();
+            };
+
+            const exportXLS = () => {
+                const data = getTableDataArray();
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+                XLSX.writeFile(wb, `Reporte_${selectedYear}.xlsx`);
+            };
+
+            const exportPDF = () => {
+                const element = exportRef.current;
+                const opt = {
+                    margin: 0.5,
+                    filename: `Reporte_${selectedYear}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
+                };
+                html2pdf().set(opt).from(element).save();
+            };
+
+            const exportPPTX = async () => {
+                let pres = new pptxgen();
+                let slide = pres.addSlide();
+                
+                // Titulo
+                slide.addText(`Reporte de Salidas - ${selectedYear}`, { x:0.5, y:0.5, w:'90%', h:0.5, fontSize: 24, bold: true, color: '1e293b' });
+
+                // Tomar captura de la Vela
+                const chartElement = document.getElementById('vela-chart');
+                if(chartElement) {
+                    const canvas = await html2canvas(chartElement);
+                    const imgData = canvas.toDataURL('image/png');
+                    slide.addImage({ data: imgData, x: 0.5, y: 1.2, w: 9, h: 3 });
+                }
+
+                // Tabla en siguiente diapositiva
+                let slide2 = pres.addSlide();
+                const tableData = getTableDataArray();
+                slide2.addTable(tableData, { x: 0.5, y: 0.5, w: 9, fontSize: 10, border: {type:'solid', color:'cccccc'}, fill: 'f8fafc' });
+
+                pres.writeFile({ fileName: `Reporte_${selectedYear}.pptx` });
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 flex flex-col items-center">
+                    
+                    {/* Header y Controles */}
+                    <div className="w-full max-w-7xl bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                                <i data-lucide="bar-chart-2" className="text-blue-600"></i>
+                                Dashboard Vela
+                            </h1>
+
+                            <div className="flex flex-wrap items-center gap-3">
+                                {/* Subir CSV */}
+                                <label className="cursor-pointer bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition flex items-center gap-2 text-sm font-semibold">
+                                    <i data-lucide="upload" className="w-4 h-4"></i>
+                                    Importar CSV
+                                    <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                                </label>
+
+                                {/* Filtro Año */}
+                                {years.length > 0 && (
+                                    <select 
+                                        className="border border-gray-300 rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={selectedYear} 
+                                        onChange={(e) => setSelectedYear(e.target.value)}
+                                    >
+                                        {years.map(y => <option key={y} value={y}>Año {y}</option>)}
+                                    </select>
+                                )}
+
+                                {/* Filtro Excepciones (Dropdown) */}
+                                {allMachines.length > 0 && (
+                                    <div className="relative">
+                                        <button 
+                                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                            className="bg-white border border-gray-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition flex items-center gap-2 text-sm font-semibold"
+                                        >
+                                            <i data-lucide="filter" className="w-4 h-4"></i>
+                                            Extraer a Máquinas ({selectedExceptions.length})
+                                        </button>
+                                        
+                                        {isMenuOpen && (
+                                            <div className="absolute top-full mt-2 right-0 w-72 bg-white border border-gray-200 shadow-xl rounded-lg p-3 z-50 max-h-64 overflow-y-auto">
+                                                <p className="text-xs text-gray-500 mb-2 font-semibold">Selecciona para NO agrupar en Terceros Procesos:</p>
+                                                {allMachines.map(m => (
+                                                    <label key={m} className="flex items-center gap-2 p-1 hover:bg-slate-50 rounded cursor-pointer text-sm">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedExceptions.includes(m)}
+                                                            onChange={() => toggleException(m)}
+                                                            className="rounded text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <span className="truncate">{m}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Botones de Exportacion */}
+                        {processedData && (
+                            <div className="mt-6 flex flex-wrap gap-2 pt-4 border-t border-gray-100">
+                                <span className="text-sm font-semibold text-gray-500 flex items-center mr-2">Exportar:</span>
+                                <button onClick={exportPDF} className="bg-red-50 text-red-600 px-3 py-1.5 rounded border border-red-200 hover:bg-red-100 flex items-center gap-1 text-sm font-medium transition"><i data-lucide="file-text" className="w-4 h-4"></i> PDF</button>
+                                <button onClick={exportXLS} className="bg-green-50 text-green-600 px-3 py-1.5 rounded border border-green-200 hover:bg-green-100 flex items-center gap-1 text-sm font-medium transition"><i data-lucide="file-spreadsheet" className="w-4 h-4"></i> Excel</button>
+                                <button onClick={exportCSV} className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 flex items-center gap-1 text-sm font-medium transition"><i data-lucide="file" className="w-4 h-4"></i> CSV</button>
+                                <button onClick={exportPPTX} className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded border border-orange-200 hover:bg-orange-100 flex items-center gap-1 text-sm font-medium transition"><i data-lucide="presentation" className="w-4 h-4"></i> PPTX</button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Area Exportable */}
+                    {!processedData ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 mt-10">
+                            <i data-lucide="bar-chart-2" className="w-16 h-16 mb-4 opacity-50"></i>
+                            <p className="text-lg">Sube tu archivo de salidas para visualizar la Vela.</p>
+                        </div>
+                    ) : (
+                        <div ref={exportRef} className="w-full max-w-7xl bg-white p-6 md:p-8 rounded-xl shadow-lg">
+                            
+                            <div className="mb-6 text-center">
+                                <h2 className="text-2xl font-black text-slate-800 uppercase tracking-wide">Análisis de Salidas {selectedYear}</h2>
+                                <p className="text-slate-500 font-medium">Total Acumulado: <span className="text-blue-600 font-bold">{formatMoney(processedData.grandTotal)}</span></p>
+                            </div>
+
+                            {/* GRAFICO TIPO VELA (Tornado) */}
+                            <div id="vela-chart" className="mb-12 relative w-full pt-6">
+                                {/* Eje Central Superior (Porcentajes) */}
+                                <div className="flex justify-between text-xs font-bold text-gray-400 mb-2 border-b border-gray-200 pb-2 relative z-10">
+                                    <span className="w-1/2 text-left pl-2">Maquinaria (Hacia 0%)</span>
+                                    <span className="absolute left-1/2 -translate-x-1/2 bg-white px-2 rounded-full border border-gray-200 text-slate-600">0%</span>
+                                    <span className="w-1/2 text-right pr-2">(Desde 0%) Meses</span>
+                                </div>
+
+                                <div className="flex w-full items-start">
+                                    {/* Lado Izquierdo: Maquinas */}
+                                    <div className="w-1/2 border-r-2 border-slate-800 pr-1 flex flex-col gap-2">
+                                        {processedData.machineArr.map((m, i) => (
+                                            <div key={'m-'+i} className="group relative flex items-center justify-end h-10 w-full cursor-default">
+                                                {/* Tooltip Hover */}
+                                                <div className="absolute z-50 bottom-full right-0 mb-1 hidden group-hover:block bg-slate-800 text-white text-xs p-2 rounded whitespace-nowrap shadow-lg">
+                                                    <strong>{m.name}</strong><br/>
+                                                    {m.percent.toFixed(2)}%<br/>
+                                                    {formatMoney(m.value)}
+                                                </div>
+
+                                                <div className="relative h-full flex items-center justify-end" style={{ width: `${(m.percent / processedData.maxScale) * 100}%` }}>
+                                                    <div className="absolute right-0 top-0 bottom-0 bg-gradient-to-l from-blue-500 to-cyan-400 rounded-l-md w-full vela-bar shadow-sm"></div>
+                                                </div>
+                                                <div className="absolute right-0 flex flex-col items-end pr-3 z-10 pointer-events-none w-full">
+                                                    <span className="text-xs font-bold text-slate-800 truncate max-w-full drop-shadow-md bg-white/60 px-1 rounded">{m.name}</span>
+                                                    <span className="text-[10px] font-semibold text-slate-600 bg-white/80 px-1 rounded">{m.percent.toFixed(1)}% | {formatMoney(m.value)}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Lado Derecho: Meses */}
+                                    <div className="w-1/2 pl-1 flex flex-col gap-2">
+                                        {processedData.monthArr.map((m, i) => (
+                                            <div key={'mo-'+i} className="group relative flex items-center justify-start h-10 w-full cursor-default">
+                                                 {/* Tooltip Hover */}
+                                                 <div className="absolute z-50 bottom-full left-0 mb-1 hidden group-hover:block bg-slate-800 text-white text-xs p-2 rounded whitespace-nowrap shadow-lg">
+                                                    <strong>{m.name}</strong><br/>
+                                                    {m.percent.toFixed(2)}%<br/>
+                                                    {formatMoney(m.value)}
+                                                </div>
+
+                                                <div className="relative h-full flex items-center justify-start" style={{ width: `${(m.percent / processedData.maxScale) * 100}%` }}>
+                                                    <div className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-r-md w-full vela-bar shadow-sm"></div>
+                                                </div>
+                                                <div className="absolute left-0 flex flex-col items-start pl-3 z-10 pointer-events-none w-full">
+                                                    <span className="text-xs font-bold text-slate-800 truncate max-w-full drop-shadow-md bg-white/60 px-1 rounded">{m.name}</span>
+                                                    <span className="text-[10px] font-semibold text-slate-600 bg-white/80 px-1 rounded">{m.percent.toFixed(1)}% | {formatMoney(m.value)}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* TABLA DE DATOS (2 FILAS CONCEPTO: Cabecera + Datos, 14 columnas) */}
+                            <div className="overflow-x-auto rounded-lg border border-gray-200 hide-scrollbar mt-10">
+                                <table className="w-full text-sm text-left text-gray-600 min-w-[1000px]">
+                                    <thead className="text-xs text-white uppercase bg-slate-800">
+                                        <tr>
+                                            <th className="px-4 py-3 border-r border-slate-700 min-w-[200px]">Máquina o Maquinaria</th>
+                                            {MONTH_NAMES.map(m => (
+                                                <th key={m} className="px-3 py-3 border-r border-slate-700 text-center">{m}</th>
+                                            ))}
+                                            <th className="px-4 py-3 text-right bg-blue-600">Total Acumulado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {processedData.machineArr.map((machine, idx) => (
+                                            <tr key={idx} className="bg-white border-b hover:bg-gray-50">
+                                                <td className="px-4 py-2 font-semibold text-slate-800 border-r border-gray-100">{machine.name}</td>
+                                                {processedData.matrix[machine.name].map((val, i) => (
+                                                    <td key={i} className="px-2 py-2 text-center border-r border-gray-100 text-xs">
+                                                        {val > 0 ? formatMoney(val) : '-'}
+                                                    </td>
+                                                ))}
+                                                <td className="px-4 py-2 font-bold text-right text-blue-700 bg-blue-50/30">
+                                                    {formatMoney(machine.value)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {/* Fila de Totales por Mes */}
+                                        <tr className="bg-slate-100 font-bold border-t-2 border-slate-300">
+                                            <td className="px-4 py-3 text-slate-800 border-r border-gray-200">TOTALES MES</td>
+                                            {processedData.monthArr.map((m, i) => (
+                                                <td key={i} className="px-2 py-3 text-center border-r border-gray-200 text-xs text-slate-700">
+                                                    {m.value > 0 ? formatMoney(m.value) : '-'}
+                                                </td>
+                                            ))}
+                                            <td className="px-4 py-3 text-right text-slate-900 bg-slate-200 text-sm">
+                                                {formatMoney(processedData.grandTotal)}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        // --- Configuración de PWA Offline-First (Manifest y Service Worker) ---
+        
+        // 1. Inyectar Manifest
+        const manifestData = {
+            name: "Dashboard Vela",
+            short_name: "Vela",
+            start_url: ".",
+            display: "standalone",
+            background_color: "#f8fafc",
+            theme_color: "#1e293b",
+            description: "Análisis de salidas de bodega con gráfico de vela",
+            icons: [{
+                src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibHVlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE4IDIwdjRtLTQtNG0wIDBINnYtNG0wIDBWMG0xMiAyMHYtNG0wIDBWMCIvPjwvc3ZnPg==",
+                sizes: "192x192",
+                type: "image/svg+xml"
+            }]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+        document.getElementById('manifest-link').href = URL.createObjectURL(manifestBlob);
+
+        // 2. Inyectar Service Worker
+        if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+            const swCode = `
+                const CACHE_NAME = 'vela-cache-v1';
+                self.addEventListener('install', event => {
+                    self.skipWaiting();
+                    event.waitUntil(
+                        caches.open(CACHE_NAME).then(cache => {
+                            return cache.addAll([
+                                '/',
+                                'https://cdn.tailwindcss.com',
+                                'https://unpkg.com/react@18/umd/react.production.min.js',
+                                'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+                                'https://unpkg.com/@babel/standalone/babel.min.js',
+                                'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
+                                'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
+                                'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
+                                'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+                                'https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS/dist/pptxgen.bundle.js',
+                                'https://unpkg.com/lucide@latest'
+                            ]);
+                        })
+                    );
+                });
+                self.addEventListener('fetch', event => {
+                    event.respondWith(
+                        caches.match(event.request).then(response => {
+                            return response || fetch(event.request).then(res => {
+                                return caches.open(CACHE_NAME).then(cache => {
+                                    if (event.request.method === 'GET' && event.request.url.startsWith('http')) {
+                                        cache.put(event.request, res.clone());
+                                    }
+                                    return res;
+                                });
+                            });
+                        }).catch(() => new Response('Offline - No hay conexión'))
+                    );
+                });
+            `;
+            const swBlob = new Blob([swCode], { type: 'application/javascript' });
+            navigator.serviceWorker.register(URL.createObjectURL(swBlob))
+                .then(reg => console.log('Service Worker Registrado para modo Offline', reg))
+                .catch(err => console.log('SW Error:', err));
+        } else {
+            console.log('Modo PWA Offline requiere un servidor (localhost o https). Actualmente funcionando desde archivo local.');
+        }
+    </script>
+</body>
+</html>
