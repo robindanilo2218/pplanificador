@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Vela - Mantenimiento</title>
     
-    <!-- PWA Manifest (Injected via JS below for single-file support) -->
+    <!-- PWA Manifest -->
     <link rel="manifest" id="manifest-link">
     <meta name="theme-color" content="#1e293b">
 
@@ -52,68 +52,149 @@
             const [allMachines, setAllMachines] = useState([]);
             const [selectedExceptions, setSelectedExceptions] = useState([]);
             const [isMenuOpen, setIsMenuOpen] = useState(false);
+            const [errorMsg, setErrorMsg] = useState(null); // Nuevo estado para evitar pantalla en blanco
             
             const exportRef = useRef(null);
 
-            // Inyectar Iconos
             useEffect(() => {
                 lucide.createIcons();
             });
 
-            // Procesar Archivo CSV
+            // Procesamiento centralizado para CSV y Excel
+            const processJsonData = (data) => {
+                try {
+                    const parsedData = [];
+                    const availableYears = new Set();
+                    const machinesSet = new Set();
+
+                    data.forEach((row, index) => {
+                        // Búsqueda flexible de columnas (ignora mayúsculas o espacios extra)
+                        const keys = Object.keys(row);
+                        const dateKey = keys.find(k => k.trim().toLowerCase().includes('fecha contab'));
+                        const valKey = keys.find(k => k.trim().toLowerCase().includes('valor salida'));
+                        const machineKey = keys.find(k => k.trim().toLowerCase().includes('maquinaria'));
+
+                        if (!dateKey || !valKey) return; // Salta filas vacías o inválidas con seguridad
+
+                        let dateVal = row[dateKey];
+                        if (!dateVal) return;
+
+                        let month, year;
+
+                        // Parsear Fecha (Soporta seriales de Excel o strings de CSV)
+                        if (typeof dateVal === 'number') {
+                            // Convertir fecha serial de Excel a JS
+                            const jsDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+                            month = jsDate.getUTCMonth();
+                            year = jsDate.getUTCFullYear().toString();
+                        } else {
+                            // String de CSV (espera DD/MM/YYYY o YYYY-MM-DD)
+                            dateVal = dateVal.toString().trim();
+                            if (dateVal.includes('/')) {
+                                const parts = dateVal.split('/');
+                                if (parts.length >= 3) {
+                                    month = parseInt(parts[1], 10) - 1;
+                                    year = parts[2];
+                                    if (year.length === 2) year = '20' + year;
+                                }
+                            } else if (dateVal.includes('-')) {
+                                const parts = dateVal.split('-');
+                                if(parts.length >= 3 && parts[0].length === 4) {
+                                    year = parts[0]; month = parseInt(parts[1], 10) - 1;
+                                } else if (parts.length >= 3) {
+                                    month = parseInt(parts[1], 10) - 1; year = parts[2];
+                                }
+                            }
+                        }
+
+                        // Si la fecha es inválida, aborta esta fila pero no la app
+                        if (month === undefined || year === undefined || isNaN(month)) return;
+
+                        // Parsear Valor Moneda
+                        let val = 0;
+                        const rawVal = row[valKey];
+                        if (typeof rawVal === 'number') {
+                            val = rawVal; // Si viene de excel directo como número
+                        } else if (typeof rawVal === 'string') {
+                            // Limpia comas y puntos (Ej: "3.125,01" -> 3125.01)
+                            let valStr = rawVal.replace(/\./g, '').replace(',', '.');
+                            val = parseFloat(valStr);
+                        }
+                        if (isNaN(val)) val = 0;
+
+                        // Parsear Máquina
+                        const machine = (machineKey && row[machineKey]) ? row[machineKey].toString().trim() : 'Desconocido';
+
+                        availableYears.add(year);
+                        machinesSet.add(machine);
+
+                        parsedData.push({ year, month, machine, value: val });
+                    });
+
+                    if (parsedData.length === 0) {
+                        setErrorMsg("No se encontraron datos válidos. Verifica que las columnas se llamen 'Fecha Contabilizacion' y 'Valor Salida'.");
+                        return;
+                    }
+
+                    const sortedYears = Array.from(availableYears).sort((a,b)=>b-a);
+                    setRawData(parsedData);
+                    setYears(sortedYears);
+                    setSelectedYear(sortedYears[0] || '');
+                    
+                    const otherMachines = Array.from(machinesSet).filter(m => 
+                        !KEYWORDS.some(k => m.toLowerCase().includes(k))
+                    ).sort();
+                    setAllMachines(otherMachines);
+
+                } catch(err) {
+                    setErrorMsg("Error interno al organizar los datos: " + err.message);
+                }
+            };
+
             const handleFileUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
+                
+                // Reiniciar estados
+                setErrorMsg(null);
+                setRawData([]);
 
-                Papa.parse(file, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: (results) => {
-                        const parsedData = [];
-                        const availableYears = new Set();
-                        const machinesSet = new Set();
-
-                        results.data.forEach(row => {
-                            if (!row['Fecha Contabilizacion'] || !row['Valor Salida']) return;
-
-                            // Formato de fecha esperado: DD/MM/YYYY
-                            const dateParts = row['Fecha Contabilizacion'].split('/');
-                            if(dateParts.length !== 3) return;
-                            
-                            const month = parseInt(dateParts[1], 10) - 1;
-                            let year = dateParts[2];
-                            if(year.length === 2) year = '20' + year; // Por si viene en 2 digitos
-
-                            // Limpiar y parsear moneda (Ej: "3.125,01" o "66,310002")
-                            let valStr = row['Valor Salida'].toString();
-                            valStr = valStr.replace(/\./g, '').replace(',', '.');
-                            const val = parseFloat(valStr) || 0;
-
-                            const machine = row['Maquinaria'] ? row['Maquinaria'].trim() : 'Desconocido';
-
-                            availableYears.add(year);
-                            machinesSet.add(machine);
-
-                            parsedData.push({
-                                year,
-                                month,
-                                machine,
-                                value: val
-                            });
+                try {
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    
+                    // Lector para Excel (.xlsx, .xls)
+                    if (['xlsx', 'xls'].includes(ext)) {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                            try {
+                                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                                const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                                processJsonData(json);
+                            } catch(err) {
+                                setErrorMsg("El archivo Excel está corrupto o protegido: " + err.message);
+                            }
+                        };
+                        reader.readAsBinaryString(file);
+                    } 
+                    // Lector para CSV, TSV, TXT
+                    else {
+                        Papa.parse(file, {
+                            header: true,
+                            skipEmptyLines: true,
+                            complete: (results) => {
+                                if (results.errors.length > 0 && results.data.length === 0) {
+                                    setErrorMsg("Error al leer el texto: " + results.errors[0].message);
+                                    return;
+                                }
+                                processJsonData(results.data);
+                            },
+                            error: (err) => setErrorMsg("Fallo al leer el archivo plano: " + err.message)
                         });
-
-                        const sortedYears = Array.from(availableYears).sort((a,b)=>b-a);
-                        setRawData(parsedData);
-                        setYears(sortedYears);
-                        setSelectedYear(sortedYears[0] || '');
-                        
-                        // Encontrar maquinas que NO son principales para el menu de excepciones
-                        const otherMachines = Array.from(machinesSet).filter(m => 
-                            !KEYWORDS.some(k => m.toLowerCase().includes(k))
-                        ).sort();
-                        setAllMachines(otherMachines);
                     }
-                });
+                } catch (err) {
+                    setErrorMsg("Error al abrir el archivo: " + err.message);
+                }
             };
 
             const toggleException = (machine) => {
@@ -124,17 +205,16 @@
                 }
             };
 
-            // Filtrar y agrupar datos según selecciones
+            // Filtrar y agrupar
             const processedData = useMemo(() => {
                 if (!rawData.length || !selectedYear) return null;
 
                 const filtered = rawData.filter(d => d.year === selectedYear);
-                
+                if (filtered.length === 0) return null;
+
                 let grandTotal = 0;
                 const machineTotals = {};
                 const monthTotals = Array(12).fill(0);
-                
-                // Matriz para la tabla: filas=maquinas, cols=meses
                 const matrix = {};
 
                 filtered.forEach(d => {
@@ -150,12 +230,11 @@
                     grandTotal += d.value;
                 });
 
-                // Convertir a arrays para renderizar
                 const machineArr = Object.keys(machineTotals).map(k => ({
                     name: k,
                     value: machineTotals[k],
                     percent: grandTotal > 0 ? (machineTotals[k] / grandTotal) * 100 : 0
-                })).sort((a, b) => b.value - a.value); // Orden mayor a menor
+                })).sort((a, b) => b.value - a.value);
 
                 const monthArr = monthTotals.map((val, i) => ({
                     name: MONTH_NAMES[i],
@@ -163,13 +242,11 @@
                     percent: grandTotal > 0 ? (val / grandTotal) * 100 : 0
                 }));
 
-                // Calcular % maximo para la escala de la vela (eje centrado)
                 const maxMachinePct = Math.max(...machineArr.map(m => m.percent), 0);
                 const maxMonthPct = Math.max(...monthArr.map(m => m.percent), 0);
-                const maxScale = Math.max(maxMachinePct, maxMonthPct, 10); // minimo 10% de escala
+                const maxScale = Math.max(maxMachinePct, maxMonthPct, 10); 
 
                 return { machineArr, monthArr, grandTotal, maxScale, matrix };
-
             }, [rawData, selectedYear, selectedExceptions]);
 
 
@@ -220,10 +297,8 @@
                 let pres = new pptxgen();
                 let slide = pres.addSlide();
                 
-                // Titulo
                 slide.addText(`Reporte de Salidas - ${selectedYear}`, { x:0.5, y:0.5, w:'90%', h:0.5, fontSize: 24, bold: true, color: '1e293b' });
 
-                // Tomar captura de la Vela
                 const chartElement = document.getElementById('vela-chart');
                 if(chartElement) {
                     const canvas = await html2canvas(chartElement);
@@ -231,7 +306,6 @@
                     slide.addImage({ data: imgData, x: 0.5, y: 1.2, w: 9, h: 3 });
                 }
 
-                // Tabla en siguiente diapositiva
                 let slide2 = pres.addSlide();
                 const tableData = getTableDataArray();
                 slide2.addTable(tableData, { x: 0.5, y: 0.5, w: 9, fontSize: 10, border: {type:'solid', color:'cccccc'}, fill: 'f8fafc' });
@@ -242,7 +316,6 @@
             return (
                 <div className="min-h-screen p-4 md:p-8 flex flex-col items-center">
                     
-                    {/* Header y Controles */}
                     <div className="w-full max-w-7xl bg-white rounded-xl shadow-lg p-6 mb-6">
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -251,14 +324,13 @@
                             </h1>
 
                             <div className="flex flex-wrap items-center gap-3">
-                                {/* Subir CSV */}
                                 <label className="cursor-pointer bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition flex items-center gap-2 text-sm font-semibold">
                                     <i data-lucide="upload" className="w-4 h-4"></i>
-                                    Importar CSV
-                                    <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                                    Importar Datos
+                                    {/* Ahora acepta explícitamente CSV y Excel */}
+                                    <input type="file" accept=".csv, .xlsx, .xls, .tsv, .txt" className="hidden" onChange={handleFileUpload} />
                                 </label>
 
-                                {/* Filtro Año */}
                                 {years.length > 0 && (
                                     <select 
                                         className="border border-gray-300 rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -269,7 +341,6 @@
                                     </select>
                                 )}
 
-                                {/* Filtro Excepciones (Dropdown) */}
                                 {allMachines.length > 0 && (
                                     <div className="relative">
                                         <button 
@@ -301,7 +372,6 @@
                             </div>
                         </div>
 
-                        {/* Botones de Exportacion */}
                         {processedData && (
                             <div className="mt-6 flex flex-wrap gap-2 pt-4 border-t border-gray-100">
                                 <span className="text-sm font-semibold text-gray-500 flex items-center mr-2">Exportar:</span>
@@ -313,13 +383,23 @@
                         )}
                     </div>
 
-                    {/* Area Exportable */}
-                    {!processedData ? (
+                    {/* Manejador de Errores Visual */}
+                    {errorMsg && (
+                        <div className="w-full max-w-7xl bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-start gap-3">
+                            <i data-lucide="alert-triangle" className="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold">Error al procesar el archivo: </strong>
+                                <span className="block sm:inline">{errorMsg}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {!processedData && !errorMsg ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400 mt-10">
                             <i data-lucide="bar-chart-2" className="w-16 h-16 mb-4 opacity-50"></i>
-                            <p className="text-lg">Sube tu archivo de salidas para visualizar la Vela.</p>
+                            <p className="text-lg">Sube tu archivo de salidas (.csv o .xlsx) para visualizar la Vela.</p>
                         </div>
-                    ) : (
+                    ) : processedData ? (
                         <div ref={exportRef} className="w-full max-w-7xl bg-white p-6 md:p-8 rounded-xl shadow-lg">
                             
                             <div className="mb-6 text-center">
@@ -327,9 +407,7 @@
                                 <p className="text-slate-500 font-medium">Total Acumulado: <span className="text-blue-600 font-bold">{formatMoney(processedData.grandTotal)}</span></p>
                             </div>
 
-                            {/* GRAFICO TIPO VELA (Tornado) */}
                             <div id="vela-chart" className="mb-12 relative w-full pt-6">
-                                {/* Eje Central Superior (Porcentajes) */}
                                 <div className="flex justify-between text-xs font-bold text-gray-400 mb-2 border-b border-gray-200 pb-2 relative z-10">
                                     <span className="w-1/2 text-left pl-2">Maquinaria (Hacia 0%)</span>
                                     <span className="absolute left-1/2 -translate-x-1/2 bg-white px-2 rounded-full border border-gray-200 text-slate-600">0%</span>
@@ -337,11 +415,9 @@
                                 </div>
 
                                 <div className="flex w-full items-start">
-                                    {/* Lado Izquierdo: Maquinas */}
                                     <div className="w-1/2 border-r-2 border-slate-800 pr-1 flex flex-col gap-2">
                                         {processedData.machineArr.map((m, i) => (
                                             <div key={'m-'+i} className="group relative flex items-center justify-end h-10 w-full cursor-default">
-                                                {/* Tooltip Hover */}
                                                 <div className="absolute z-50 bottom-full right-0 mb-1 hidden group-hover:block bg-slate-800 text-white text-xs p-2 rounded whitespace-nowrap shadow-lg">
                                                     <strong>{m.name}</strong><br/>
                                                     {m.percent.toFixed(2)}%<br/>
@@ -359,11 +435,9 @@
                                         ))}
                                     </div>
 
-                                    {/* Lado Derecho: Meses */}
                                     <div className="w-1/2 pl-1 flex flex-col gap-2">
                                         {processedData.monthArr.map((m, i) => (
                                             <div key={'mo-'+i} className="group relative flex items-center justify-start h-10 w-full cursor-default">
-                                                 {/* Tooltip Hover */}
                                                  <div className="absolute z-50 bottom-full left-0 mb-1 hidden group-hover:block bg-slate-800 text-white text-xs p-2 rounded whitespace-nowrap shadow-lg">
                                                     <strong>{m.name}</strong><br/>
                                                     {m.percent.toFixed(2)}%<br/>
@@ -383,7 +457,6 @@
                                 </div>
                             </div>
 
-                            {/* TABLA DE DATOS (2 FILAS CONCEPTO: Cabecera + Datos, 14 columnas) */}
                             <div className="overflow-x-auto rounded-lg border border-gray-200 hide-scrollbar mt-10">
                                 <table className="w-full text-sm text-left text-gray-600 min-w-[1000px]">
                                     <thead className="text-xs text-white uppercase bg-slate-800">
@@ -409,7 +482,6 @@
                                                 </td>
                                             </tr>
                                         ))}
-                                        {/* Fila de Totales por Mes */}
                                         <tr className="bg-slate-100 font-bold border-t-2 border-slate-300">
                                             <td className="px-4 py-3 text-slate-800 border-r border-gray-200">TOTALES MES</td>
                                             {processedData.monthArr.map((m, i) => (
@@ -426,7 +498,7 @@
                             </div>
 
                         </div>
-                    )}
+                    ) : null}
                 </div>
             );
         }
@@ -434,9 +506,6 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
 
-        // --- Configuración de PWA Offline-First (Manifest y Service Worker) ---
-        
-        // 1. Inyectar Manifest
         const manifestData = {
             name: "Dashboard Vela",
             short_name: "Vela",
@@ -444,7 +513,7 @@
             display: "standalone",
             background_color: "#f8fafc",
             theme_color: "#1e293b",
-            description: "Análisis de salidas de bodega con gráfico de vela",
+            description: "Análisis de salidas de bodega",
             icons: [{
                 src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibHVlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE4IDIwdjRtLTQtNG0wIDBINnYtNG0wIDBWMG0xMiAyMHYtNG0wIDBWMCIvPjwvc3ZnPg==",
                 sizes: "192x192",
@@ -453,53 +522,8 @@
         };
         const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
         document.getElementById('manifest-link').href = URL.createObjectURL(manifestBlob);
-
-        // 2. Inyectar Service Worker
-        if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
-            const swCode = `
-                const CACHE_NAME = 'vela-cache-v1';
-                self.addEventListener('install', event => {
-                    self.skipWaiting();
-                    event.waitUntil(
-                        caches.open(CACHE_NAME).then(cache => {
-                            return cache.addAll([
-                                '/',
-                                'https://cdn.tailwindcss.com',
-                                'https://unpkg.com/react@18/umd/react.production.min.js',
-                                'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-                                'https://unpkg.com/@babel/standalone/babel.min.js',
-                                'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
-                                'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
-                                'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
-                                'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-                                'https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS/dist/pptxgen.bundle.js',
-                                'https://unpkg.com/lucide@latest'
-                            ]);
-                        })
-                    );
-                });
-                self.addEventListener('fetch', event => {
-                    event.respondWith(
-                        caches.match(event.request).then(response => {
-                            return response || fetch(event.request).then(res => {
-                                return caches.open(CACHE_NAME).then(cache => {
-                                    if (event.request.method === 'GET' && event.request.url.startsWith('http')) {
-                                        cache.put(event.request, res.clone());
-                                    }
-                                    return res;
-                                });
-                            });
-                        }).catch(() => new Response('Offline - No hay conexión'))
-                    );
-                });
-            `;
-            const swBlob = new Blob([swCode], { type: 'application/javascript' });
-            navigator.serviceWorker.register(URL.createObjectURL(swBlob))
-                .then(reg => console.log('Service Worker Registrado para modo Offline', reg))
-                .catch(err => console.log('SW Error:', err));
-        } else {
-            console.log('Modo PWA Offline requiere un servidor (localhost o https). Actualmente funcionando desde archivo local.');
-        }
     </script>
 </body>
 </html>
+
+
