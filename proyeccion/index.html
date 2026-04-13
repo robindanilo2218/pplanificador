@@ -14,7 +14,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     
     <style>
-        /* ESTILOS ORIGINALES INTACTOS */
         table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
         th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; white-space: nowrap; }
         th { background-color: #f3f4f6; position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
@@ -34,16 +33,20 @@
         .mw-150 { max-width: 150px; }
         .mw-200 { max-width: 200px; }
         
+        /* OPTIMIZACIÓN DE IMPRESIÓN / PDF */
         @media print {
             @page { size: landscape; margin: 10mm; } 
             body { background-color: white !important; padding: 0 !important; font-size: 8pt !important; }
             .no-print { display: none !important; }
+            
+            /* Ocultar todo excepto el área del PDF del carrito cuando esté activo */
+            body.printing-cart > :not(#cartPrintArea) { display: none !important; }
+            #cartPrintArea { display: block !important; }
+
             .max-w-[1400px] { max-width: 100% !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; border: none !important; }
             .overflow-auto { overflow: visible !important; max-height: none !important; border: none !important; }
             table { font-size: 6pt !important; width: 100% !important; table-layout: auto !important; }
-            th, td { 
-                padding: 3px !important; border: 1px solid #cbd5e1 !important; white-space: normal !important; word-wrap: break-word !important;
-            }
+            th, td { padding: 3px !important; border: 1px solid #cbd5e1 !important; white-space: normal !important; word-wrap: break-word !important; }
             .cell-scroll { overflow: visible !important; white-space: normal !important; max-width: none !important; padding-bottom: 0 !important; }
             thead { display: table-header-group !important; }
             tr { page-break-inside: avoid !important; }
@@ -53,12 +56,12 @@
 </head>
 <body class="bg-gray-50 text-gray-800 p-2 md:p-6 relative">
 
-    <div class="max-w-[1400px] mx-auto bg-white p-3 md:p-6 rounded-lg shadow-md">
+    <div class="max-w-[1400px] mx-auto bg-white p-3 md:p-6 rounded-lg shadow-md no-print">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <h1 class="text-2xl font-bold text-blue-800">Análisis de Rotación e Inventario</h1>
             
-            <div id="controlesSesion" class="hidden flex flex-wrap gap-2 no-print items-center">
-                <button id="btnVerCarrito" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm relative flex items-center gap-1">
+            <div id="controlesSesion" class="hidden flex flex-wrap gap-2 items-center">
+                <button onclick="abrirCarrito()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm relative flex items-center gap-1">
                     🛒 Carrito
                     <span id="cartBadge" class="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] rounded-full h-5 w-5 flex items-center justify-center font-bold hidden">0</span>
                 </button>
@@ -80,7 +83,7 @@
             <p class="text-gray-500 text-sm mt-2">Optimizando registros y buscando proyecciones vencidas.</p>
         </div>
 
-        <div id="zonaImportacion" class="mb-6 transition-all duration-300 no-print hidden">
+        <div id="zonaImportacion" class="mb-6 transition-all duration-300 hidden">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div class="p-4 border rounded bg-gray-50 shadow-sm">
                     <label class="block font-semibold mb-2 text-sm text-blue-800">1. Base Inventario</label>
@@ -101,7 +104,7 @@
             </button>
         </div>
 
-        <div class="w-full border p-4 rounded bg-gray-50 hidden mb-6 no-print shadow-sm" id="contenedorFiltros">
+        <div class="w-full border p-4 rounded bg-gray-50 hidden mb-6 shadow-sm" id="contenedorFiltros">
             <div class="w-full mb-4">
                 <label for="busquedaTexto" class="font-semibold text-sm mb-1 block text-gray-700">Buscador General (Presiona Enter para buscar):</label>
                 <div class="flex flex-col md:flex-row gap-2">
@@ -191,7 +194,7 @@
             </table>
         </div>
         
-        <div id="controlesPaginacion" class="w-full py-4 flex flex-col items-center hidden no-print">
+        <div id="controlesPaginacion" class="w-full py-4 flex flex-col items-center hidden">
             <p class="text-sm text-gray-500 mb-2">Mostrando <span id="countVisibles" class="font-bold">0</span> de <span id="countTotalFiltrados" class="font-bold">0</span> resultados</p>
             <button id="btnCargarMas" class="bg-white hover:bg-gray-100 text-blue-600 font-bold py-2 px-8 rounded border border-blue-300 shadow-sm transition">⬇️ Cargar más registros</button>
         </div>
@@ -270,27 +273,27 @@
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Máquina / Destino <span class="text-red-500">*</span></label>
-                                <input type="text" id="inpMaquina" placeholder="Ej: Corrugadora 01" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <input type="text" id="inpMaquina" placeholder="Ej: Corrugadora 01" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Serie</label>
-                                <input type="text" id="inpSerie" placeholder="Opcional" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <input type="text" id="inpSerie" placeholder="Opcional" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Modelo</label>
-                                <input type="text" id="inpModelo" placeholder="Opcional" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <input type="text" id="inpModelo" placeholder="Opcional" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Sección (Texto Libre)</label>
-                                <input type="text" id="inpSeccion" placeholder="Ej: Eléctrico, Empaque..." class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <input type="text" id="inpSeccion" placeholder="Ej: Eléctrico, Empaque..." class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Técnico</label>
-                                <input type="text" id="inpTecnico" placeholder="Opcional" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <input type="text" id="inpTecnico" placeholder="Opcional" class="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500">
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Fecha Sugerida de Compra</label>
-                                <input type="date" id="inpFechaSug" class="w-full sm:w-1/2 border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <input type="date" id="inpFechaSug" class="w-full sm:w-1/2 border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500">
                             </div>
                         </div>
                     </div>
@@ -314,13 +317,18 @@
             
             <div class="p-4 overflow-y-auto flex-grow" id="contenedorItemsCarrito"></div>
 
-            <div class="bg-gray-100 p-4 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
-                <button onclick="vaciarCarrito()" class="w-full sm:w-auto bg-white border border-red-300 text-red-700 hover:bg-red-50 px-6 py-2 rounded font-semibold transition">
+            <div class="bg-gray-100 p-4 border-t flex flex-col md:flex-row justify-between items-center gap-4">
+                <button onclick="vaciarCarrito()" class="w-full md:w-auto bg-white border border-red-300 text-red-700 hover:bg-red-50 px-6 py-2 rounded font-semibold transition">
                     Vaciar Lista
                 </button>
-                <button onclick="procesarSolicitudEmail()" class="w-full sm:w-auto bg-blue-700 text-white hover:bg-blue-800 px-8 py-3 rounded font-bold shadow-md transition flex items-center justify-center gap-2">
-                    📧 Generar y Enviar a Compras
-                </button>
+                <div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                    <button onclick="generarPdfCarrito()" class="w-full sm:w-auto bg-gray-800 text-white hover:bg-gray-900 px-6 py-3 rounded font-bold shadow-md transition flex items-center justify-center gap-2">
+                        📄 Descargar PDF
+                    </button>
+                    <button onclick="procesarSolicitudEmail()" class="w-full sm:w-auto bg-blue-700 text-white hover:bg-blue-800 px-8 py-3 rounded font-bold shadow-md transition flex items-center justify-center gap-2">
+                        📧 Enviar a Compras
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -368,14 +376,14 @@
 
         const codeRegex = /^[A-Za-z0-9]-[A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{3}$/;
         
-        // --- BASE DE DATOS (AUMENTO DE VERSIÓN PARA ASEGURAR TABLAS) ---
+        // --- BASE DE DATOS LOCAL ---
         const DB_NAME = 'BodegaDB';
         const STORE_ANALISIS = 'analisisStore';
         const STORE_HISTORIAL = 'historialStore';
 
         function initDB() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open(DB_NAME, 3); // Subimos version a 3
+                const request = indexedDB.open(DB_NAME, 3);
                 request.onupgradeneeded = (e) => {
                     const db = e.target.result;
                     if (!db.objectStoreNames.contains(STORE_ANALISIS)) db.createObjectStore(STORE_ANALISIS);
@@ -386,7 +394,7 @@
             });
         }
 
-        // --- SISTEMA DE CARRITO E HISTORIAL ---
+        // --- SISTEMA DE CARRITO, HISTORIAL Y PDF ---
         let carrito = [];
         let itemActualSeleccionado = null; 
 
@@ -421,11 +429,8 @@
             return localDate.toLocaleDateString('es-GT');
         }
 
-        // --- APERTURA DE MODAL CON TODOS LOS DATOS ---
         function abrirModalDetalle(fila) {
             itemActualSeleccionado = fila;
-            
-            // Llenar Datos Estadísticos
             document.getElementById('detDesc').innerText = fila.inv.descripcion;
             document.getElementById('detCodigo').innerText = `COD: ${fila.inv.codigo} | PN: ${fila.inv.noParte || '-'}`;
             document.getElementById('detStock').innerText = fila.inv.cantidad;
@@ -441,10 +446,8 @@
             document.getElementById('detQ4').innerText = formatQ(fila.qConsumo[4]);
             document.getElementById('detMaquinas').innerText = fila.maquinasUnicas;
 
-            // Valores por defecto del formulario (solo reseteo Cantidad y Fecha)
             document.getElementById('inpCant').value = 1;
             document.getElementById('inpFechaSug').value = new Date().toISOString().split('T')[0];
-            // No reseteo Máquina, Sección, Técnico etc, para que sea rápido pedir múltiples cosas para el mismo lugar
 
             document.getElementById('modalDetalle').classList.remove('hidden');
             setTimeout(() => document.getElementById('inpCant').focus(), 100);
@@ -462,7 +465,7 @@
             if(!itemActualSeleccionado) return;
             const cant = parseFloat(document.getElementById('inpCant').value);
             const maq = document.getElementById('inpMaquina').value.trim();
-            const sec = document.getElementById('inpSeccion').value.trim() || "-"; // SECCION TEXTO LIBRE
+            const sec = document.getElementById('inpSeccion').value.trim() || "-";
 
             if(isNaN(cant) || cant <= 0) { alert("Ingrese una cantidad válida."); return; }
             if(!maq) { alert("Especifique la máquina o destino."); return; }
@@ -525,11 +528,74 @@
         function eliminarDelCarrito(index) { carrito.splice(index, 1); actualizarBadgeCarrito(); abrirCarrito(); }
         function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrito?")) { carrito = []; actualizarBadgeCarrito(); abrirCarrito(); } }
 
-        // --- TRUCO CORREO E HISTORIAL ---
-        async function procesarSolicitudEmail() {
-            if(carrito.length === 0) { alert("No hay items en el carrito."); return; }
+        // --- GENERADOR DE PDF (NUEVA FUNCIÓN) ---
+        function generarPdfCarrito() {
+            if(carrito.length === 0) return alert("El carrito está vacío. Añade repuestos primero.");
+            
+            const d = new Date();
+            const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
+                          d.getDate().toString().padStart(2, '0') + d.getHours().toString().padStart(2, '0') + 
+                          d.getMinutes().toString().padStart(2, '0') + d.getSeconds().toString().padStart(2, '0');
 
-            // Generar ID
+            // Crear el div oculto para el formato del PDF
+            let printDiv = document.createElement('div');
+            printDiv.id = 'cartPrintArea';
+            printDiv.innerHTML = `
+                <div style="font-family: Arial, sans-serif; color: #000; padding: 20px;">
+                    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px;">
+                        <h1 style="color: #1e3a8a; font-size: 24px; margin:0;">EMPRESAS GALINDO</h1>
+                        <h2 style="font-size: 16px; margin: 5px 0 0 0; color:#555;">SOLICITUD TÉCNICA - DEPTO. ELÉCTRICO</h2>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size:14px;">
+                        <div><strong>No. Solicitud:</strong> ${idSol}</div>
+                        <div><strong>Fecha:</strong> ${new Date().toLocaleString('es-GT')}</div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background-color: #f3f4f6; text-align: left;">
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">#</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Código / Parte</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Descripción</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">Cant.</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Máquina / Sección</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Serie / Modelo</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Técnico</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${carrito.map((it, idx) => `
+                                <tr>
+                                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center;">${idx+1}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.codigo}</b><br><span style="font-size:10px;">PN: ${it.noParte}</span></td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;">${it.descripcion}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center; font-weight:bold;">${it.cant}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.maquina}</b><br>${it.seccion}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px; font-size:10px;">S: ${it.serie}<br>M: ${it.modelo}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;">${it.tecnico}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 60px; text-align: center;">
+                        <p>___________________________________</p>
+                        <p style="margin-top:5px; font-size:12px;">Firma / Autorización Solicitante</p>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(printDiv);
+            document.body.classList.add('printing-cart');
+            
+            window.print(); // Abre el diálogo nativo de PDF/Impresora
+            
+            // Limpieza
+            document.body.classList.remove('printing-cart');
+            document.body.removeChild(printDiv);
+        }
+
+        async function procesarSolicitudEmail() {
+            if(carrito.length === 0) return alert("No hay items en el carrito.");
+
             const d = new Date();
             const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
                           d.getDate().toString().padStart(2, '0') + d.getHours().toString().padStart(2, '0') + 
@@ -568,22 +634,20 @@
             `;
 
             try {
-                // Guardar Historial
                 await guardarCompraEnHistorial(idSol, carrito);
 
-                // Copiar Portapapeles
                 const htmlBlob = new Blob([tablaHtml], { type: 'text/html' });
                 const textBlob = new Blob(["Pega aquí con CTRL+V la tabla."], { type: 'text/plain' });
                 await navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })]);
 
-                alert(`✅ Solicitud #${idSol} generada y copiada al portapapeles.\n\nAl abrirse el correo, haz clic en el cuerpo y presiona CTRL + V.`);
+                alert(`✅ Solicitud #${idSol} generada y copiada al portapapeles.\n\nAl abrirse el correo, haz clic en el cuerpo y presiona CTRL + V.\n\n(También puedes usar el botón de 'Descargar PDF' y adjuntarlo si lo prefieres)`);
 
-                let cuerpoBase = encodeURIComponent(`David,\n\nAdjunto solicitud de compra #${idSol} para mantenimiento:\n\n[PRESIONA CTRL + V AQUÍ PARA PEGAR LA TABLA]\n\nSaludos.`);
+                let cuerpoBase = encodeURIComponent(`David,\n\nAdjunto solicitud de compra #${idSol} para mantenimiento:\n\n[PRESIONA CTRL + V AQUÍ PARA PEGAR LA TABLA O ADJUNTA EL PDF]\n\nSaludos.`);
                 window.location.href = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
 
                 carrito = []; actualizarBadgeCarrito(); cerrarCarrito();
             } catch (err) {
-                alert("No se pudo copiar automáticamente al portapapeles, pero se guardó en historial. Error: " + err.message);
+                alert("No se pudo copiar automáticamente al portapapeles, pero se guardó en historial. Puedes usar la opción de PDF.");
             }
         }
 
@@ -605,7 +669,6 @@
             const unDia = 24 * 60 * 60 * 1000;
             const unaSemana = 7 * unDia;
 
-            // Llenar select maquinas
             const selMaq = document.getElementById('histFiltroMaquina');
             if(selMaq.options.length <= 1) {
                 const maqs = new Set();
@@ -618,7 +681,7 @@
             let filas = [];
             data.forEach(sol => {
                 const d = new Date(sol.fecha_log);
-                const fechaStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()} ${d.getHours()}:${d.getMinutes().toString().padStart(2,'0')}`;
+                const fechaStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
                 
                 sol.items.forEach(it => {
                     let ok = true;
@@ -723,7 +786,6 @@
             else { document.getElementById('controlesPaginacion').classList.add('hidden'); }
         }
 
-        // FUNCIONES DE DB, ARCHIVOS Y FILTROS EXACTAMENTE COMO ESTABAN (Resumido para proteger vista)
         async function guardarDatos(datos) {
             const db = await initDB();
             const tx = db.transaction(STORE_ANALISIS, 'readwrite');
@@ -901,7 +963,7 @@
             ejecutarBusqueda();
         }
 
-        // LECTURA DE ARCHIVOS ORIGINAL
+        // LECTURA DE ARCHIVOS Y PROCESAMIENTO
         function calcularCuartil(arr, q) {
             const ordenado = [...arr].sort((a, b) => a - b);
             const pos = (ordenado.length - 1) * q;
