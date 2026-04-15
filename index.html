@@ -777,149 +777,139 @@
 
     <!-- MODAL NUEVA/EDITAR TAREA -->
     <div id="modalTask" class="modal">
-        <div class="modal-content">
-            <h3 id="modalTitle">Planificar Tarea</h3>
+        <div class="modal-content" style="max-width: 1000px; padding: 25px;">
+            <h3 id="modalTitle" style="margin-top:0; border-bottom:1px solid #444; padding-bottom:10px; color:var(--accent);">Planificar Tarea</h3>
 
             <!-- NUEVO: Alerta de Almuerzo -->
-            <div id="lunchWarning"
-                style="display:none; background:#ff980033; border:1px solid #ff9800; color:#ffb74d; padding:8px; border-radius:4px; font-size:0.8em; margin-bottom:12px;">
-                ⚠️ <b>Horario de Almuerzo:</b> Estás asignando una tarea en hora de almuerzo. Asegúrate de asignar a
-                otro técnico disponible.
+            <div id="lunchWarning" style="display:none; background:#ff980033; border:1px solid #ff9800; color:#ffb74d; padding:8px; border-radius:4px; font-size:0.8em; margin-bottom:12px;">
+                ⚠️ <b>Horario de Almuerzo:</b> Estás asignando una tarea en hora de almuerzo. Asegúrate de asignar a otro técnico disponible.
             </div>
 
-            <div class="form-row">
-                <label>Categoría</label>
-                <input type="text" id="inpCat" class="input-dark" list="catListRef"
-                    placeholder="Ej: Corrugadora Fosber 2" oninput="filterSubcategories()">
-                <datalist id="catListRef"></datalist>
-            </div>
-
-            <div class="form-row">
-                <label>Subcategoría</label>
-                <input type="text" id="inpSub" class="input-dark" list="subListRef" placeholder="Ej: Twin">
-                <datalist id="subListRef"></datalist>
-            </div>
-
-            <div class="form-row">
-                <label>Proceso/Departamento</label>
-                <input type="text" id="inpProcess" class="input-dark" list="processListRef" placeholder="Ej: ELECTRICO">
-                <datalist id="processListRef"></datalist>
-            </div>
-
-            <div class="form-row">
-                <label>Detalle</label>
-                <input type="text" id="inpDetail" class="input-dark"
-                    placeholder="Ej: Proyecto abc o Mantenimiento Preventivo">
-            </div>
-
-            <div class="form-row" style="display:flex; gap:10px;">
-                <div style="flex:1">
-                    <label>Tipo</label>
-                    <select id="inpMaintType" class="input-dark">
-                        <option value="preventivo" selected>🛡️ Preventivo</option>
-                        <option value="correctivo">🔧 Correctivo</option>
-                        <option value="proyecto">🏗️ Proyecto</option>
-                    </select>
-                </div>
-                <div style="flex:1">
-                    <label>Prioridad</label>
-                    <select id="inpPriority" class="input-dark">
-                        <option value="urgent">Urgente (Rojo)</option>
-                        <option value="high">Alta (Amarillo)</option>
-                        <option value="medium" selected>Media (Celeste)</option>
-                        <option value="low">Baja (Verde)</option>
-                    </select>
-                </div>
-            </div>
-
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-
-            <div class="form-row" style="display:flex; gap:10px;">
-                <div style="flex:1"><label>Hora Inicio</label><select id="inpStartHour" class="input-dark"></select>
-                </div>
-                <div style="flex:1"><label>Hora Fin</label><select id="inpEndHour" class="input-dark"></select></div>
-            </div>
-
-            <div class="form-row" style="display:flex; gap:10px;">
-                <div style="flex:1"><label>Desde</label><input type="date" id="inpDateStart" class="input-dark"></div>
-                <div style="flex:1"><label>Hasta</label><input type="date" id="inpDateEnd" class="input-dark"></div>
-            </div>
-
-            <div class="form-row">
-                <label>Días a incluir en el rango base</label>
-                <div
-                    style="display:flex; gap:10px; flex-wrap:wrap; font-size:0.9em; padding: 5px 0; background: #222; border-radius: 5px; padding: 10px; border: 1px solid #444;">
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-1" checked> Lun</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-2" checked> Mar</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-3" checked> Mié</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-4" checked> Jue</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-5" checked> Vie</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input
-                            type="checkbox" id="day-6"> Sáb</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input
-                            type="checkbox" id="day-0"> Dom</label>
-                </div>
-            </div>
-
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-
-            <!-- NUEVO: SECCIÓN DE ASIGNACIÓN DE PERSONAL EN EL MODAL -->
-            <div class="form-row">
-                <label>Asignación de Personal y Días</label>
-                <p style="font-size:0.75em; color:#888; margin-top:-5px;">Agrega a los técnicos y marca qué días
-                    trabajarán en esta tarea.</p>
-                <div id="assignList">
-                    <!-- Filas dinámicas aquí -->
-                </div>
-                <button class="btn btn-sm btn-add" style="background:#00bcd4; color:black; font-weight:bold;"
-                    onclick="addAssignRow()">+ Agregar Técnico/Líder</button>
-            </div>
-
-            <!-- Sección de Tareas Recurrentes -->
-            <div class="form-row" style="margin-top:20px;">
-                <label
-                    style="display:flex; align-items:center; gap:5px; color:#fff; cursor:pointer; background:#1a1a1a; padding:10px; border-radius:5px; border:1px solid #333;">
-                    <input type="checkbox" id="inpRepeatCheck" onchange="toggleRepeatUI()"> 🔁 Repetir esta tarea
-                    (Recurrente)
-                </label>
-                <div id="repeatUI"
-                    style="display:none; gap:10px; margin-top:5px; background:#222; padding:10px; border-radius:5px; border:1px solid #444;">
-                    <div style="display:flex; align-items:center; gap:5px;">
-                        Cada <input type="number" id="inpRepeatNum" class="input-dark" style="width:60px; padding:5px;"
-                            value="1" min="1">
-                        <select id="inpRepeatUnit" class="input-dark" style="width:110px; padding:5px;">
-                            <option value="weeks">Semana(s)</option>
-                            <option value="months">Mes(es)</option>
-                            <option value="years">Año(s)</option>
-                        </select>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 30px;">
+                
+                <!-- COLUMNA IZQUIERDA -->
+                <div>
+                    <h4 style="color:#aaa; margin-top:0; margin-bottom:15px; text-transform:uppercase; font-size:0.85em; letter-spacing:1px;">1. Detalles del Trabajo</h4>
+                    
+                    <div class="form-row">
+                        <label>Categoría</label>
+                        <input type="text" id="inpCat" class="input-dark" list="catListRef" placeholder="Ej: Corrugadora Fosber 2" oninput="filterSubcategories()">
+                        <datalist id="catListRef"></datalist>
                     </div>
-                    <div style="margin-top:8px;">
-                        Hasta la fecha <input type="date" id="inpRepeatUntil" class="input-dark" style="padding:5px;">
+
+                    <div class="form-row">
+                        <label>Subcategoría</label>
+                        <input type="text" id="inpSub" class="input-dark" list="subListRef" placeholder="Ej: Twin">
+                        <datalist id="subListRef"></datalist>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Proceso/Departamento</label>
+                        <input type="text" id="inpProcess" class="input-dark" list="processListRef" placeholder="Ej: ELECTRICO">
+                        <datalist id="processListRef"></datalist>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Detalle</label>
+                        <input type="text" id="inpDetail" class="input-dark" placeholder="Ej: Proyecto abc o Mantenimiento Preventivo">
+                    </div>
+
+                    <div class="form-row" style="display:flex; gap:15px;">
+                        <div style="flex:1">
+                            <label>Tipo</label>
+                            <select id="inpMaintType" class="input-dark">
+                                <option value="preventivo" selected>🛡️ Preventivo</option>
+                                <option value="correctivo">🔧 Correctivo</option>
+                                <option value="proyecto">🏗️ Proyecto</option>
+                                <option value="otro">⚙️ Otro</option>
+                            </select>
+                        </div>
+                        <div style="flex:1">
+                            <label>Prioridad</label>
+                            <select id="inpPriority" class="input-dark">
+                                <option value="urgent">🔴 Urgente</option>
+                                <option value="high">🟡 Alta</option>
+                                <option value="medium" selected>🔵 Media</option>
+                                <option value="low">🟢 Baja</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <hr style="border:0; border-top:1px solid #444; margin:20px 0;">
+                    
+                    <h4 style="color:#aaa; margin-top:0; margin-bottom:15px; text-transform:uppercase; font-size:0.85em; letter-spacing:1px;">2. Desglose de Gastos</h4>
+                    <div class="form-row">
+                        <div id="costList">
+                            <!-- Filas dinámicas aquí -->
+                        </div>
+                        <button class="btn btn-sm btn-add" style="margin-top:5px;" onclick="addCostRow()">+ Agregar Gasto/Repuesto</button>
+                        <div class="total-display" id="totalCostDisplay" style="margin-top:10px;">Q0.00</div>
                     </div>
                 </div>
-            </div>
 
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+                <!-- COLUMNA DERECHA -->
+                <div>
+                    <h4 style="color:#aaa; margin-top:0; margin-bottom:15px; text-transform:uppercase; font-size:0.85em; letter-spacing:1px;">3. Programación y Ejecución</h4>
+                    
+                    <div class="form-row" style="display:flex; gap:15px;">
+                        <div style="flex:1"><label>Hora Inicio</label><select id="inpStartHour" class="input-dark"></select></div>
+                        <div style="flex:1"><label>Hora Fin</label><select id="inpEndHour" class="input-dark"></select></div>
+                    </div>
 
-            <div class="form-row">
-                <label>Desglose de Costos (Global para todo el rango)</label>
-                <div id="costList">
-                    <!-- Filas dinámicas aquí -->
+                    <div class="form-row" style="display:flex; gap:15px;">
+                        <div style="flex:1"><label>Desde</label><input type="date" id="inpDateStart" class="input-dark"></div>
+                        <div style="flex:1"><label>Hasta</label><input type="date" id="inpDateEnd" class="input-dark"></div>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Días hábiles a incluir en el rango</label>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:0.9em; padding: 10px; background: #222; border-radius: 5px; border: 1px solid #444;">
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-1" checked> Lun</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-2" checked> Mar</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-3" checked> Mié</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-4" checked> Jue</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="day-5" checked> Vie</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input type="checkbox" id="day-6"> Sáb</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input type="checkbox" id="day-0"> Dom</label>
+                        </div>
+                    </div>
+
+                    <div class="form-row" style="margin-top:15px;">
+                        <label>Asignación de Personal</label>
+                        <div id="assignList" style="margin-bottom:5px;">
+                            <!-- Filas dinámicas aquí -->
+                        </div>
+                        <button class="btn btn-sm btn-add" style="background:#00bcd4; color:black; font-weight:bold;" onclick="addAssignRow()">+ Agregar Técnico/Líder</button>
+                    </div>
+
+                    <hr style="border:0; border-top:1px solid #444; margin:20px 0;">
+
+                    <div class="form-row">
+                        <label style="display:flex; align-items:center; gap:5px; color:#fff; cursor:pointer; background:#1a1a1a; padding:10px; border-radius:5px; border:1px solid #333;">
+                            <input type="checkbox" id="inpRepeatCheck" onchange="toggleRepeatUI()"> 🔁 Hacer Recurrente (Automático)
+                        </label>
+                        <div id="repeatUI" style="display:none; gap:10px; margin-top:5px; background:#222; padding:10px; border-radius:5px; border:1px solid #444;">
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                Cada <input type="number" id="inpRepeatNum" class="input-dark" style="width:60px; padding:5px;" value="1" min="1">
+                                <select id="inpRepeatUnit" class="input-dark" style="width:110px; padding:5px;">
+                                    <option value="weeks">Semana(s)</option>
+                                    <option value="months">Mes(es)</option>
+                                    <option value="years">Año(s)</option>
+                                </select>
+                            </div>
+                            <div style="margin-top:8px;">
+                                Hasta <input type="date" id="inpRepeatUntil" class="input-dark" style="padding:5px;">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <button class="btn btn-sm btn-add" onclick="addCostRow()">+ Agregar Costo</button>
-                <div class="total-display" id="totalCostDisplay">Q0.00</div>
             </div>
 
             <input type="hidden" id="editingGroupId">
 
-            <div class="btn-row">
-                <button class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
-                <button class="btn btn-save" onclick="saveTaskRange()">Guardar</button>
+            <div class="btn-row" style="border-top:1px solid #444; padding-top:20px; margin-top:15px;">
+                <button class="btn btn-cancel" style="flex:1;" onclick="closeModal()">❌ Cancelar</button>
+                <button class="btn btn-save" style="flex:2;" onclick="saveTaskRange()">💾 Guardar Tarea</button>
             </div>
         </div>
     </div>
