@@ -45,8 +45,9 @@
         .lunch-row { background: repeating-linear-gradient(45deg, #181818, #181818 10px, #202020 10px, #202020 20px); }
         .weekend-col { background: rgba(255, 255, 255, 0.02); }
 
-        /* MODIFICADO: Las tarjetas ahora son flexibles para apilarse si hay varias */
-        .task-card { flex: 1; min-height: 42px; width: 100%; background: #2d2d2d; border-left: 4px solid #555; border-radius: 4px; padding: 4px; font-size: 0.8em; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; flex-shrink: 0; z-index: 2; position: relative; }
+        /* MODIFICADO: Las tarjetas ahora son flexibles para apilarse si hay varias. Agregado hover para expandir. */
+        .task-card { flex: 1; min-height: 42px; width: 100%; background: #2d2d2d; border-left: 4px solid #555; border-radius: 4px; padding: 4px; font-size: 0.8em; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; flex-shrink: 0; z-index: 2; position: relative; transition: min-height 0.2s ease, background 0.2s ease, box-shadow 0.2s ease; }
+        .task-card:hover { min-height: 90px; background: #383838; box-shadow: 0 4px 15px rgba(0,0,0,0.8); z-index: 10; }
         .task-card.running { background: #1a3320; border-left-color: #00ff00 !important; animation: pulse 2s infinite; }
         .task-card.done { opacity: 0.5; text-decoration: line-through; filter: grayscale(1); }
         
@@ -861,8 +862,8 @@
 
             const { breakdown, total } = getCostBreakdownFromUI();
 
-            const dateStart = new Date(document.getElementById('inpDateStart').value);
-            const dateEnd = new Date(document.getElementById('inpDateEnd').value);
+            const dateStart = new Date(document.getElementById('inpDateStart').value + "T00:00:00");
+            const dateEnd = new Date(document.getElementById('inpDateEnd').value + "T00:00:00");
             const hStart = parseInt(document.getElementById('inpStartHour').value);
             const hEnd = parseInt(document.getElementById('inpEndHour').value);
             const editId = document.getElementById('editingGroupId').value;
@@ -1084,8 +1085,8 @@
             const startInput = document.getElementById('inpDateStart');
             const endInput = document.getElementById('inpDateEnd');
             
-            const oldStart = new Date(startInput.value);
-            const oldEnd = new Date(endInput.value);
+            const oldStart = new Date(startInput.value + "T00:00:00");
+            const oldEnd = new Date(endInput.value + "T00:00:00");
             const diffTime = Math.abs(oldEnd - oldStart);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
             
@@ -1098,7 +1099,7 @@
             // Ajustar la fecha "Hasta" de recurrencia si existe
             const repeatUntilInput = document.getElementById('inpRepeatUntil');
             if(repeatUntilInput.value) {
-                const oldUntil = new Date(repeatUntilInput.value);
+                const oldUntil = new Date(repeatUntilInput.value + "T00:00:00");
                 const diffUntilTime = Math.abs(oldUntil - oldStart);
                 const diffUntilDays = Math.ceil(diffUntilTime / (1000 * 60 * 60 * 24));
                 const newUntil = new Date(today);
