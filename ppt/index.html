@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Vela - Mantenimiento</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" id="manifest-link">
+    <meta name="theme-color" content="#1e293b">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS/dist/pptxgen.bundle.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: #f8fafc; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .vela-bar { transition: width 0.5s ease-in-out; }
+        .boxplot-dot { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .boxplot-dot:hover { transform: scale(1.5) translateX(-33%); z-index: 50; box-shadow: 0 0 10px rgba(0,0,0,0.3); }
+        .boxplot-dot.right-dot:hover { transform: scale(1.5) translateX(33%); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+        const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const KEYWORDS = ['impresora', 'imprenta', 'corrugadora'];
+
+        // --- ESCUDO ANTI ERRORES (Error Boundary) ---
+        class ErrorBoundary extends React.Component {
+            constructor(props) { super(props); this.state = { hasError: false, errorInfo: null }; }
+            static getDerivedStateFromError(error) { return { hasError: true, errorInfo: error.toString() }; }
+            componentDidCatch(error, errorInfo) { console.error("Error:", error, errorInfo); }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-red-50 p-8">
+                            <div className="bg-white p-6 rounded-xl shadow-xl max-w-2xl border border-red-200">
+                                <h1 className="text-2xl font-bold text-red-600 mb-4">Fallo Crítico Evitado</h1>
+                                <pre className="bg-gray-100 p-4 rounded text-sm text-red-800 whitespace-pre-wrap">{this.state.errorInfo}</pre>
+                                <button onClick={() => window.location.reload()} className="mt-6 bg-red-600 text-white px-4 py-2 rounded">Recargar</button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        function App() {
+            const [rawData, setRawData] = useState([]);
+            const [years, setYears] = useState([]);
+            const [selectedYear, setSelectedYear] = useState('');
+            const [selectedExceptions, setSelectedExceptions] = useState([]);
+            const [debugMsg, setDebugMsg] = useState(null);
+            
+            // --- NUEVOS ESTADOS PARA EL GESTOR ---
+            const [customNames, setCustomNames] = useState({}); // Mapeo: { "Nombre Original": "Nombre Personalizado" }
+            const [isManagerOpen, setIsManagerOpen] = useState(false);
+            const [managerFilter, setManagerFilter] = useState('terceros'); // 'terceros' | 'extraidas' | 'todas'
+            
+            const [activeTab, setActiveTab] = useState('divergent');
+            const exportRef = useRef(null);
+
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, []);
+
+            // LECTOR DE DATOS
+            const processData = useCallback((dataRows) => {
+                let validData = [];
+                let availableYears = new Set();
+
+                for (let i = 0; i < dataRows.length; i++) {
+                    const row = dataRows[i];
+                    const fechaStr = row['Fecha Contabilizacion'];
+                    const valorStr = row['Valor Salida'];
+                    const maquinaStr = row['Maquinaria'];
+
+                    if (!fechaStr || !valorStr) continue;
+
+                    try {
+                        const dateParts = fechaStr.toString().split('/');
+                        if (dateParts.length !== 3) continue;
+                        
+                        const month = parseInt(dateParts[1], 10) - 1; 
+                        let year = dateParts[2].trim();
+                        if (year.includes(' ')) year = year.split(' ')[0];
+                        if (isNaN(month) || month < 0 || month > 11 || !year) continue;
+
+                        let vStr = valorStr.toString().trim().replace(/^"|"$/g, '').replace(/\./g, '').replace(/,/g, '.');
+                        const val = parseFloat(vStr);
+                        if (isNaN(val)) continue;
+
+                        let machine = maquinaStr ? maquinaStr.toString().trim().replace(/^"|"$/g, '') : 'Desconocido';
+
+                        availableYears.add(year);
+                        validData.push({ year, month, machine, value: val });
+                    } catch (e) { /* ignorar fila mala */ }
+                }
+
+                if (validData.length === 0) {
+                    setDebugMsg("No pude encontrar registros válidos.");
+                    return;
+                }
+
+                const sortedYears = Array.from(availableYears).sort((a,b)=>b-a);
+                
+                setTimeout(() => {
+                    setRawData(validData);
+                    setYears(sortedYears);
+                    setSelectedYear(sortedYears[0] || '');
+                    setDebugMsg(`Archivo procesado: ${validData.length} registros.`);
+                    setTimeout(() => setDebugMsg(null), 4000);
+                }, 100);
+
+            }, []);
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setDebugMsg("Leyendo archivo...");
+                Papa.parse(file, {
+                    header: true, skipEmptyLines: true, dynamicTyping: false, 
+                    complete: (results) => processData(results.data),
+                    error: (err) => setDebugMsg("Error: " + err.message)
+                });
+                e.target.value = null; 
+            };
+
+            // --- LÓGICA DE RENOMBRAMIENTO Y AGRUPACIÓN ---
+            const handleRename = (originalName, newName) => {
+                setCustomNames(prev => {
+                    const next = { ...prev };
+                    if (!newName || newName.trim() === '') {
+                        delete next[originalName];
+                    } else {
+                        next[originalName] = newName.trim();
+                    }
+                    return next;
+                });
+            };
+
+            const toggleException = (machine) => {
+                setSelectedExceptions(prev => prev.includes(machine) ? prev.filter(m => m !== machine) : [...prev, machine]);
+            };
+
+            // Preparar listado para el Gestor de Máquinas (Modal)
+            const allMachinesStats = useMemo(() => {
+                if (!rawData.length || !selectedYear) return [];
+                const filtered = rawData.filter(d => d.year === selectedYear);
+                const map = {};
+                
+                filtered.forEach(d => {
+                    if(!map[d.machine]) map[d.machine] = 0;
+                    map[d.machine] += d.value;
+                });
+
+                return Object.keys(map).map(original => {
+                    const display = customNames[original] || original;
+                    const dLower = display.toLowerCase();
+                    const oLower = original.toLowerCase();
+                    const hasKeyword = KEYWORDS.some(k => dLower.includes(k) || oLower.includes(k));
+                    const isExtracted = hasKeyword || selectedExceptions.includes(original);
+                    
+                    return { original, display, value: map[original], isExtracted, hasKeyword };
+                }).sort((a,b) => b.value - a.value);
+            }, [rawData, selectedYear, customNames, selectedExceptions]);
+
+
+            // Filtrar, agrupar y calcular ESTADÍSTICAS PARA GRAFICAS Y TABLAS
+            const processedData = useMemo(() => {
+                if (!rawData.length || !selectedYear) return null;
+
+                const filtered = rawData.filter(d => d.year === selectedYear);
+                if (filtered.length === 0) return null;
+
+                let grandTotal = 0;
+                const machineTotals = {};
+                const monthTotals = Array(12).fill(0);
+                const matrix = {};
+
+                filtered.forEach(d => {
+                    const originalName = d.machine;
+                    const displayName = customNames[originalName] || originalName;
+                    
+                    const dLower = displayName.toLowerCase();
+                    const oLower = originalName.toLowerCase();
+                    
+                    const isMain = KEYWORDS.some(k => dLower.includes(k) || oLower.includes(k)) || selectedExceptions.includes(originalName);
+                    
+                    const groupedMachine = isMain ? displayName : 'Terceros procesos';
+
+                    if (!machineTotals[groupedMachine]) machineTotals[groupedMachine] = 0;
+                    if (!matrix[groupedMachine]) matrix[groupedMachine] = Array(12).fill(0);
+
+                    machineTotals[groupedMachine] += d.value;
+                    monthTotals[d.month] += d.value;
+                    matrix[groupedMachine][d.month] += d.value;
+                    grandTotal += d.value;
+                });
+
+                const machineArr = Object.keys(machineTotals).map(k => ({
+                    id: `mach-${k.replace(/[^a-zA-Z0-9]/g, '-')}`, name: k, value: machineTotals[k],
+                    percent: grandTotal > 0 ? (machineTotals[k] / grandTotal) * 100 : 0
+                })).sort((a, b) => b.value - a.value);
+
+                const monthArr = monthTotals.map((val, i) => ({
+                    id: `month-${i}`, name: MONTH_NAMES[i], value: val,
+                    percent: grandTotal > 0 ? (val / grandTotal) * 100 : 0
+                }));
+
+                const maxMachinePct = Math.max(...machineArr.map(m => m.percent), 0);
+                const maxMonthPct = Math.max(...monthArr.map(m => m.percent), 0);
+                const maxScale = Math.max(maxMachinePct, maxMonthPct, 10) * 1.5; 
+
+                // BoxPlot
+                const allValues = [...machineArr.map(m=>m.value), ...monthArr.map(m=>m.value)].sort((a,b) => a-b);
+                const getQuartile = (arr, q) => {
+                    if (arr.length === 0) return 0;
+                    const pos = (arr.length - 1) * q;
+                    const base = Math.floor(pos);
+                    const rest = pos - base;
+                    if (arr[base + 1] !== undefined) return arr[base] + rest * (arr[base + 1] - arr[base]);
+                    return arr[base];
+                };
+
+                const stats = {
+                    min: allValues[0] || 0,
+                    q1: getQuartile(allValues, 0.25),
+                    median: getQuartile(allValues, 0.50),
+                    q3: getQuartile(allValues, 0.75),
+                    max: allValues[allValues.length - 1] || 0
+                };
+
+                const chartMaxY = stats.max > 0 ? stats.max * 1.05 : 100;
+
+                return { machineArr, monthArr, grandTotal, maxScale, matrix, stats, chartMaxY };
+            }, [rawData, selectedYear, customNames, selectedExceptions]);
+
+
+            const formatMoney = (val) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(val);
+            
+            const getTableDataArray = () => {
+                if(!processedData) return [];
+                const headers = ['Máquina o Maquinaria', ...MONTH_NAMES, 'Total Acumulado'];
+                const rows = processedData.machineArr.map(m => [m.name, ...processedData.matrix[m.name].map(v => v.toFixed(2)), m.value.toFixed(2)]);
+                return [headers, ...rows];
+            };
+
+            const exportCSV = () => {
+                const csv = Papa.unparse(getTableDataArray());
+                const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); link.download = `Vela_${selectedYear}.csv`; link.click();
+            };
+            const exportXLS = () => {
+                const ws = XLSX.utils.aoa_to_sheet(getTableDataArray()); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Vela"); XLSX.writeFile(wb, `Vela_${selectedYear}.xlsx`);
+            };
+            const exportPDF = () => {
+                html2pdf().set({ margin: 0.5, filename: `Vela_${selectedYear}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' } }).from(exportRef.current).save();
+            };
+            const exportPPTX = async () => {
+                let pres = new pptxgen(); let slide = pres.addSlide();
+                slide.addText(`Análisis de Salidas Vela - ${selectedYear}`, { x:0.5, y:0.5, w:'90%', h:0.5, fontSize: 24, bold: true, color: '1e293b' });
+                const chartElement = document.getElementById('exportable-chart');
+                if(chartElement) { const canvas = await html2canvas(chartElement); slide.addImage({ data: canvas.toDataURL('image/png'), x: 0.5, y: 1.2, w: 9, h: 3 }); }
+                let slide2 = pres.addSlide(); slide2.addTable(getTableDataArray(), { x: 0.5, y: 0.5, w: 9, fontSize: 10, border: {type:'solid', color:'cccccc'}, fill: 'f8fafc' });
+                pres.writeFile({ fileName: `Vela_${selectedYear}.pptx` });
+            };
+
+            const getPosPct = (val) => {
+                if (!processedData || processedData.chartMaxY === 0) return 100;
+                return 5 + ((1 - (val / processedData.chartMaxY)) * 90);
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 flex flex-col items-center">
+                    
+                    {/* MODAL GESTOR DE MÁQUINAS (Emergente) */}
+                    {isManagerOpen && (
+                        <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+                                
+                                {/* Header Modal */}
+                                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-slate-50">
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                                            Gestor de Terceros y Agrupaciones
+                                        </h3>
+                                        <p className="text-sm text-slate-500 mt-1">Cambia nombres para agrupar máquinas o extráelas de "Terceros procesos".</p>
+                                    </div>
+                                    <button onClick={() => setIsManagerOpen(false)} className="bg-slate-200 hover:bg-red-500 hover:text-white text-slate-600 p-2 rounded-full transition">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+                                    </button>
+                                </div>
+
+                                {/* Filtros Modal */}
+                                <div className="px-6 py-4 bg-white border-b border-gray-100 flex gap-3">
+                                    <button onClick={() => setManagerFilter('terceros')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors ${managerFilter === 'terceros' ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-slate-100 text-slate-600'}`}>Solo en Terceros</button>
+                                    <button onClick={() => setManagerFilter('extraidas')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors ${managerFilter === 'extraidas' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-600'}`}>Máquinas Extraídas</button>
+                                    <button onClick={() => setManagerFilter('todas')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors ${managerFilter === 'todas' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'}`}>Ver Todas</button>
+                                </div>
+
+                                {/* Tabla Modal */}
+                                <div className="overflow-y-auto flex-1 p-6 bg-slate-50">
+                                    <table className="w-full text-left text-sm bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                                        <thead className="bg-slate-800 text-white text-xs uppercase">
+                                            <tr>
+                                                <th className="px-4 py-3 border-r border-slate-700 w-1/3">Nombre Original (Base de Datos)</th>
+                                                <th className="px-4 py-3 border-r border-slate-700 w-1/3">Nombre Deseado (Renombrar/Agrupar)</th>
+                                                <th className="px-4 py-3 border-r border-slate-700 text-right">Costo {selectedYear}</th>
+                                                <th className="px-4 py-3 text-center">Gestión</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {allMachinesStats.filter(m => {
+                                                if (managerFilter === 'terceros') return !m.isExtracted;
+                                                if (managerFilter === 'extraidas') return m.isExtracted;
+                                                return true;
+                                            }).map(m => (
+                                                <tr key={`modal-${m.original}`} className="hover:bg-blue-50 transition-colors">
+                                                    <td className="px-4 py-3 font-medium text-slate-500 border-r border-gray-100" title={m.original}>
+                                                        {m.original}
+                                                    </td>
+                                                    <td className="px-4 py-2 border-r border-gray-100">
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-slate-800 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                            defaultValue={m.display !== m.original ? m.display : ''}
+                                                            placeholder={m.original}
+                                                            onBlur={(e) => handleRename(m.original, e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-slate-700 border-r border-gray-100">
+                                                        {formatMoney(m.value)}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        {m.hasKeyword ? (
+                                                            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded font-bold border border-emerald-200">Extraído (Automático)</span>
+                                                        ) : m.isExtracted ? (
+                                                            <button onClick={() => toggleException(m.original)} className="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-3 py-1 rounded font-bold border border-orange-300 transition-colors">Regresar a Terceros</button>
+                                                        ) : (
+                                                            <button onClick={() => toggleException(m.original)} className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded font-bold border border-blue-300 transition-colors">Extraer (Separar)</button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {allMachinesStats.filter(m => managerFilter === 'terceros' ? !m.isExtracted : managerFilter === 'extraidas' ? m.isExtracted : true).length === 0 && (
+                                                <tr>
+                                                    <td colSpan="4" className="text-center py-8 text-gray-400 font-medium">No hay registros en esta vista.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+
+                    {/* PANEL DE CONTROL SUPERIOR */}
+                    <div className="w-full max-w-[1400px] bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>
+                                Dashboard Vela
+                            </h1>
+
+                            <div className="flex flex-wrap items-center gap-3">
+                                <label className="cursor-pointer bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition flex items-center gap-2 text-sm font-semibold">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                                    Subir CSV
+                                    <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                                </label>
+
+                                {years.length > 0 && (
+                                    <select className="border border-gray-300 rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
+                                        {years.map(y => <option key={y} value={y}>Año {y}</option>)}
+                                    </select>
+                                )}
+
+                                {/* BOTÓN PARA ABRIR EL GESTOR */}
+                                {rawData.length > 0 && (
+                                    <button 
+                                        onClick={() => setIsManagerOpen(true)} 
+                                        className="bg-orange-50 border border-orange-300 text-orange-800 px-4 py-2 rounded-lg hover:bg-orange-100 transition flex items-center gap-2 text-sm font-bold shadow-sm"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                        Detalle y Gestor de Terceros
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {debugMsg && (
+                        <div className="w-full max-w-[1400px] bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-6 flex items-start gap-3 transition-opacity">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                            <span className="font-medium">{debugMsg}</span>
+                        </div>
+                    )}
+
+                    {!processedData ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 mt-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-4 opacity-50"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>
+                            <p className="text-lg text-center max-w-md">Sube tu archivo CSV.<br/>Podrás visualizar los datos en Vela Divergente o Vela de Cuartiles (BoxPlot).</p>
+                        </div>
+                    ) : (
+                        <div ref={exportRef} className="w-full max-w-[1400px] bg-white p-6 md:p-10 rounded-xl shadow-lg relative">
+                            
+                            {/* ENCABEZADO Y PESTAÑAS */}
+                            <div className="mb-8 border-b border-gray-200 pb-4">
+                                <div className="text-center mb-6">
+                                    <h2 className="text-3xl font-black text-slate-800 uppercase tracking-wide">Comportamiento de Salidas {selectedYear}</h2>
+                                    <p className="text-slate-500 font-medium text-lg mt-1">Total Acumulado Anual: <span className="text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded-full">{formatMoney(processedData.grandTotal)}</span></p>
+                                </div>
+                                
+                                <div className="flex justify-center gap-4">
+                                    <button onClick={() => setActiveTab('divergent')} className={`px-6 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'divergent' ? 'bg-slate-800 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg> Gráfico Divergente
+                                    </button>
+                                    <button onClick={() => setActiveTab('boxplot')} className={`px-6 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'boxplot' ? 'bg-slate-800 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><rect x="8" y="6" width="8" height="12" rx="1"/></svg> Vela BoxPlot (Cuartiles)
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="exportable-chart" className="mb-12">
+                                
+                                {/* T A B   1 */}
+                                {activeTab === 'divergent' && (
+                                    <div className="relative w-full pt-4">
+                                        <div className="flex justify-between text-sm font-bold text-gray-400 mb-4 border-b-2 border-slate-200 pb-2 relative z-10">
+                                            <span className="w-1/2 text-left pl-2 uppercase tracking-wider text-slate-500">Máquinas y Equipos</span>
+                                            <span className="absolute left-1/2 -translate-x-1/2 bg-slate-800 text-white px-3 py-0.5 rounded-full text-xs shadow-md">0% Eje Central</span>
+                                            <span className="w-1/2 text-right pr-2 uppercase tracking-wider text-slate-500">Meses del Año</span>
+                                        </div>
+                                        <div className="flex w-full items-start">
+                                            <div className="w-1/2 border-r-[3px] border-slate-800 pr-1 flex flex-col gap-3">
+                                                {processedData.machineArr.map((m) => (
+                                                    <div key={m.id} className="group relative flex items-center justify-end h-10 w-full hover:bg-slate-50 rounded">
+                                                        <div className="absolute left-0 right-2 flex justify-between items-center z-10 pointer-events-none w-full px-2">
+                                                            <span className="text-xs font-bold text-slate-700 bg-white/80 px-1 rounded shadow-sm">{formatMoney(m.value)} | {m.percent.toFixed(1)}%</span>
+                                                            <span className="text-sm font-black text-slate-800 truncate max-w-[50%] drop-shadow-md text-right pl-2">{m.name}</span>
+                                                        </div>
+                                                        <div className="relative h-full flex items-center justify-end" style={{ width: `${(m.percent / processedData.maxScale) * 100}%` }}>
+                                                            <div className="absolute right-0 top-1 bottom-1 bg-gradient-to-l from-blue-600 to-cyan-400 rounded-l-md w-full shadow"></div>
+                                                        </div>
+                                                        <span className="absolute -right-10 text-[10px] font-bold text-blue-700 z-20 opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 rounded border border-blue-200">{m.percent.toFixed(1)}%</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="w-1/2 pl-1 flex flex-col gap-3">
+                                                {processedData.monthArr.map((m) => (
+                                                    <div key={m.id} className="group relative flex items-center justify-start h-10 w-full hover:bg-slate-50 rounded">
+                                                        <div className="absolute left-2 right-0 flex justify-between items-center z-10 pointer-events-none w-full px-2">
+                                                            <span className="text-sm font-black text-slate-800 drop-shadow-md text-left pr-2">{m.name}</span>
+                                                            <span className="text-xs font-bold text-slate-700 bg-white/80 px-1 rounded shadow-sm text-right">{m.percent.toFixed(1)}% | {formatMoney(m.value)}</span>
+                                                        </div>
+                                                        <div className="relative h-full flex items-center justify-start" style={{ width: `${(m.percent / processedData.maxScale) * 100}%` }}>
+                                                            <div className="absolute left-0 top-1 bottom-1 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-r-md w-full shadow"></div>
+                                                        </div>
+                                                        <span className="absolute -left-10 text-[10px] font-bold text-emerald-700 z-20 opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 rounded border border-emerald-200">{m.percent.toFixed(1)}%</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+
+                                {/* T A B   2 */}
+                                {activeTab === 'boxplot' && (
+                                    <div className="w-full relative bg-slate-50 border border-slate-200 rounded-xl overflow-hidden" style={{ height: '600px' }}>
+                                        <div className="absolute top-4 left-0 right-0 flex justify-between px-10 text-sm font-bold text-slate-600 z-10">
+                                            <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full"></div> Máquinas (Borde Izquierdo)</div>
+                                            <div className="flex items-center gap-2">Meses (Borde Derecho) <div className="w-3 h-3 bg-emerald-500 rounded-full"></div></div>
+                                        </div>
+
+                                        {[ { label: 'Máx', val: processedData.stats.max }, { label: 'Q3 (75%)', val: processedData.stats.q3 }, { label: 'Mediana', val: processedData.stats.median }, { label: 'Q1 (25%)', val: processedData.stats.q1 }, { label: 'Mín', val: processedData.stats.min } ].map((line, idx) => (
+                                            <div key={idx} className="absolute left-0 right-0 border-t border-dashed border-slate-300 pointer-events-none" style={{ top: `${getPosPct(line.val)}%` }}>
+                                                <span className="absolute left-2 -top-5 text-[10px] font-bold text-slate-400 bg-white/80 px-1 rounded">{line.label}: {formatMoney(line.val)}</span>
+                                            </div>
+                                        ))}
+
+                                        <div className="absolute left-[50%] w-[2px] bg-slate-800 -translate-x-1/2 z-0" style={{ top: `${getPosPct(processedData.stats.max)}%`, bottom: `${100 - getPosPct(processedData.stats.min)}%` }}></div>
+                                        <div className="absolute left-[40%] right-[40%] bg-slate-200/60 border-2 border-slate-800 rounded shadow-sm z-10" style={{ top: `${getPosPct(processedData.stats.q3)}%`, height: `${getPosPct(processedData.stats.q1) - getPosPct(processedData.stats.q3)}%` }}></div>
+                                        <div className="absolute left-[40%] right-[40%] h-[3px] bg-slate-900 z-10" style={{ top: `${getPosPct(processedData.stats.median)}%` }}></div>
+
+                                        {processedData.machineArr.map(m => (
+                                            <div key={`bp-mach-${m.id}`} className="absolute left-[40%] w-4 h-4 bg-blue-500 rounded-full border-2 border-white cursor-pointer boxplot-dot group z-20" style={{ top: `calc(${getPosPct(m.value)}% - 8px)`, transform: 'translateX(-50%)' }}>
+                                                 <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center pointer-events-none whitespace-nowrap">
+                                                    <div className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded shadow-xl flex flex-col items-end"><strong className="font-black text-blue-300">{m.name}</strong><span>{formatMoney(m.value)}</span></div>
+                                                    <div className="w-2 h-2 bg-slate-800 rotate-45 -ml-1"></div>
+                                                 </div>
+                                            </div>
+                                        ))}
+                                        {processedData.monthArr.map(m => (
+                                            <div key={`bp-mo-${m.id}`} className="absolute left-[60%] w-4 h-4 bg-emerald-500 rounded-full border-2 border-white cursor-pointer boxplot-dot right-dot group z-20" style={{ top: `calc(${getPosPct(m.value)}% - 8px)`, transform: 'translateX(-50%)' }}>
+                                                 <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center pointer-events-none whitespace-nowrap">
+                                                    <div className="w-2 h-2 bg-slate-800 rotate-45 -mr-1"></div>
+                                                    <div className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded shadow-xl flex flex-col items-start"><strong className="font-black text-emerald-300">{m.name}</strong><span>{formatMoney(m.value)}</span></div>
+                                                 </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* CONTROLES DE EXPORTACIÓN */}
+                            <div className="mb-6 flex flex-wrap gap-2 pt-4 border-t border-gray-100 justify-end">
+                                <span className="text-sm font-semibold text-gray-500 flex items-center mr-2">Exportar Vista Actual:</span>
+                                <button onClick={exportPDF} className="bg-red-50 text-red-600 px-3 py-1.5 rounded border border-red-200 hover:bg-red-100 flex items-center gap-1 text-sm font-medium transition">PDF</button>
+                                <button onClick={exportXLS} className="bg-green-50 text-green-600 px-3 py-1.5 rounded border border-green-200 hover:bg-green-100 flex items-center gap-1 text-sm font-medium transition">Excel</button>
+                                <button onClick={exportCSV} className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 flex items-center gap-1 text-sm font-medium transition">CSV</button>
+                                <button onClick={exportPPTX} className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded border border-orange-200 hover:bg-orange-100 flex items-center gap-1 text-sm font-medium transition">PPTX</button>
+                            </div>
+
+                            {/* TABLA DE 14 COLUMNAS */}
+                            <div className="overflow-x-auto rounded-lg border border-slate-300 shadow-sm">
+                                <table className="w-full text-sm text-left text-gray-600 min-w-[1200px]">
+                                    <thead className="text-xs text-white uppercase bg-slate-800">
+                                        <tr>
+                                            <th className="px-4 py-4 border-r border-slate-700 w-1/5">Máquina o Maquinaria</th>
+                                            {MONTH_NAMES.map(m => ( <th key={`th-${m}`} className="px-2 py-4 border-r border-slate-700 text-center w-[6%]">{m}</th> ))}
+                                            <th className="px-4 py-4 text-right bg-blue-700 w-auto">Total Acumulado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {processedData.machineArr.map((machine) => (
+                                            <tr key={`tr-${machine.id}`} className="bg-white hover:bg-blue-50 transition-colors">
+                                                <td className="px-4 py-3 font-bold text-slate-800 border-r border-gray-200">{machine.name}</td>
+                                                {processedData.matrix[machine.name].map((val, i) => (
+                                                    <td key={`td-${machine.id}-${i}`} className="px-2 py-3 text-center border-r border-gray-200 text-xs font-medium">{val > 0 ? formatMoney(val) : <span className="text-gray-300">-</span>}</td>
+                                                ))}
+                                                <td className="px-4 py-3 font-black text-right text-blue-800 bg-blue-50/50">{formatMoney(machine.value)}</td>
+                                            </tr>
+                                        ))}
+                                        <tr className="bg-slate-100 font-bold border-t-[3px] border-slate-400">
+                                            <td className="px-4 py-4 text-slate-900 border-r border-gray-300 uppercase">Totales por Mes</td>
+                                            {processedData.monthArr.map((m) => (
+                                                <td key={`td-total-${m.id}`} className="px-2 py-4 text-center border-r border-gray-300 text-xs text-slate-800">{m.value > 0 ? formatMoney(m.value) : '-'}</td>
+                                            ))}
+                                            <td className="px-4 py-4 text-right text-slate-900 bg-slate-300 text-base">{formatMoney(processedData.grandTotal)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ErrorBoundary><App /></ErrorBoundary>);
+
+        // PWA Offline
+        const manifestData = { name: "Dashboard Vela", short_name: "Vela", start_url: ".", display: "standalone", background_color: "#f8fafc", theme_color: "#1e293b", description: "Análisis de salidas de bodega", icons: [{ src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibHVlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE4IDIwdjRtLTQtNG0wIDBINnYtNG0wIDBWMG0xMiAyMHYtNG0wIDBWMCIvPjwvc3ZnPg==", sizes: "192x192", type: "image/svg+xml" }] };
+        const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+        document.getElementById('manifest-link').href = URL.createObjectURL(manifestBlob);
+
+        if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+            const swCode = `const CACHE_NAME = 'vela-cache-v6'; self.addEventListener('install', event => { self.skipWaiting(); }); self.addEventListener('fetch', event => { event.respondWith( caches.match(event.request).then(response => { return response || fetch(event.request).then(res => { return caches.open(CACHE_NAME).then(cache => { if (event.request.method === 'GET' && event.request.url.startsWith('http')) { cache.put(event.request, res.clone()); } return res; }); }); }).catch(() => new Response('Offline - No hay conexión')) ); });`;
+            navigator.serviceWorker.register(URL.createObjectURL(new Blob([swCode], { type: 'application/javascript' })));
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard OEE y Costos - Mantenimiento 2025</title>
+    <!-- Tailwind CSS para diseño UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Plotly.js para la Vela Maestra -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- SheetJS para leer Excel, CSV, HTML localmente -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- PptxGenJS para exportar a Presentaciones (Compatible con Google Slides) -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        industrial: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 600: '#475569', 800: '#1e293b', 900: '#0f172a' },
+                        brand: { blue: '#1E3A8A', red: '#B91C1C', green: '#15803D', lightBlue: '#E3F2FD', orange: '#E65100', lightOrange: '#FFF3E0' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: #f1f5f9; }
+        .file-input-wrapper { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; width: 100%; transition: all 0.3s ease; }
+        .file-input-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; height: 100%; width: 100%; z-index: 10;}
+        .file-input-wrapper:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .file-loaded { background-color: #f0fdf4 !important; border-color: #86efac !important; color: #166534 !important; }
+        .btn-config { position: absolute; right: 8px; top: 8px; z-index: 20; padding: 4px; border-radius: 4px; background: white; border: 1px solid #ccc; cursor: pointer; }
+        .btn-config:hover { background: #e2e8f0; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Custom scrollbar para las listas de checkboxes */
+        .checkbox-list::-webkit-scrollbar { width: 6px; }
+        .checkbox-list::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 3px; }
+    </style>
+</head>
+<body class="text-industrial-800 h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="bg-industrial-900 text-white p-4 shadow-md flex justify-between items-center z-10 shrink-0">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight">OEE Master Dashboard</h1>
+            <p class="text-sm text-industrial-200 opacity-80">Mantenimiento 2025 - Agrupación Inteligente</p>
+        </div>
+        <div class="flex gap-2 flex-wrap justify-end">
+            <button id="btn-clear-data" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm">
+                🗑️ Borrar Datos
+            </button>
+            <button id="btn-export-slides" class="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path></svg>
+                Exportar a Slides
+            </button>
+            <button id="btn-export-csv" class="bg-industrial-600 hover:bg-industrial-500 px-3 py-2 rounded font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Exportar CSV
+            </button>
+            <button id="btn-install" class="hidden bg-brand-green hover:bg-green-600 px-3 py-2 rounded font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm">
+                Instalar App
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        
+        <!-- Sidebar: Importación y Filtros -->
+        <aside class="w-full lg:w-1/4 xl:w-1/5 bg-white border-r border-industrial-200 p-5 overflow-y-auto shadow-inner flex flex-col gap-5 shrink-0">
+            
+            <div class="border-b border-industrial-100 pb-4">
+                <h2 class="font-bold text-lg mb-1 text-industrial-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                    Importar y Mapear
+                </h2>
+                <p class="text-xs text-industrial-600 mb-4">Sube tus archivos. Usa el ⚙️ para agrupar máquinas o aplicar filtros.</p>
+                
+                <div class="mb-4 bg-industrial-50 p-3 rounded-lg border border-industrial-200 shadow-sm">
+                    <label for="year-selector" class="block text-sm font-bold text-industrial-800 mb-1">Año a analizar:</label>
+                    <select id="year-selector" class="w-full p-2 rounded border border-gray-300 text-sm font-semibold bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                    </select>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="file-input-wrapper bg-blue-50 border border-blue-200 text-brand-blue rounded-lg p-3 text-center" id="wrapper-ot">
+                        <span class="font-semibold text-sm block" id="label-ot">1. Archivo OEE / OT</span>
+                        <input type="file" id="file-ot" accept=".csv,.xls,.xlsx,.html">
+                        <button id="config-ot" class="btn-config hidden" onclick="openMappingModal('ot')" title="Configurar Filtros y Columnas">⚙️</button>
+                    </div>
+                    <div class="file-input-wrapper bg-industrial-50 border border-industrial-200 text-industrial-600 rounded-lg p-3 text-center" id="wrapper-mat">
+                        <span class="font-semibold text-sm block" id="label-mat">2. Salidas de Bodega</span>
+                        <input type="file" id="file-mat" accept=".csv,.xls,.xlsx,.html">
+                        <button id="config-mat" class="btn-config hidden" onclick="openMappingModal('mat')" title="Configurar Filtros y Columnas">⚙️</button>
+                    </div>
+                    <div class="file-input-wrapper bg-industrial-50 border border-industrial-200 text-industrial-600 rounded-lg p-3 text-center" id="wrapper-mo">
+                        <span class="font-semibold text-sm block" id="label-mo">3. Mano de Obra</span>
+                        <input type="file" id="file-mo" accept=".csv,.xls,.xlsx,.html">
+                        <button id="config-mo" class="btn-config hidden" onclick="openMappingModal('mo')" title="Configurar Filtros y Columnas">⚙️</button>
+                    </div>
+                    <div class="file-input-wrapper bg-industrial-50 border border-industrial-200 text-industrial-600 rounded-lg p-3 text-center" id="wrapper-otros">
+                        <span class="font-semibold text-sm block" id="label-otros">4. Otros Gastos</span>
+                        <input type="file" id="file-otros" accept=".csv,.xls,.xlsx,.html">
+                        <button id="config-otros" class="btn-config hidden" onclick="openMappingModal('otros')" title="Configurar Filtros y Columnas">⚙️</button>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-process" class="w-full bg-brand-blue hover:bg-blue-800 text-white py-3 rounded-lg font-bold shadow-md transition-all flex justify-center items-center gap-2">
+                Procesar y Graficar
+            </button>
+
+            <!-- Resumen Rápido -->
+            <div class="bg-industrial-50 border border-industrial-200 p-4 rounded-lg mt-auto shadow-sm">
+                <h3 class="font-bold text-sm mb-3 text-industrial-800 border-b pb-1">Análisis Global</h3>
+                <div class="flex justify-between text-sm mb-2 items-center">
+                    <span class="text-industrial-600">Mediana OEE:</span> 
+                    <span id="res-mediana" class="font-bold text-brand-blue text-lg bg-blue-100 px-2 rounded">--%</span>
+                </div>
+                <div class="flex justify-between text-sm items-center mt-3 pt-2 border-t border-gray-200">
+                    <span class="text-industrial-600">Gasto Anual Mto:</span> 
+                    <span id="res-gasto-total" class="font-bold text-brand-red text-md truncate text-right">Q0.00</span>
+                </div>
+                <div class="flex justify-between text-sm items-center mt-1">
+                    <span class="text-industrial-600">Gasto Excluido:</span> 
+                    <span id="res-gasto-proyectos" class="font-bold text-brand-orange text-md truncate text-right">Q0.00</span>
+                </div>
+            </div>
+
+            <button onclick="openDataTableModal()" class="w-full bg-industrial-600 hover:bg-industrial-700 text-white py-2 rounded-lg font-bold shadow-md transition-all flex justify-center items-center gap-2">
+                📋 Ver Tabla y Extraer Filas
+            </button>
+        </aside>
+
+        <!-- Chart Area con Pestañas (Tabs) -->
+        <section class="w-full lg:w-3/4 xl:w-4/5 bg-industrial-100 p-4 lg:p-6 flex flex-col relative overflow-hidden">
+            
+            <!-- CONTROLES DE PESTAÑAS -->
+            <div class="flex border-b border-gray-300 mb-4 bg-white rounded-t-lg shadow-sm">
+                <button id="btn-tab-oee" onclick="switchTab('oee')" class="flex-1 py-3 px-6 text-sm font-bold border-b-4 border-brand-blue text-brand-blue focus:outline-none transition-colors">
+                    📊 Vela Maestra: OEE
+                </button>
+                <button id="btn-tab-costos" onclick="switchTab('costos')" class="flex-1 py-3 px-6 text-sm font-bold border-b-4 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none transition-colors">
+                    💰 Vela Maestra: Consumos Financieros
+                </button>
+            </div>
+
+            <!-- CONTENEDORES DE GRÁFICAS (Ancho Completo) -->
+            <div id="tab-oee" class="bg-white rounded-b-lg shadow-md border border-t-0 border-industrial-200 flex-1 flex flex-col p-2 relative min-h-[550px] w-full block">
+                <div id="master-candle-chart" class="w-full h-full min-h-[550px]"></div>
+            </div>
+
+            <div id="tab-costos" class="bg-white rounded-b-lg shadow-md border border-t-0 border-industrial-200 flex-1 flex flex-col p-2 relative min-h-[550px] w-full hidden">
+                <div id="costs-candle-chart" class="w-full h-full min-h-[550px]"></div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- MODAL DE MAPEADO Y FILTROS -->
+    <div id="mapping-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="bg-industrial-800 text-white p-4 flex justify-between items-center">
+                <h2 class="font-bold text-lg">Configurar Archivo: <span id="modal-filename" class="text-brand-lightBlue"></span></h2>
+                <button onclick="closeMappingModal()" class="text-gray-300 hover:text-white font-bold text-xl">&times;</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1 space-y-6">
+                
+                <!-- SELECCIÓN Y CATEGORIZACIÓN INTELIGENTE DE MÁQUINAS -->
+                <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                    <label class="block text-sm font-bold text-brand-blue mb-1">Filtrar y Categorizar Activos</label>
+                    <p class="text-xs text-blue-700 mb-2">Desmarca lo que no desees ver. Puedes cambiar el nombre de un activo a la derecha para agruparlo en una categoría (ej. agrupar varias cosas pequeñas bajo la palabra "Edificios").</p>
+                    
+                    <!-- Botonera de Agrupación Rápida -->
+                    <div class="flex gap-2 mb-3 bg-white p-2 rounded border border-blue-100 shadow-sm">
+                        <input type="text" id="bulk-category" placeholder="Ej: Gastos Generales" class="flex-1 p-1.5 text-xs border rounded focus:ring-1 focus:ring-brand-blue">
+                        <button type="button" onclick="applyBulkCategory()" class="bg-brand-blue text-white px-3 py-1.5 text-xs rounded hover:bg-blue-800 font-bold shadow-sm">Agrupar Seleccionados</button>
+                    </div>
+
+                    <!-- Lista de Checkboxes (Dinámica) -->
+                    <div id="map-maquinas-checkboxes" class="checkbox-list w-full max-h-48 overflow-y-auto border border-blue-300 rounded p-1 bg-white flex flex-col text-sm shadow-inner">
+                        <!-- Inyectados por JS -->
+                    </div>
+                    
+                    <div class="mt-2 flex gap-4">
+                        <button type="button" onclick="selectAllMachines(true)" class="text-xs font-bold text-brand-blue hover:text-blue-900 flex items-center gap-1"><span class="text-lg leading-none">✓</span> Marcar Todas</button>
+                        <button type="button" onclick="selectAllMachines(false)" class="text-xs font-bold text-brand-red hover:text-red-900 flex items-center gap-1"><span class="text-lg leading-none">✗</span> Desmarcar Todas</button>
+                    </div>
+                </div>
+
+                <!-- Sección 1: Mapeo de Columnas -->
+                <div>
+                    <h3 class="font-bold text-industrial-800 border-b pb-2 mb-3">1. Asignar Columnas Principales</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Activo/Máquina:</label>
+                            <select id="map-maquina" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Fecha/Mes:</label>
+                            <select id="map-fecha" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Valor OEE (%)</label>
+                            <select id="map-oee" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Columna de Costo/Gasto Monetario</label>
+                            <select id="map-costo" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white"></select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sección 2: Filtros Dinámicos -->
+                <div>
+                    <h3 class="font-bold text-industrial-800 border-b pb-2 mb-3 flex justify-between items-center">
+                        <span>2. Filtros Adicionales (Ej. Solo Darvin o Eléctrico)</span>
+                        <button onclick="addFilterRow()" class="text-xs bg-brand-green hover:bg-green-700 text-white px-2 py-1 rounded">+ Añadir Regla</button>
+                    </h3>
+                    <div id="filters-container" class="space-y-2">
+                        <!-- Las reglas de filtros aparecerán aquí -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 p-4 border-t flex justify-end gap-3">
+                <button onclick="closeMappingModal()" class="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-semibold text-sm">Cancelar</button>
+                <button onclick="saveMappingConfig()" class="px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded font-bold text-sm shadow">Guardar Configuración</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE TABLA DE DATOS PARA PROYECTOS -->
+    <div id="data-table-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="bg-industrial-800 text-white p-4 flex justify-between items-center">
+                <h2 class="font-bold text-lg">Revisión de Gastos y Extracción</h2>
+                <button onclick="closeDataTableModal()" class="text-gray-300 hover:text-white font-bold text-xl">&times;</button>
+            </div>
+            <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
+                <p class="text-sm text-gray-600">Marca la casilla <b>"Excluir"</b> para quitar un gasto del presupuesto general de mantenimiento (Gráfica). Esto mandará el costo al indicador de "Gasto Excluido".</p>
+            </div>
+            <div class="overflow-y-auto flex-1 p-0">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-100 text-gray-700 sticky top-0 shadow-sm">
+                        <tr>
+                            <th class="p-3 border-b">Activo / Categoría</th>
+                            <th class="p-3 border-b">Fecha</th>
+                            <th class="p-3 border-b">Detalle / Artículo</th>
+                            <th class="p-3 border-b text-right">Costo (GTQ)</th>
+                            <th class="p-3 border-b text-center">Excluir</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table-body" class="divide-y divide-gray-200">
+                        <!-- Las filas se inyectan aquí con JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="bg-gray-50 p-4 border-t flex justify-end gap-3">
+                <button onclick="closeDataTableModal()" class="px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded font-bold text-sm shadow">Cerrar y Actualizar Gráficas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LÓGICA JAVASCRIPT Y PWA -->
+    <script>
+        // --- PWA Initialization ---
+        const manifestJSON = { "name": "OEE Dashboard 2025", "short_name": "OEEDash", "start_url": ".", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#0f172a" };
+        const manifestBlob = new Blob([JSON.stringify(manifestJSON)], {type: 'application/json'});
+        const linkManifest = document.createElement('link'); linkManifest.rel = 'manifest'; linkManifest.href = URL.createObjectURL(manifestBlob);
+        document.head.appendChild(linkManifest);
+
+        if ('serviceWorker' in navigator) {
+            const swCode = `self.addEventListener('install', e => e.waitUntil(caches.open('oee-dash-v8').then(c => c.addAll([location.href])))); self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));`;
+            const swBlob = new Blob([swCode], {type: 'application/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(console.error);
+        }
+
+        // --- MANEJO DE PESTAÑAS (TABS) ---
+        function switchTab(tabId) {
+            const tabOee = document.getElementById('tab-oee');
+            const tabCostos = document.getElementById('tab-costos');
+            const btnOee = document.getElementById('btn-tab-oee');
+            const btnCostos = document.getElementById('btn-tab-costos');
+
+            if (tabId === 'oee') {
+                tabOee.classList.remove('hidden'); tabCostos.classList.add('hidden');
+                btnOee.classList.add('border-brand-blue', 'text-brand-blue'); btnOee.classList.remove('border-transparent', 'text-gray-500');
+                btnCostos.classList.add('border-transparent', 'text-gray-500'); btnCostos.classList.remove('border-brand-orange', 'text-brand-orange');
+                setTimeout(() => Plotly.Plots.resize('master-candle-chart'), 50);
+            } else {
+                tabCostos.classList.remove('hidden'); tabOee.classList.add('hidden');
+                btnCostos.classList.add('border-brand-orange', 'text-brand-orange'); btnCostos.classList.remove('border-transparent', 'text-gray-500');
+                btnOee.classList.add('border-transparent', 'text-gray-500'); btnOee.classList.remove('border-brand-blue', 'text-brand-blue');
+                setTimeout(() => Plotly.Plots.resize('costs-candle-chart'), 50);
+            }
+        }
+
+        // --- CORE DATA STRUCTURE ---
+        let appData = {
+            files: {
+                ot: { data: [], config: null, filename: '', headers: [] },
+                mat: { data: [], config: null, filename: '', headers: [] },
+                mo: { data: [], config: null, filename: '', headers: [] },
+                otros: { data: [], config: null, filename: '', headers: [] }
+            },
+            processedMachinesOEE: {}, processedMonthsOEE: {},
+            processedMachinesCost: {}, processedMonthsCost: {},
+            currentCostRows: []
+        };
+        
+        let currentModalKey = null; 
+        const availableYears = new Set(['2025', '2024', '2023']);
+
+        // --- INDEXEDDB MANAGER (PERSISTENCIA OFFLINE) ---
+        const dbManager = {
+            dbName: 'OEEDashboardDB',
+            storeName: 'appState',
+            init: function() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open(this.dbName, 1);
+                    req.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(this.storeName)) db.createObjectStore(this.storeName);
+                    };
+                    req.onsuccess = (e) => resolve(e.target.result);
+                    req.onerror = (e) => reject(e.target.error);
+                });
+            },
+            save: async function(key, data) {
+                const db = await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(this.storeName, 'readwrite');
+                    tx.objectStore(this.storeName).put(data, key);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            },
+            load: async function(key) {
+                const db = await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(this.storeName, 'readonly');
+                    const req = tx.objectStore(this.storeName).get(key);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            clear: async function() {
+                const db = await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(this.storeName, 'readwrite');
+                    tx.objectStore(this.storeName).clear();
+                    tx.oncomplete = () => resolve();
+                });
+            }
+        };
+
+        // --- UTILS ---
+        const parseLatamNumber = (str) => {
+            if (!str) return 0;
+            if (typeof str === 'number') return str;
+            const cleanStr = String(str).replace(/\./g, '').replace(',', '.');
+            return parseFloat(cleanStr) || 0;
+        };
+        const formatCurrency = (val) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(val);
+        const formatNumberShort = (val) => new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 }).format(val);
+        const parseDateInfo = (dateStr) => {
+            if(!dateStr) return null;
+            const parts = String(dateStr).split(/[\/\-]/); 
+            if(parts.length >= 3) {
+                const m = parseInt(parts[1]) - 1; 
+                let y = parts[2]; if (y.length > 4) y = y.substring(0,4);
+                const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+                if (m >= 0 && m <= 11) return { month: months[m], year: y.toString() };
+            }
+            return null;
+        };
+
+        const updateYearSelector = () => {
+            const selector = document.getElementById('year-selector');
+            const currentSelected = selector.value;
+            selector.innerHTML = '';
+            [...availableYears].sort().reverse().forEach(y => {
+                const opt = document.createElement('option'); opt.value = y; opt.text = y; selector.appendChild(opt);
+            });
+            if(availableYears.has(currentSelected)) selector.value = currentSelected;
+        };
+
+        // --- FILE PARSING & AUTO-DETECT ---
+        const setupFileInput = (inputId, labelId, wrapperId, storageKey, btnConfigId) => {
+            document.getElementById(inputId).addEventListener('change', function(e) {
+                const file = e.target.files[0]; if (!file) return;
+                
+                document.getElementById(labelId).innerHTML = `✓ ${file.name}`;
+                document.getElementById(wrapperId).classList.add('file-loaded');
+                document.getElementById(btnConfigId).classList.remove('hidden');
+                
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const data = new Uint8Array(evt.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                        
+                        if(jsonData.length === 0) throw new Error("Archivo vacío");
+
+                        const headers = Object.keys(jsonData[0]);
+                        
+                        appData.files[storageKey].data = jsonData;
+                        appData.files[storageKey].filename = file.name;
+                        appData.files[storageKey].headers = headers;
+
+                        const findMatch = (keywords) => headers.find(h => keywords.some(k => h.toLowerCase().includes(k))) || '';
+                        appData.files[storageKey].config = {
+                            mapMaquina: findMatch(['maquinaria', 'maquina', 'equipo', 'activo']),
+                            mapFecha: findMatch(['fecha', 'mes', 'date', 'contabilizacion']),
+                            mapOee: findMatch(['oee', 'eficiencia', 'rendimiento']),
+                            mapCosto: findMatch(['valor salida', 'costo', 'gasto', 'monto', 'total']),
+                            machineMapping: {},
+                            filters: []
+                        };
+
+                        jsonData.forEach(row => {
+                            const fechaCol = appData.files[storageKey].config.mapFecha;
+                            if (fechaCol && row[fechaCol]) {
+                                const dInfo = parseDateInfo(row[fechaCol]);
+                                if (dInfo) availableYears.add(dInfo.year);
+                            }
+                        });
+                        updateYearSelector();
+                        dbManager.save('appFiles', appData.files); // Guardar archivo en BD
+                        openMappingModal(storageKey);
+
+                    } catch (err) { alert(`Error al leer ${file.name}`); console.error(err); }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        };
+        
+        setupFileInput('file-ot', 'label-ot', 'wrapper-ot', 'ot', 'config-ot');
+        setupFileInput('file-mat', 'label-mat', 'wrapper-mat', 'mat', 'config-mat');
+        setupFileInput('file-mo', 'label-mo', 'wrapper-mo', 'mo', 'config-mo');
+        setupFileInput('file-otros', 'label-otros', 'wrapper-otros', 'otros', 'config-otros');
+
+        // --- MODAL, ALIAS Y FILTROS LOGIC ---
+        function applyBulkCategory() {
+            const val = document.getElementById('bulk-category').value.trim();
+            if(!val) { alert('Escribe el nombre de la nueva categoría primero.'); return; }
+            document.querySelectorAll('.mach-checkbox:checked').forEach(cb => {
+                const machName = cb.value;
+                const aliasInput = document.querySelector(`.mach-alias[data-mach="${machName}"]`);
+                if(aliasInput) aliasInput.value = val;
+            });
+        }
+
+        function renderMachineCheckboxes(key) {
+            const fileObj = appData.files[key];
+            const col = document.getElementById('map-maquina').value;
+            const container = document.getElementById('map-maquinas-checkboxes');
+            
+            if (!col) { container.innerHTML = '<div class="text-gray-500 italic text-center py-4">Asigna la columna de "Activo/Máquina" abajo para ver los datos aquí.</div>'; return; }
+
+            const uniqueMachines = [...new Set(fileObj.data.map(row => String(row[col] || '').trim() || 'Sin Asignar'))].sort();
+            let mapping = fileObj.config.machineMapping || {};
+            let html = '';
+            
+            uniqueMachines.forEach(m => {
+                if (!mapping[m]) mapping[m] = { included: true, alias: m }; 
+                const isChecked = mapping[m].included ? 'checked' : '';
+                const alias = mapping[m].alias;
+                const escapedM = m.replace(/"/g, '&quot;');
+                
+                html += `
+                    <div class="flex items-center gap-2 hover:bg-blue-50 p-1.5 rounded border-b border-gray-100 last:border-0 transition-colors">
+                        <input type="checkbox" value="${escapedM}" class="mach-checkbox w-4 h-4 text-brand-blue rounded cursor-pointer" ${isChecked}>
+                        <span class="truncate w-1/2 text-gray-700 text-xs font-semibold cursor-default" title="${escapedM}">${escapedM}</span>
+                        <span class="text-gray-300 text-xs">➡️</span>
+                        <input type="text" data-mach="${escapedM}" value="${alias.replace(/"/g, '&quot;')}" class="mach-alias flex-1 p-1 text-xs border rounded bg-white focus:ring-1 focus:ring-brand-blue" placeholder="Alias o Categoría">
+                    </div>
+                `;
+            });
+            fileObj.config.machineMapping = mapping;
+            container.innerHTML = html;
+        }
+
+        function selectAllMachines(checkStatus) { document.querySelectorAll('.mach-checkbox').forEach(cb => cb.checked = checkStatus); }
+
+        function openMappingModal(key) {
+            currentModalKey = key; const fileObj = appData.files[key];
+            document.getElementById('modal-filename').innerText = fileObj.filename;
+            
+            const selects = ['map-maquina', 'map-fecha', 'map-oee', 'map-costo'];
+            selects.forEach(selId => {
+                const el = document.getElementById(selId); el.innerHTML = '<option value="">-- No Usar / Ignorar --</option>';
+                fileObj.headers.forEach(h => { const opt = document.createElement('option'); opt.value = h; opt.text = h; el.appendChild(opt); });
+            });
+
+            document.getElementById('map-maquina').value = fileObj.config.mapMaquina;
+            document.getElementById('map-fecha').value = fileObj.config.mapFecha;
+            document.getElementById('map-oee').value = fileObj.config.mapOee;
+            document.getElementById('map-costo').value = fileObj.config.mapCosto;
+
+            document.getElementById('map-maquina').onchange = () => renderMachineCheckboxes(currentModalKey);
+            renderMachineCheckboxes(currentModalKey);
+
+            document.getElementById('filters-container').innerHTML = '';
+            fileObj.config.filters.forEach(f => addFilterRow(f.col, f.op, f.val));
+            document.getElementById('mapping-modal').classList.remove('hidden');
+        }
+
+        function closeMappingModal() { document.getElementById('mapping-modal').classList.add('hidden'); currentModalKey = null; }
+
+        function addFilterRow(col = '', op = 'contains', val = '') {
+            const container = document.getElementById('filters-container');
+            const rowId = 'filter-' + Date.now();
+            const fileObj = appData.files[currentModalKey];
+            let colOptions = fileObj.headers.map(h => `<option value="${h}" ${h===col?'selected':''}>${h}</option>`).join('');
+
+            const html = `
+                <div id="${rowId}" class="flex gap-2 items-center bg-white p-2 border rounded shadow-sm">
+                    <select class="filter-col flex-1 p-1 border rounded text-sm">${colOptions}</select>
+                    <select class="filter-op w-1/3 p-1 border rounded text-sm">
+                        <option value="contains" ${op==='contains'?'selected':''}>Contiene cualquier (,)</option>
+                        <option value="equals" ${op==='equals'?'selected':''}>Es exactamente igual a</option>
+                        <option value="not_contains" ${op==='not_contains'?'selected':''}>NO contiene (,)</option>
+                    </select>
+                    <input type="text" class="filter-val flex-1 p-1 border rounded text-sm" placeholder="Valor(es)..." value="${val}">
+                    <button onclick="document.getElementById('${rowId}').remove()" class="text-red-500 font-bold px-2">X</button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+        }
+
+        function saveMappingConfig() {
+            if(!currentModalKey) return;
+            const conf = appData.files[currentModalKey].config;
+            
+            conf.mapMaquina = document.getElementById('map-maquina').value;
+            conf.mapFecha = document.getElementById('map-fecha').value;
+            conf.mapOee = document.getElementById('map-oee').value;
+            conf.mapCosto = document.getElementById('map-costo').value;
+            
+            const mapping = {};
+            document.querySelectorAll('.mach-checkbox').forEach(cb => {
+                const machOriginal = cb.value;
+                const included = cb.checked;
+                const aliasInput = document.querySelector(`.mach-alias[data-mach="${machOriginal.replace(/"/g, '\\"')}"]`);
+                const alias = aliasInput ? aliasInput.value.trim() : machOriginal;
+                mapping[machOriginal] = { included: included, alias: alias || machOriginal };
+            });
+            conf.machineMapping = mapping;
+
+            conf.filters = [];
+            document.querySelectorAll('#filters-container > div').forEach(row => {
+                const col = row.querySelector('.filter-col').value;
+                const op = row.querySelector('.filter-op').value;
+                const val = row.querySelector('.filter-val').value;
+                if(col && val) conf.filters.push({col, op, val});
+            });
+
+            closeMappingModal();
+            // Guardar configuración en Base de Datos y Procesar
+            dbManager.save('appFiles', appData.files).then(() => {
+                processAndDrawCharts(); 
+            });
+        }
+
+        // --- MOTOR DE PROCESAMIENTO (OEE + COSTOS) ---
+        function processAndDrawCharts() {
+            const selectedYear = document.getElementById('year-selector').value;
+            
+            let mOeeData = {}; let moOeeData = {}; 
+            let mCostData = {}; let moCostData = {}; 
+            let totalCost = 0; let totalProjectCost = 0; let hasData = false;
+            appData.currentCostRows = []; 
+
+            Object.values(appData.files).forEach(fileObj => {
+                if (!fileObj.data || fileObj.data.length === 0 || !fileObj.config) return;
+                hasData = true;
+
+                fileObj.data.forEach(row => {
+                    let passFilter = true;
+                    for(let f of fileObj.config.filters) {
+                        const rowValue = String(row[f.col] || '').toLowerCase();
+                        const searchTerms = f.val.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+                        
+                        if (f.op === 'contains') { if (!searchTerms.some(term => rowValue.includes(term))) passFilter = false; } 
+                        else if (f.op === 'not_contains') { if (searchTerms.some(term => rowValue.includes(term))) passFilter = false; } 
+                        else if (f.op === 'equals') { if (rowValue !== f.val.trim().toLowerCase()) passFilter = false; }
+                    }
+                    if (!passFilter) return;
+
+                    const rawMaq = String(fileObj.config.mapMaquina ? row[fileObj.config.mapMaquina] : '').trim();
+                    let maqVal = rawMaq ? rawMaq : 'Sin Asignar';
+                    
+                    if (fileObj.config.machineMapping && fileObj.config.machineMapping[maqVal]) {
+                        const mapping = fileObj.config.machineMapping[maqVal];
+                        if (!mapping.included) return; 
+                        maqVal = mapping.alias || maqVal; 
+                    }
+
+                    let rowYear = null, rowMonth = null;
+                    if (fileObj.config.mapFecha && row[fileObj.config.mapFecha]) {
+                        const dInfo = parseDateInfo(row[fileObj.config.mapFecha]);
+                        if (dInfo) { rowYear = dInfo.year; rowMonth = dInfo.month; }
+                        else { rowMonth = row[fileObj.config.mapFecha]; } 
+                    }
+                    if (rowYear && rowYear !== selectedYear) return;
+
+                    if (fileObj.config.mapOee && row[fileObj.config.mapOee] !== undefined && row[fileObj.config.mapOee] !== "") {
+                        let oeeVal = parseFloat(String(row[fileObj.config.mapOee]).replace(',','.').replace('%',''));
+                        if (!isNaN(oeeVal)) {
+                            if (maqVal !== 'Sin Asignar') { mOeeData[maqVal] = mOeeData[maqVal] || []; mOeeData[maqVal].push(oeeVal); }
+                            if (rowMonth) { moOeeData[rowMonth] = moOeeData[rowMonth] || []; moOeeData[rowMonth].push(oeeVal); }
+                        }
+                    }
+
+                    if (fileObj.config.mapCosto && row[fileObj.config.mapCosto] !== undefined && row[fileObj.config.mapCosto] !== "") {
+                        let costNum = parseLatamNumber(row[fileObj.config.mapCosto]);
+                        if (costNum > 0 && maqVal !== 'Sin Asignar') {
+                            
+                            const getVal = (kStr) => { const k = Object.keys(row).find(k => k.toString().trim().toLowerCase() === kStr.toLowerCase()); return k ? row[k] : null; };
+                            let desc = getVal('descripcion') || getVal('articulo') || getVal('comentario') || getVal('detalle') || '-';
+
+                            appData.currentCostRows.push({
+                                ref: row, maquina: maqVal, fecha: row[fileObj.config.mapFecha] || '', desc: desc, costo: costNum, isProject: !!row._isProject 
+                            });
+
+                            if (row._isProject) {
+                                totalProjectCost += costNum; 
+                            } else {
+                                mCostData[maqVal] = (mCostData[maqVal] || 0) + costNum;
+                                if(rowMonth) { moCostData[rowMonth] = (moCostData[rowMonth] || 0) + costNum; }
+                                totalCost += costNum; 
+                            }
+                        }
+                    }
+                });
+            });
+
+            const calcAvg = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.reduce((a,b)=>a+b,0)/v.length]));
+            appData.processedMachinesOEE = calcAvg(mOeeData);
+            appData.processedMonthsOEE = calcAvg(moOeeData);
+            appData.processedMachinesCost = mCostData;
+            appData.processedMonthsCost = moCostData;
+
+            document.getElementById('res-gasto-total').innerText = formatCurrency(totalCost);
+            document.getElementById('res-gasto-proyectos').innerText = formatCurrency(totalProjectCost);
+
+            drawCandleChart('master-candle-chart', appData.processedMachinesOEE, appData.processedMonthsOEE, selectedYear, 'OEE (%)', '#1E3A8A', '#E3F2FD', true);
+            drawCandleChart('costs-candle-chart', appData.processedMachinesCost, appData.processedMonthsCost, selectedYear, 'Consumos (GTQ)', '#E65100', '#FFF3E0', false);
+        }
+
+        // --- LÓGICA DE TABLA DE DATOS Y PROYECTOS ---
+        function openDataTableModal() {
+            const tbody = document.getElementById('data-table-body');
+            tbody.innerHTML = '';
+            
+            if (!appData.currentCostRows || appData.currentCostRows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500 font-semibold">Procesa un archivo con Costos Monetarios para ver los datos aquí.</td></tr>';
+            } else {
+                let html = '';
+                const maxRows = Math.min(appData.currentCostRows.length, 3000);
+                for(let i=0; i<maxRows; i++) {
+                    const r = appData.currentCostRows[i];
+                    html += `
+                        <tr class="hover:bg-blue-50 transition-colors ${r.isProject ? 'bg-orange-50' : ''}" id="row-${i}">
+                            <td class="p-3">${r.maquina}</td>
+                            <td class="p-3">${r.fecha}</td>
+                            <td class="p-3 text-xs text-gray-600 truncate max-w-xs" title="${r.desc}">${r.desc}</td>
+                            <td class="p-3 text-right font-semibold">${formatCurrency(r.costo)}</td>
+                            <td class="p-3 text-center"><input type="checkbox" class="w-5 h-5 cursor-pointer accent-brand-orange" ${r.isProject ? 'checked' : ''} onchange="toggleProjectRow(${i}, this.checked)"></td>
+                        </tr>
+                    `;
+                }
+                tbody.innerHTML = html;
+            }
+            document.getElementById('data-table-modal').classList.remove('hidden');
+        }
+
+        function closeDataTableModal() { document.getElementById('data-table-modal').classList.add('hidden'); processAndDrawCharts(); }
+
+        function toggleProjectRow(index, isChecked) {
+            const rowData = appData.currentCostRows[index];
+            if (rowData && rowData.ref) {
+                rowData.ref._isProject = isChecked; rowData.isProject = isChecked;
+                const tr = document.getElementById('row-' + index);
+                if (tr) { if (isChecked) tr.classList.add('bg-orange-50'); else tr.classList.remove('bg-orange-50'); }
+                
+                // Guardar la marca de proyecto en la Base de Datos
+                dbManager.save('appFiles', appData.files);
+            }
+        }
+
+        // --- RENDERIZADO PLOTLY (GENÉRICO PARA AMBAS VELAS) ---
+        function drawCandleChart(divId, dataMach, dataMonth, year, titleVal, colorDark, colorLight, isOEE) {
+            const machNames = Object.keys(dataMach), machVals = Object.values(dataMach);
+            const monthNames = Object.keys(dataMonth), monthVals = Object.values(dataMonth);
+            const allVals = [...machVals, ...monthVals];
+
+            if(allVals.length === 0) {
+                document.getElementById(divId).innerHTML = `<div class="flex h-full items-center justify-center text-gray-400 font-bold">No hay datos de ${titleVal} con estos filtros.</div>`;
+                if(isOEE) document.getElementById('res-mediana').innerText = '--%';
+                return;
+            }
+
+            const sorted = [...allVals].sort((a,b)=>a-b);
+            const q1 = sorted[Math.floor(sorted.length * 0.25)], q2 = sorted[Math.floor(sorted.length * 0.5)], q3 = sorted[Math.floor(sorted.length * 0.75)];
+
+            if(isOEE) document.getElementById('res-mediana').innerText = `${q2.toFixed(1)}%`;
+
+            // Anti colisión dinámico escalable para OEE vs Dinero
+            const range = Math.max(...allVals) - Math.min(...allVals);
+            const minDistance = range > 0 ? range * 0.03 : (isOEE ? 2 : 100); 
+
+            const getCleanY = (vDict) => {
+                let sItems = Object.entries(vDict).sort((a,b) => a[1] - b[1]);
+                let lastY = -99999999;
+                return sItems.map(([name, val]) => { let plotY = Math.max(val, lastY + minDistance); lastY = plotY; return { name, val, plotY }; });
+            };
+            const cleanMach = getCleanY(dataMach), cleanMonth = getCleanY(dataMonth);
+
+            const formatVal = (v) => isOEE ? `${v.toFixed(1)}%` : `Q${formatNumberShort(v)}`;
+
+            const traceBox = { y: allVals, type: 'box', name: '', boxpoints: false, marker: { color: colorLight }, line: { color: colorDark, width: 2.5 }, fillcolor: colorLight, width: 0.25 };
+            const traceMachines = { x: cleanMach.map(() => -0.35), y: cleanMach.map(d => d.plotY), text: cleanMach.map(d => `<b>${d.name}</b> (${formatVal(d.val)}) →`), mode: 'text+markers', textposition: 'middle left', marker: { size: 9, color: '#B91C1C', symbol: 'square' }, textfont: { size: 10, color: '#991B1B' }, hoverinfo: 'none' };
+            const traceMonths = { x: cleanMonth.map(() => 0.35), y: cleanMonth.map(d => d.plotY), text: cleanMonth.map(d => `← <b>${d.name}</b> (${formatVal(d.val)})`), mode: 'text+markers', textposition: 'middle right', marker: { size: 9, color: '#15803D', symbol: 'circle' }, textfont: { size: 10, color: '#166534' }, hoverinfo: 'none' };
+
+            const layout = {
+                title: { text: `<b>Vela de ${titleVal} - ${year}</b>`, font: { size: 18 }, y: 0.95 },
+                showlegend: false, xaxis: { range: [-1, 1], showgrid: false, zeroline: false, showticklabels: false, fixedrange: true },
+                yaxis: { title: titleVal, range: [Math.min(...allVals) - (range*0.1), Math.max(...allVals) + (range*0.1)], gridcolor: '#f1f5f9', zeroline: false },
+                annotations: [
+                    { x: 0, y: q3, text: `<b>Q3: ${formatVal(q3)}</b>`, showarrow: false, yanchor: 'bottom', font: {size: 10}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2},
+                    { x: 0, y: q2, text: `<b>MED: ${formatVal(q2)}</b>`, showarrow: false, yanchor: 'middle', font: {size: 12, color: colorDark}, bgcolor: 'rgba(255,255,255,0.95)', bordercolor: colorDark, borderpad: 3, borderwidth: 1},
+                    { x: 0, y: q1, text: `<b>Q1: ${formatVal(q1)}</b>`, showarrow: false, yanchor: 'top', font: {size: 10}, bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2}
+                ],
+                margin: { l: 80, r: 80, t: 70, b: 30 }, plot_bgcolor: 'transparent', paper_bgcolor: 'transparent', shapes: []
+            };
+
+            const addGuideLine = (arr, x0, x1, col) => { arr.forEach(d => { if(Math.abs(d.plotY - d.val) > (range*0.01)) layout.shapes.push({type: 'line', x0: x0, y0: d.plotY, x1: x1, y1: d.val, line: {color: col, width: 0.5, dash: 'dot'}}); }); };
+            addGuideLine(cleanMach, -0.33, -0.15, '#B91C1C'); addGuideLine(cleanMonth, 0.33, 0.15, '#15803D');  
+            
+            Plotly.newPlot(divId, [traceBox, traceMachines, traceMonths], layout, { responsive: true, displayModeBar: false });
+        }
+
+        // --- EXPORTACIÓN ---
+        document.getElementById('btn-export-slides').addEventListener('click', () => {
+            const chartOEE = document.getElementById('master-candle-chart');
+            const chartCosts = document.getElementById('costs-candle-chart');
+            const btn = document.getElementById('btn-export-slides');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "Generando Slides...";
+
+            Promise.all([
+                Plotly.toImage(chartOEE, {format: 'png', width: 1280, height: 720}).catch(()=>null),
+                Plotly.toImage(chartCosts, {format: 'png', width: 1280, height: 720}).catch(()=>null)
+            ]).then(function([imgOEE, imgCosts]) {
+                let pptx = new PptxGenJS(); pptx.layout = 'LAYOUT_16x9'; 
+                let year = document.getElementById('year-selector').value;
+                
+                if(imgOEE) {
+                    let slide1 = pptx.addSlide();
+                    slide1.addText(`Análisis OEE ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: '1E3A8A' });
+                    slide1.addImage({ data: imgOEE, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
+                }
+                if(imgCosts) {
+                    let slide2 = pptx.addSlide();
+                    slide2.addText(`Análisis de Consumos y Gastos ${year}`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 24, bold: true, color: 'E65100' });
+                    slide2.addImage({ data: imgCosts, x: 1.0, y: 1.2, w: 8.0, h: 4.5 });
+                }
+                pptx.writeFile({ fileName: `Presentacion_Mant_${year}.pptx` }).then(() => { btn.innerHTML = originalText; });
+            }).catch(err => { console.error(err); btn.innerHTML = originalText; alert("Error al generar diapositivas."); });
+        });
+
+        document.getElementById('btn-export-csv').addEventListener('click', () => {
+            let csvContent = "data:text/csv;charset=utf-8,Categoria,Identificador,Valor\n";
+            Object.entries(appData.processedMachinesOEE).forEach(([k, v]) => csvContent += `Maquina (OEE%),${k},${v.toFixed(2)}\n`);
+            Object.entries(appData.processedMonthsOEE).forEach(([k, v]) => csvContent += `Mes (OEE%),${k},${v.toFixed(2)}\n`);
+            Object.entries(appData.processedMachinesCost).forEach(([k, v]) => csvContent += `Gasto Materiales,${k},${v.toFixed(2)}\n`);
+            const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", `Consolidado_Mantenimiento_${document.getElementById('year-selector').value}.csv`);
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        });
+
+        document.getElementById('year-selector').addEventListener('change', () => {
+            dbManager.save('selectedYear', document.getElementById('year-selector').value);
+            processAndDrawCharts();
+        });
+        
+        document.getElementById('btn-process').addEventListener('click', () => { setTimeout(processAndDrawCharts, 200); });
+        
+        // --- BOTÓN BORRAR DATOS ---
+        document.getElementById('btn-clear-data').addEventListener('click', async () => {
+            if(confirm('¿Estás seguro de borrar todos los datos importados? Esto dejará el dashboard en blanco.')) {
+                await dbManager.clear();
+                location.reload();
+            }
+        });
+
+        // Carga inicial y Restauración desde Base de Datos Local
+        window.onload = async () => { 
+            try {
+                const savedFiles = await dbManager.load('appFiles');
+                const savedYear = await dbManager.load('selectedYear');
+                
+                if (savedFiles) {
+                    appData.files = savedFiles;
+                    let hasData = false;
+                    
+                    // Restaurar visualmente los archivos cargados
+                    Object.keys(appData.files).forEach(key => {
+                        const fileObj = appData.files[key];
+                        if (fileObj && fileObj.data && fileObj.data.length > 0) {
+                            hasData = true;
+                            document.getElementById(`label-${key}`).innerHTML = `✓ ${fileObj.filename}`;
+                            document.getElementById(`wrapper-${key}`).classList.add('file-loaded');
+                            document.getElementById(`config-${key}`).classList.remove('hidden');
+                            
+                            if (fileObj.config && fileObj.config.mapFecha) {
+                                fileObj.data.forEach(row => {
+                                    const dInfo = parseDateInfo(row[fileObj.config.mapFecha]);
+                                    if (dInfo) availableYears.add(dInfo.year);
+                                });
+                            }
+                        }
+                    });
+
+                    if (hasData) {
+                        updateYearSelector();
+                        if (savedYear && availableYears.has(savedYear)) {
+                            document.getElementById('year-selector').value = savedYear;
+                        }
+                        processAndDrawCharts();
+                        return; // Terminar aquí para no mostrar el mensaje de "Vacío"
+                    }
+                }
+            } catch(e) {
+                console.error('Error cargando datos locales', e);
+            }
+
+            // Si falla o está vacío, mostrar mensaje por defecto
+            document.getElementById('master-candle-chart').innerHTML = '<div class="flex h-full items-center justify-center text-gray-400 font-bold">Por favor, importa un archivo para comenzar.</div>'; 
+            document.getElementById('costs-candle-chart').innerHTML = '<div class="flex h-full items-center justify-center text-gray-400 font-bold">Por favor, importa un archivo para comenzar.</div>'; 
+        };
+
+    </script>
+</body>
+</html>
