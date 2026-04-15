@@ -1195,6 +1195,16 @@
                             };
                             div.appendChild(cardEl);
                         });
+
+                        // Añadir botón explícito de crear nueva tarea para facilitar uso cuando hay muchos items
+                        const addBtn = document.createElement('div');
+                        addBtn.innerHTML = '+ Trabajo Simultáneo';
+                        addBtn.style.cssText = "text-align:center; font-size:0.75em; color:#fff; background:rgba(255,255,255,0.15); border-radius:4px; padding:3px; margin-top:5px; cursor:pointer; font-weight:bold;";
+                        addBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            openModalNew(dateStr, h);
+                        };
+                        div.appendChild(addBtn);
                     }
 
                     grid.appendChild(div);
@@ -1247,8 +1257,15 @@
                     }
                 };
                 
-                const dayTasks = state.tasks.filter(t => t.date === dateStr);
-                dayTasks.sort((a,b) => a.hour - b.hour);
+                const dayTasksRaw = state.tasks.filter(t => t.date === dateStr);
+                dayTasksRaw.sort((a,b) => a.hour - b.hour);
+                
+                // Evitar duplicados de tareas de varias horas agrupadolas por groupId
+                const uniqueTasksMap = new Map();
+                dayTasksRaw.forEach(t => {
+                    if(!uniqueTasksMap.has(t.groupId)) uniqueTasksMap.set(t.groupId, t);
+                });
+                const dayTasks = Array.from(uniqueTasksMap.values());
                 
                 dayTasks.forEach(task => {
                     const cardWrapper = document.createElement('div');
@@ -1269,6 +1286,18 @@
                     };
                     div.appendChild(cardEl);
                 });
+
+                // Botón siempre disponible para agregar otra tarea al grupo
+                if (dayTasks.length > 0) {
+                    const addBtn = document.createElement('div');
+                    addBtn.innerHTML = '+ Nuevo';
+                    addBtn.style.cssText = "display:inline-block; font-size:0.75em; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:2px 5px; margin-top:5px; cursor:pointer;";
+                    addBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        openModalNew(dateStr, 8);
+                    };
+                    div.appendChild(addBtn);
+                }
                 
                 grid.appendChild(div);
             }
@@ -2141,7 +2170,19 @@
         function restoreTimer() { const r = state.tasks.find(t => t.status === 'running'); if (r) { state.activeTaskId = r.id; startTimer(); } }
         function switchView(viewName, btn) { document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active-view')); document.getElementById(viewName + '-view').classList.add('active-view'); document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active')); if (btn) btn.classList.add('active'); }
         function updateLunchTime() { state.lunchHour = parseInt(document.getElementById('lunchSelector').value); localStorage.setItem('lunchHour', state.lunchHour); renderApp(); }
-        function changeViewMode() { state.viewMode = document.getElementById('viewSelector').value; localStorage.setItem('viewMode', state.viewMode); renderApp(); }
+        function scrollToTodayMarker() {
+            setTimeout(() => {
+                const todayEl = document.querySelector('.today-col') || document.querySelector('.today');
+                const calendarView = document.getElementById('calendar-view');
+                if (todayEl && calendarView) {
+                    const scrollLeft = Math.max(0, todayEl.offsetLeft - (calendarView.clientWidth / 2) + (todayEl.clientWidth / 2));
+                    const scrollTop = Math.max(0, todayEl.offsetTop - (calendarView.clientHeight / 2) + (todayEl.clientHeight / 2));
+                    calendarView.scrollTo({ left: scrollLeft, top: scrollTop, behavior: 'smooth' });
+                }
+            }, 300);
+        }
+
+        function changeViewMode() { state.viewMode = document.getElementById('viewSelector').value; localStorage.setItem('viewMode', state.viewMode); renderApp(); scrollToTodayMarker(); }
 
         // Actualizamos saveLocal para guardar configuraciones
         function saveLocal() {
@@ -2169,11 +2210,7 @@
             // Forzar vista de calendario si estaba en otra pestaña
             switchView('calendar', document.querySelector('.tab-btn'));
 
-            // Auto-scroll a las 7:00 AM
-            setTimeout(() => {
-                const startHourEl = document.getElementById('hour-7');
-                if (startHourEl) startHourEl.scrollIntoView({ behavior: "smooth", block: "start" });
-            }, 300);
+            scrollToTodayMarker();
         }
 
         function changeDate(n) {
