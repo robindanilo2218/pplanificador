@@ -692,6 +692,8 @@
                         <button class="btn btn-save" style="flex:1; min-width:140px;" onclick="openTextImporter()">📝 Pegar Texto</button>
                         <button class="btn" style="flex:1; min-width:140px; background:#00bcd4; color:black;" onclick="exportDataToCSV()">📊 Exportar a CSV</button>
                         <button class="btn btn-delete" style="flex:1; min-width:140px; background:#8e44ad;" onclick="exportFullBackup()">💾 Backup (Todo)</button>
+                        <button class="btn btn-save" style="flex:1; min-width:140px; background:#e67e22;" onclick="document.getElementById('restoreBackupInput').click()">🔄 Restaurar Backup</button>
+                        <input type="file" id="restoreBackupInput" accept=".json" style="display:none;" onchange="restoreFullBackup(event)">
                     </div>
                 </div>
 
@@ -722,57 +724,66 @@
             </div>
         </div>
 
-        <!-- VISTA DASHBOARD -->
-        <div id="dashboard-view" class="view-section" style="padding:20px;">
-            <div class="stat-box"
-                style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
-                <h3>Resumen Financiero (Semana Visible)</h3>
-                <h1 id="dashCost" style="color:#4caf50; margin:5px 0;">Q0.00</h1>
-                <p style="color:#888; font-size:0.8em;">Calculado proporcionalmente según las horas en pantalla.</p>
-                <div id="dashBreakdown"
-                    style="margin-top:10px; padding-top:10px; border-top:1px solid #333; font-size:0.9em;">
-                    <!-- Breakdown JS -->
+        <!-- VISTA DASHBOARD REPARADO E INTERACTIVO -->
+        <div id="dashboard-view" class="view-section" style="padding:20px; background:#121212;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <h2 style="margin:0; color:var(--accent);">📊 Dashboard CMMS Analytics</h2>
+                <select id="dashTimeframe" class="input-dark" style="font-size:1.05em; padding:8px 15px; border-color:var(--accent); min-width: 200px;" onchange="updateDashboard()">
+                    <option value="this_week">Esta Semana</option>
+                    <option value="last_week">Semana Anterior</option>
+                    <option value="this_month" selected>Este Mes</option>
+                    <option value="last_month">Mes Anterior</option>
+                    <option value="next_month">Próximo Mes</option>
+                    <option value="this_year">Este Año</option>
+                    <option value="last_year">Año Anterior</option>
+                    <option value="all_time">Todo el Historial</option>
+                </select>
+            </div>
+
+            <!-- KPIs Row -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:20px;">
+                <div class="stat-box" style="text-align:center; background:#1a1a1a; padding:20px; border-radius:10px; border:1px solid #333;">
+                    <h4 style="margin:0; color:#888;">Costo Total Incurrrido</h4>
+                    <h1 id="dashTotalCost" style="margin:10px 0; color:#4caf50;">Q0.00</h1>
+                </div>
+                <div class="stat-box" style="text-align:center; background:#1a1a1a; padding:20px; border-radius:10px; border:1px solid #333;">
+                    <h4 style="margin:0; color:#888;">Cumplimiento (Realizadas)</h4>
+                    <h1 id="dashCompliance" style="margin:10px 0; color:#00bcd4;">0%</h1>
+                    <p id="dashTasksCount" style="margin:0; color:#aaa; font-size:0.85em;">0 / 0 Tareas</p>
+                </div>
+                <div class="stat-box" style="text-align:center; background:#1a1a1a; padding:20px; border-radius:10px; border:1px solid #333;">
+                    <h4 style="margin:0; color:#888;">Tiempo Registrado</h4>
+                    <h1 id="dashTime" style="margin:10px 0; color:#ff9800;">0h</h1>
                 </div>
             </div>
 
-            <!-- NUEVO: GRÁFICO DE PRIORIDADES -->
-            <div class="stat-box"
-                style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
-                <h3>Tareas Pendientes por Prioridad</h3>
-                <p style="color:#888; font-size:0.8em; margin-top:-10px; margin-bottom:15px;">Incluye tareas 'Por hacer'
-                    y 'En progreso'.</p>
+            <!-- Charts Row -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:15px;">
+                
+                <!-- Prioridades -->
+                <div class="stat-box" style="background:#1a1a1a; padding:20px; border-radius:10px; border:1px solid #333;">
+                    <h3 style="margin-top:0; border-bottom:1px solid #333; padding-bottom:10px; color:#ddd;">Distribución de Prioridades</h3>
+                    <div id="dashPriorityChart"></div>
+                </div>
 
-                <div class="chart-row">
-                    <div class="chart-label">Urgente</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-urgent" class="chart-bar-fill neon-red"></div>
-                    </div>
-                    <div id="count-urgent" class="chart-count">0</div>
+                <!-- Mantenimiento / Tipo de Trabajo -->
+                <div class="stat-box" style="background:#1a1a1a; padding:20px; border-radius:10px; border:1px solid #333;">
+                    <h3 style="margin-top:0; border-bottom:1px solid #333; padding-bottom:10px; color:#ddd;">Tipos de Trabajo</h3>
+                    <p style="font-size: 0.8em; color: #888; margin-top:-5px;">(Regla General: >80% Preventivo)</p>
+                    <div id="dashTypeChart"></div>
                 </div>
-                <div class="chart-row">
-                    <div class="chart-label">Alta</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-high" class="chart-bar-fill neon-yellow"></div>
-                    </div>
-                    <div id="count-high" class="chart-count">0</div>
+
+                <!-- Costos por Categorías (Top 5) -->
+                <div class="stat-box" style="background:#1a1a1a; padding:20px; border-radius:10px; border:1px solid #333;">
+                    <h3 style="margin-top:0; border-bottom:1px solid #333; padding-bottom:10px; color:#ddd;">Top 5 Centros de Costo</h3>
+                    <div id="dashCatCostChart"></div>
                 </div>
-                <div class="chart-row">
-                    <div class="chart-label">Media</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-medium" class="chart-bar-fill neon-blue"></div>
-                    </div>
-                    <div id="count-medium" class="chart-count">0</div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-label">Baja</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-low" class="chart-bar-fill soft-green"></div>
-                    </div>
-                    <div id="count-low" class="chart-count">0</div>
-                </div>
+
             </div>
-
-            <button class="btn btn-save" onclick="exportCSV()">📥 Exportar Excel Completo</button>
+            
+            <div style="text-align:right; margin-top:20px;">
+                <button class="btn btn-save" onclick="exportDataToCSV()">📥 Exportar KPIs y Tareas a Excel</button>
+            </div>
         </div>
     </div>
 
@@ -1700,78 +1711,152 @@
 
         // --- DASHBOARD & UTILS ---
         function updateDashboard() {
-            // Filtrar solo tareas de la semana actual para mostrar costos reales de la semana
-            const s = getStartOfWeek(state.currentDate);
-            const e = new Date(s); e.setDate(e.getDate() + 7);
-
-            const visibleTasks = state.tasks.filter(t => {
-                const d = new Date(t.date);
-                return d >= s && d < e;
-            });
-
-            const total = visibleTasks.reduce((a, b) => a + (b.cost || 0), 0);
-            document.getElementById('dashCost').textContent = `Q${total.toFixed(2)}`;
-
-            // Calcular desglose proporcional visual
-            // Como el cost per slot ya está dividido, podemos intentar reconstruir categorías
-            // Nota: Esto es aproximado si los slots tienen costos parciales.
-            let breakdownStats = {};
-            visibleTasks.forEach(t => {
-                if (t.breakdown) {
-                    // La tarea tiene un desglose global. Su costo de slot es una fracción.
-                    // Calculamos la fracción que representa este slot del total original
-                    // t.cost = costo de este slot. t.originalTotal = costo total.
-                    const ratio = t.cost / (t.originalTotal || 1); // Cuánto pesa este slot
-
-                    t.breakdown.forEach(b => {
-                        if (!breakdownStats[b.name]) breakdownStats[b.name] = 0;
-                        // Sumamos la parte proporcional de este concepto para esta hora
-                        if (t.originalTotal > 0) {
-                            breakdownStats[b.name] += (b.value * (t.cost / t.originalTotal));
-                        }
-                    });
-                } else {
-                    if (!breakdownStats['General']) breakdownStats['General'] = 0;
-                    breakdownStats['General'] += t.cost;
-                }
-            });
-
-            let html = '<ul style="padding-left:15px; margin:0;">';
-            for (const [key, val] of Object.entries(breakdownStats)) {
-                html += `<li><b>${key}:</b> Q${val.toFixed(2)}</li>`;
+            const tfNode = document.getElementById('dashTimeframe');
+            if(!tfNode) return;
+            const tf = tfNode.value;
+            const now = new Date();
+            let start = new Date(1970, 0, 1);
+            let end = new Date(3000, 0, 1);
+            
+            // Lógica de fechas
+            if (tf === 'this_week') {
+                start = getStartOfWeek(now);
+                end = new Date(start); end.setDate(end.getDate() + 7);
+            } else if (tf === 'last_week') {
+                end = getStartOfWeek(now);
+                start = new Date(end); start.setDate(start.getDate() - 7);
+            } else if (tf === 'this_month') {
+                start = new Date(now.getFullYear(), now.getMonth(), 1);
+                end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+            } else if (tf === 'last_month') {
+                start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                end = new Date(now.getFullYear(), now.getMonth(), 1);
+            } else if (tf === 'next_month') {
+                start = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                end = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+            } else if (tf === 'this_year') {
+                start = new Date(now.getFullYear(), 0, 1);
+                end = new Date(now.getFullYear() + 1, 0, 1);
+            } else if (tf === 'last_year') {
+                start = new Date(now.getFullYear() - 1, 0, 1);
+                end = new Date(now.getFullYear(), 0, 1);
             }
-            html += '</ul>';
-            document.getElementById('dashBreakdown').innerHTML = html;
-
-            // --- LÓGICA DEL GRÁFICO DE PRIORIDADES ---
-            // Filtrar tareas que no estén terminadas
-            const activeTasks = state.tasks.filter(t => t.status === 'planned' || t.status === 'running');
-
-            // Agrupar por groupId para contar el proyecto/serie como 1 sola tarea
-            const uniqueTasks = new Map();
-            activeTasks.forEach(t => {
-                if (!uniqueTasks.has(t.groupId)) {
-                    uniqueTasks.set(t.groupId, t);
+            
+            // Filtrar Tareas y agrupar por groupId para no distorsionar KPIs
+            const uniqueVisibleTasks = new Map();
+            let totalCost = 0;
+            let totalSeconds = 0;
+            
+            state.tasks.forEach(t => {
+                if (!t.date) return;
+                let taskStart;
+                
+                if (t.date.includes('-')) {
+                    const ds = t.date.split('-');
+                    taskStart = new Date(ds[0], ds[1] - 1, ds[2]); // local
+                } else if(t.date.length === 8) {
+                    taskStart = new Date(t.date.substring(0,4), t.date.substring(4,6)-1, t.date.substring(6,8));
+                }
+                
+                if (taskStart >= start && taskStart < end) {
+                    if (!uniqueVisibleTasks.has(t.groupId)) {
+                        uniqueVisibleTasks.set(t.groupId, { ...t, totalGroupCost: t.cost || 0, totalGroupSecs: t.seconds || 0 });
+                    } else {
+                        const group = uniqueVisibleTasks.get(t.groupId);
+                        group.totalGroupCost += (t.cost || 0);
+                        group.totalGroupSecs += (t.seconds || 0);
+                    }
                 }
             });
-
-            // Contar prioridades
-            const priorityCounts = { urgent: 0, high: 0, medium: 0, low: 0 };
-            uniqueTasks.forEach(t => {
+            
+            let completedCount = 0;
+            let totalTasks = 0;
+            const typeStats = { 'Preventivo': 0, 'Correctivo': 0, 'Proyecto': 0, 'Otro': 0 };
+            const priorityStats = { urgent: 0, high: 0, medium: 0, low: 0 };
+            const catCostStats = {};
+            
+            uniqueVisibleTasks.forEach(t => {
+                totalTasks++;
+                if (t.status === 'done') completedCount++;
+                totalCost += t.totalGroupCost;
+                totalSeconds += t.totalGroupSecs;
+                
+                // Tipo
+                const type = (t.maintenanceType && t.maintenanceType !== '') ? t.maintenanceType : 'Otro';
+                if(typeStats[type] === undefined) typeStats['Otro']++; else typeStats[type]++;
+                
+                // Prioridades
                 const p = t.priority || 'medium';
-                if (priorityCounts[p] !== undefined) priorityCounts[p]++;
+                if (priorityStats[p] !== undefined) priorityStats[p]++;
+                
+                // Categorías de Costo
+                const cat = t.category || 'Sin Categoría';
+                if(!catCostStats[cat]) catCostStats[cat] = 0;
+                catCostStats[cat] += t.totalGroupCost;
             });
+            
+            // Render KPIs Superiores
+            document.getElementById('dashTotalCost').textContent = `Q${totalCost.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            
+            const hours = (totalSeconds / 3600).toFixed(1);
+            document.getElementById('dashTime').textContent = `${hours}h`;
+            
+            const compliance = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
+            document.getElementById('dashCompliance').textContent = `${compliance}%`;
+            document.getElementById('dashTasksCount').textContent = `${completedCount} hechas / ${totalTasks} totales`;
+            
+            // Función generadora de gráficos de barras simples y elegantes
+            const renderBars = (statsObj, containerId, colorsMap) => {
+                const container = document.getElementById(containerId);
+                if(!container) return;
+                
+                let html = '';
+                const max = Math.max(...Object.values(statsObj), 1);
+                
+                for(const [label, val] of Object.entries(statsObj)) {
+                    if (val === 0 && Object.keys(statsObj).length > 4) continue; // esconder 0s si son dinámicos
+                    
+                    const pct = (val / max) * 100;
+                    const color = typeof colorsMap === 'function' ? colorsMap(label) : (colorsMap[label] || colorsMap['default'] || '#00bcd4');
+                    
+                    // Formato para tooltip o label info (moneda si es costo, cant si es item)
+                    const formatVal = Number.isInteger(val) ? val.toLocaleString() : `Q${val.toLocaleString('en-US', {minimumFractionDigits:2})}`;
 
-            // Encontrar el valor máximo para escalar las barras (mínimo 1 para no dividir por 0)
-            const maxCount = Math.max(...Object.values(priorityCounts), 1);
-
-            // Actualizar barras en el DOM
-            ['urgent', 'high', 'medium', 'low'].forEach(p => {
-                const count = priorityCounts[p];
-                const percentage = (count / maxCount) * 100;
-                document.getElementById(`bar-${p}`).style.width = `${percentage}%`;
-                document.getElementById(`count-${p}`).textContent = count;
+                    html += `
+                        <div style="margin-bottom:12px; display:flex; align-items:center;">
+                            <div title="${label}" style="width:100px; font-size:0.9em; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; padding-right:10px;">
+                                ${label}
+                            </div>
+                            <div style="flex:1; background:#222; height:12px; border-radius:6px; overflow:hidden;">
+                                <div style="width:${pct}%; background:${color}; height:100%; border-radius:6px; transition:width 0.5s ease-out;"></div>
+                            </div>
+                            <div style="width:70px; text-align:right; font-size:0.9em; font-weight:bold; color:var(--accent);">${formatVal}</div>
+                        </div>
+                    `;
+                }
+                if (html === '') html = '<p style="color:#666; font-size:0.9em; text-align:center;">No hay datos en este período.</p>';
+                container.innerHTML = html;
+            };
+            
+            // Gráfico: Prioridades
+            const pColors = { urgent: '#ff3366', high: '#ffc107', medium: '#00bcd4', low: '#4caf50' };
+            const pLabels = { urgent: 'Urgente', high: 'Alta', medium: 'Media', low: 'Baja' };
+            const translatedPStats = {};
+            for(const [k, v] of Object.entries(priorityStats)) translatedPStats[pLabels[k]] = v;
+            renderBars(translatedPStats, 'dashPriorityChart', (l) => {
+                const key = Object.keys(pLabels).find(k => pLabels[k] === l);
+                return pColors[key];
             });
+            
+            // Gráfico: Tipos
+            const tColors = { 'Preventivo': '#4caf50', 'Correctivo': '#ff3366', 'Proyecto': '#9c27b0', 'Otro': '#888' };
+            renderBars(typeStats, 'dashTypeChart', tColors);
+            
+            // Gráfico: Top 5 Categorías por Costo
+            const sortedCats = Object.entries(catCostStats).sort((a,b)=>b[1]-a[1]).slice(0, 5);
+            const topCatObj = {};
+            sortedCats.forEach(x => { topCatObj[x[0]] = x[1] });
+            renderBars(topCatObj, 'dashCatCostChart', {'default': '#e67e22'});
         }
 
         // --- VISTA TABLA ---
@@ -2751,6 +2836,45 @@
             document.body.appendChild(dlAnchorElem);
             dlAnchorElem.click();
             document.body.removeChild(dlAnchorElem);
+        }
+
+        function restoreFullBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const backup = JSON.parse(e.target.result);
+                    
+                    if (!backup.tasks || !backup.defaultCategories) {
+                        alert("El archivo subido no parece ser un backup válido del Planificador.");
+                        return;
+                    }
+                    
+                    if (!confirm("ADVERTENCIA: Restaurar un backup REEMPLAZARÁ TODOS los datos actuales de forma permanente. ¿Deseas continuar?")) {
+                        event.target.value = '';
+                        return;
+                    }
+                    
+                    state.tasks = backup.tasks;
+                    state.defaultCategories = backup.defaultCategories;
+                    state.defaultSubcategories = backup.defaultSubcategories || [];
+                    state.defaultProcesses = backup.defaultProcesses || [];
+                    state.defaultLeaders = backup.defaultLeaders || [];
+                    state.shifts = backup.shifts || { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+                    state.managerName = backup.managerName || '';
+                    
+                    saveLocal();
+                    renderApp();
+                    alert("✅ Backup restaurado exitosamente.");
+                    
+                } catch (err) {
+                    alert("Error al leer el archivo de backup. Verifique que sea el archivo correcto.");
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
         }
 
         function addToGoogleCalendar() {
