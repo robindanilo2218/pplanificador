@@ -6,7 +6,7 @@
     <title>Planificador Mantenimiento Pro</title>
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#1e1e1e">
-    <link rel="icon" type="image/png" href="./logo.png">
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/265/265674.png">
 
     <!-- Estilos -->
     <style>
@@ -60,7 +60,7 @@
 
         /* MODALS */
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 2000; }
-        .modal-content { background: #252525; padding: 20px; border-radius: 12px; width: 95%; max-width: 450px; border: 1px solid #444; max-height: 90vh; overflow-y: auto; }
+        .modal-content { background: #252525; padding: 20px; border-radius: 12px; width: 95%; max-width: 700px; border: 1px solid #444; max-height: 90vh; overflow-y: auto; }
         .form-row { margin-bottom: 12px; }
         .form-row label { display: block; color: #888; font-size: 0.8em; margin-bottom: 5px; }
         .input-dark { width: 100%; padding: 10px; background: #151515; border: 1px solid #444; color: white; border-radius: 5px; font-family: inherit; }
@@ -111,7 +111,7 @@
 
     <header>
         <div class="nav-group">
-            <img src="./logo.png" style="height:30px; display:none;" onerror="this.style.display='none'">
+            <img src="https://cdn-icons-png.flaticon.com/512/265/265674.png" style="height:30px; display:none;" onerror="this.style.display='none'">
             <!-- Botón HOY agregado aquí -->
             <button class="nav-btn" onclick="goToToday()" style="background: var(--accent); color: black; font-weight: bold;">Hoy</button>
             <button class="nav-btn" onclick="changeDate(-1)">❮</button>
@@ -318,7 +318,7 @@
 
             <div class="form-row">
                 <label>Categoría</label>
-                <input type="text" id="inpCat" class="input-dark" list="catListRef" placeholder="Ej: Corrugadora Fosber 2">
+                <input type="text" id="inpCat" class="input-dark" list="catListRef" placeholder="Ej: Corrugadora Fosber 2" oninput="filterSubcategories()">
                 <datalist id="catListRef"></datalist>
             </div>
 
@@ -769,8 +769,13 @@
             const breakdown = [];
             let total = 0;
             document.querySelectorAll('.cost-row').forEach(row => {
-                const name = row.querySelector('.cost-name').value.trim();
-                const val = parseFloat(row.querySelector('.cost-val').value) || 0;
+                const nameInput = row.querySelector('.cost-name');
+                const valInput = row.querySelector('.cost-val');
+                
+                if (!nameInput || !valInput) return; // Evita el error "Cannot read properties of null"
+                
+                const name = nameInput.value.trim();
+                const val = parseFloat(valInput.value) || 0;
                 if(name) {
                     breakdown.push({ name, value: val });
                     total += val;
@@ -791,6 +796,7 @@
             
             document.getElementById('inpCat').value = "";
             document.getElementById('inpSub').value = "";
+            filterSubcategories(); // Filtrar subcategorías reseteadas
             document.getElementById('inpProcess').value = "";
             document.getElementById('inpDetail').value = "";
             document.getElementById('inpMaintType').value = "preventivo";
@@ -1006,6 +1012,7 @@
             document.getElementById('editingGroupId').value = first.groupId;
 
             document.getElementById('inpCat').value = first.category || first.title.split(' ')[0];
+            filterSubcategories(); // Amarrar listas de acuerdo a la categoría cargada
             document.getElementById('inpSub').value = first.subcategory || '';
             document.getElementById('inpProcess').value = first.process || '';
             document.getElementById('inpDetail').value = first.detail || '';
@@ -1518,10 +1525,8 @@
             document.getElementById('catList').innerHTML = optsCats; 
             document.getElementById('catListRef').innerHTML = optsCats; 
             
-            const dynSubs = state.tasks.map(t => t.subcategory);
-            const subs = [...new Set([...dynSubs, ...state.defaultSubcategories])].filter(Boolean);
-            const optsSubs = subs.map(c => `<option value="${c}">`).join('');
-            if(document.getElementById('subListRef')) document.getElementById('subListRef').innerHTML = optsSubs;
+            // Reubicamos el seteo de subcategorías en una función atada a la categoría
+            filterSubcategories();
 
             // Extraer líderes de los arrays assignees
             const dynLeaders = [];
@@ -1529,6 +1534,38 @@
             const leaders = [...new Set([...dynLeaders, ...state.defaultLeaders])].filter(Boolean);
             const optsLeaders = leaders.map(l => `<option value="${l}">`).join('');
             if(document.getElementById('leadersList')) document.getElementById('leadersList').innerHTML = optsLeaders;
+        }
+
+        // NUEVA FUNCIÓN: Amarra las subcategorías (secciones) a la categoría (máquina)
+        function filterSubcategories() {
+            const catInput = document.getElementById('inpCat');
+            if(!catInput) return; // Por si acaso estemos en otra vista
+            
+            const cat = catInput.value.trim().toLowerCase();
+            let subs = [];
+
+            if (!cat) {
+                // Si está vacío, mostrar todas (dinámicas históricas y las default)
+                const dynSubs = state.tasks.map(t => t.subcategory);
+                subs = [...new Set([...dynSubs, ...state.defaultSubcategories])].filter(Boolean);
+            } else {
+                // Filtrar solo las que coincidan históricamente con esta máquina
+                const dynSubsForCat = state.tasks
+                    .filter(t => (t.category || t.title.split(' ')[0]).toLowerCase() === cat)
+                    .map(t => t.subcategory)
+                    .filter(Boolean);
+                
+                if (dynSubsForCat.length > 0) {
+                    subs = [...new Set(dynSubsForCat)]; 
+                } else {
+                    // Máquina nueva, no tiene subcategorías previas, mostrar defaults de secciones.
+                    subs = [...new Set([...state.defaultSubcategories])].filter(Boolean);
+                }
+            }
+
+            const optsSubs = subs.map(c => `<option value="${c}">`).join('');
+            const subListRef = document.getElementById('subListRef');
+            if(subListRef) subListRef.innerHTML = optsSubs;
         }
 
         // --- FUNCIONES DE CONFIGURACIÓN ---
