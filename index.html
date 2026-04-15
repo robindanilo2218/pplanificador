@@ -684,14 +684,14 @@
                     <div id="listDefaultLeaders" style="display:flex; flex-wrap:wrap; gap:8px; max-height:180px; overflow-y:auto; padding-right:5px; align-content: flex-start;"></div>
                 </div>
 
-                <!-- BOTONES DE IMPORTACIÓN MASIVA -->
+                <!-- BOTONES DE IMPORTACIÓN Y EXPORTACIÓN MASIVA -->
                 <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
-                    <h4 style="margin-bottom:8px;">Importación Masiva</h4>
+                    <h4 style="margin-bottom:8px;">Importación y Exportación de Datos</h4>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <button class="btn btn-save" style="flex:1; min-width:150px;" onclick="openCSVImporter()">📂
-                            Importar CSV</button>
-                        <button class="btn btn-save" style="flex:1; min-width:150px;" onclick="openTextImporter()">📝
-                            Pegar Texto</button>
+                        <button class="btn btn-save" style="flex:1; min-width:140px;" onclick="openCSVImporter()">📂 Importar CSV</button>
+                        <button class="btn btn-save" style="flex:1; min-width:140px;" onclick="openTextImporter()">📝 Pegar Texto</button>
+                        <button class="btn" style="flex:1; min-width:140px; background:#00bcd4; color:black;" onclick="exportDataToCSV()">📊 Exportar a CSV</button>
+                        <button class="btn btn-delete" style="flex:1; min-width:140px; background:#8e44ad;" onclick="exportFullBackup()">💾 Backup (Todo)</button>
                     </div>
                 </div>
 
@@ -1030,6 +1030,7 @@
 
             <div class="btn-row" style="flex-direction:column;">
                 <button class="btn btn-play" onclick="actionStartTimer()">⏱️ Cronómetro (Start/Stop)</button>
+                <button class="btn" style="background:#4285F4; color:white;" onclick="addToGoogleCalendar()">📅 Añadir a Google Calendar</button>
                 <button class="btn" style="background:#555; color:white;" onclick="actionEditTask()">✏️ Editar
                     Serie</button>
                 <button class="btn" style="background:#00bcd4; color:black;" onclick="actionDuplicateTask()">📋 Duplicar
@@ -2694,7 +2695,90 @@
             if (document.getElementById('leadersList')) document.getElementById('leadersList').innerHTML = optsLeaders;
         }
 
-        function exportCSV() { /* Export logic */ }
+        function exportDataToCSV() {
+            if (state.tasks.length === 0) return alert("No hay tareas para exportar.");
+            
+            const headers = ['ID', 'Categoria_Maquina', 'Subcategoria_Seccion', 'Proceso_Depto', 'Detalle_Descripcion', 'Lider_Autorizador', 'Mantenimiento', 'Prioridad', 'Fecha', 'Hora', 'Estado', 'Costo', 'Tiempo_Segundos'];
+            
+            const rows = [headers.join(',')];
+            
+            state.tasks.forEach(t => {
+                const arr = [
+                    t.taskCode || '',
+                    t.category || '',
+                    t.subcategory || '',
+                    t.process || '',
+                    (t.detail || '').replace(/,/g, ' ').replace(/"/g, '""'), 
+                    (t.assignees || []).join(' | '),
+                    t.maintenanceType || '',
+                    t.priority || '',
+                    t.date,
+                    `${t.hour}:00`,
+                    t.status,
+                    t.cost || 0,
+                    t.seconds || 0
+                ];
+                rows.push(arr.map(x => `"${x}"`).join(','));
+            });
+            
+            const csvContent = rows.join('\n');
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `planificador_export_${formatDate(new Date())}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function exportFullBackup() {
+            const backup = {
+                tasks: state.tasks,
+                defaultCategories: state.defaultCategories,
+                defaultSubcategories: state.defaultSubcategories,
+                defaultProcesses: state.defaultProcesses,
+                defaultLeaders: state.defaultLeaders,
+                shifts: state.shifts,
+                managerName: state.managerName,
+                exportDate: new Date().toISOString()
+            };
+            
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `backup_completo_planificador_${formatDate(new Date())}.json`);
+            document.body.appendChild(dlAnchorElem);
+            dlAnchorElem.click();
+            document.body.removeChild(dlAnchorElem);
+        }
+
+        function addToGoogleCalendar() {
+            const task = state.tasks.find(t => t.id === state.activeOptionsId);
+            if (!task) return;
+            
+            const parseToLocalString = (dateStr, h) => {
+                const dateParts = dateStr.split('-');
+                const yyyy = dateParts[0];
+                const MM = dateParts[1];
+                const dd = dateParts[2];
+                const hh = String(h).padStart(2, '0');
+                return `${yyyy}${MM}${dd}T${hh}0000`; // Local time para Google Calendar
+            };
+            
+            const start = parseToLocalString(task.date, task.hour);
+            const end = parseToLocalString(task.date, task.hour + 1);
+            
+            const title = encodeURIComponent(`${task.taskCode || ''} ${task.category || ''} ${task.subcategory || ''}`.trim());
+            
+            let description = `Detalle: ${task.detail || 'Sin detalles.'}`;
+            if(task.process) description += `\nProceso: ${task.process}`;
+            if(task.assignees && task.assignees.length > 0) description += `\nTécnicos: ${task.assignees.join(', ')}`;
+            description = encodeURIComponent(description);
+            
+            const url = `https://calendar.google.com/calendar/r/eventedit?text=${title}&dates=${start}/${end}&details=${description}`;
+            window.open(url, '_blank');
+        }
         function handleAuth() { alert("Configurar API Google"); }
         function gapiLoaded() { } function gisLoaded() { }
     </script>
