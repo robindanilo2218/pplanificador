@@ -1,1051 +1,4 @@
-<!DOCTYPE html>
-<html lang="es">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Planificador Mantenimiento Pro</title>
-    <link rel="manifest" href="./manifest.json">
-    <meta name="theme-color" content="#1e1e1e">
-    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/265/265674.png">
-
-    <!-- Estilos -->
-    <style>
-        :root {
-            --bg-color: #121212;
-            --card-color: #1e1e1e;
-            --text-color: #e0e0e0;
-            --accent: #00bcd4;
-            --border: #333;
-            --slot-height: 70px;
-        }
-
-        * {
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg-color);
-            color: var(--text-color);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* HEADER */
-        header {
-            padding: 10px;
-            background: var(--card-color);
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 100;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .nav-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .nav-btn {
-            background: #333;
-            border: 1px solid #444;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .date-display {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 120px;
-        }
-
-        .week-title {
-            font-weight: bold;
-            font-size: 0.9em;
-            color: var(--accent);
-        }
-
-        .month-sub {
-            font-size: 0.75em;
-            color: #888;
-        }
-
-        .lunch-selector {
-            background: #222;
-            color: #aaa;
-            border: 1px solid #444;
-            padding: 4px;
-            border-radius: 4px;
-            font-size: 0.8em;
-        }
-
-        /* TABS */
-        .tab-bar {
-            background: #181818;
-            padding: 5px;
-            display: flex;
-            gap: 5px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .tab-btn {
-            flex: 1;
-            border: none;
-            background: transparent;
-            color: #888;
-            padding: 8px;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: 0.2s;
-        }
-
-        .tab-btn.active {
-            color: var(--accent);
-            border-bottom-color: var(--accent);
-            background: #222;
-        }
-
-        /* VIEWS CONTAINER */
-        .view-container {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .view-section {
-            display: none;
-            height: 100%;
-            overflow: auto;
-        }
-
-        .view-section.active-view {
-            display: block;
-        }
-
-        /* CALENDAR GRID */
-        .calendar-grid {
-            display: grid;
-            position: relative;
-        }
-
-        .header-corner {
-            position: sticky;
-            top: 0;
-            left: 0;
-            z-index: 30;
-            background: var(--card-color);
-            border-bottom: 1px solid var(--border);
-            border-right: 1px solid var(--border);
-        }
-
-        .day-header {
-            position: sticky;
-            top: 0;
-            z-index: 20;
-            background: var(--card-color);
-            padding: 5px;
-            text-align: center;
-            border-bottom: 1px solid var(--border);
-            border-right: 1px solid var(--border);
-            font-size: 0.85em;
-        }
-
-        .day-header.today {
-            border-bottom: 3px solid var(--accent);
-            color: var(--accent);
-        }
-
-        .time-col {
-            position: sticky;
-            left: 0;
-            z-index: 10;
-            background: var(--card-color);
-            border-right: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.75em;
-            color: #777;
-            min-height: var(--slot-height);
-            height: 100%;
-        }
-
-        /* MODIFICADO: Slots adaptan su altura a su contenido */
-        .slot {
-            min-height: var(--slot-height);
-            height: 100%;
-            border-right: 1px solid #2a2a2a;
-            border-bottom: 1px solid #2a2a2a;
-            padding: 2px;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            overflow: visible;
-        }
-
-        .lunch-row {
-            background: repeating-linear-gradient(45deg, #181818, #181818 10px, #202020 10px, #202020 20px);
-        }
-
-        .weekend-col {
-            background: rgba(255, 255, 255, 0.02);
-        }
-
-        .slot.today-col {
-            background: rgba(0, 188, 212, 0.05);
-            border-left: 1px solid rgba(0, 188, 212, 0.3);
-            border-right: 1px solid rgba(0, 188, 212, 0.3);
-            box-shadow: inset 0 0 15px rgba(0, 188, 212, 0.05);
-            z-index: 1;
-        }
-
-        /* MODIFICADO: Tarjetas no estiran el layout global al pasarles el cursor, sólo se resaltan y escalan. El grid absorbe físicamente todas las tareas. */
-        .task-card {
-            min-height: 42px;
-            height: max-content;
-            width: 100%;
-            background: #2d2d2d;
-            border-left: 4px solid #555;
-            border-radius: 4px;
-            padding: 4px;
-            font-size: 0.8em;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            overflow: hidden;
-            flex-shrink: 0;
-            z-index: 2;
-            position: relative;
-            transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .task-card:hover {
-            transform: scale(1.02);
-            background: #383838;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.8);
-            z-index: 100;
-        }
-
-        .task-card.running {
-            background: #1a3320;
-            border-left-color: #00ff00 !important;
-            animation: pulse 2s infinite;
-        }
-
-        .task-card.done {
-            opacity: 0.5;
-            text-decoration: line-through;
-            filter: grayscale(1);
-        }
-
-        /* TABLE VIEW */
-        .table-controls {
-            padding: 15px;
-            background: var(--card-color);
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .filter-input {
-            background: #333;
-            color: white;
-            border: 1px solid #444;
-            padding: 8px;
-            border-radius: 4px;
-            flex: 1;
-            min-width: 150px;
-        }
-
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.9em;
-        }
-
-        .data-table th {
-            background: #252525;
-            padding: 10px;
-            text-align: left;
-            position: sticky;
-            top: 0;
-        }
-
-        .data-table td {
-            border-bottom: 1px solid #333;
-            padding: 10px;
-        }
-
-        .data-table tr:hover {
-            background: #2a2a2a;
-        }
-
-        /* MODALS */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-        }
-
-        .modal-content {
-            background: #252525;
-            padding: 20px;
-            border-radius: 12px;
-            width: 95%;
-            max-width: 700px;
-            border: 1px solid #444;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .form-row {
-            margin-bottom: 12px;
-        }
-
-        .form-row label {
-            display: block;
-            color: #888;
-            font-size: 0.8em;
-            margin-bottom: 5px;
-        }
-
-        .input-dark {
-            width: 100%;
-            padding: 10px;
-            background: #151515;
-            border: 1px solid #444;
-            color: white;
-            border-radius: 5px;
-            font-family: inherit;
-        }
-
-        .btn-row {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .btn-save {
-            background: var(--accent);
-            color: black;
-        }
-
-        .btn-cancel {
-            background: #333;
-            color: white;
-        }
-
-        .btn-delete {
-            background: #d32f2f;
-            color: white;
-        }
-
-        .btn-play {
-            background: #388e3c;
-            color: white;
-        }
-
-        /* COST BREAKDOWN STYLES */
-        .cost-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-            align-items: center;
-        }
-
-        .cost-name {
-            flex: 2;
-        }
-
-        .cost-val {
-            flex: 1;
-            text-align: right;
-        }
-
-        .btn-sm {
-            padding: 5px 10px;
-            font-size: 0.8em;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-        }
-
-        .btn-add {
-            background: #2e7d32;
-            color: white;
-            width: 100%;
-            margin-top: 5px;
-        }
-
-        .btn-remove {
-            background: #c62828;
-            color: white;
-        }
-
-        .total-display {
-            text-align: right;
-            font-size: 1.1em;
-            font-weight: bold;
-            color: #4caf50;
-            margin-top: 10px;
-            border-top: 1px solid #444;
-            padding-top: 5px;
-        }
-
-        /* LEADERS VIEW */
-        .leader-card {
-            background: var(--card-color);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-
-        .leader-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #333;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
-        }
-
-        /* ELIMINADA .assign-form antigua */
-
-        .task-id-badge {
-            background: #444;
-            color: #fff;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 0.85em;
-            font-weight: bold;
-            border: 1px solid #555;
-        }
-
-        /* NUEVO: ESTILOS PARA ASIGNACIONES EN EL MODAL */
-        .assign-row {
-            background: #222;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 10px;
-            border: 1px solid #444;
-        }
-
-        .assign-day-chk {
-            margin-right: 2px;
-        }
-
-        /* ESTILOS GRÁFICO PRIORIDADES */
-        .chart-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-            gap: 10px;
-        }
-
-        .chart-label {
-            width: 60px;
-            font-size: 0.8em;
-            text-align: right;
-            color: #aaa;
-            font-weight: bold;
-        }
-
-        .chart-bar-bg {
-            flex: 1;
-            background: #222;
-            height: 14px;
-            border-radius: 7px;
-            overflow: hidden;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
-        }
-
-        .chart-bar-fill {
-            height: 100%;
-            border-radius: 7px;
-            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-            width: 0%;
-        }
-
-        .chart-count {
-            width: 25px;
-            font-size: 0.9em;
-            font-weight: bold;
-            text-align: left;
-        }
-
-        .neon-red {
-            background: #ff003c;
-            box-shadow: 0 0 10px #ff003c;
-        }
-
-        .neon-yellow {
-            background: #fffb00;
-            box-shadow: 0 0 10px #fffb00;
-        }
-
-        .neon-blue {
-            background: #00e5ff;
-            box-shadow: 0 0 10px #00e5ff;
-        }
-
-        .soft-green {
-            background: #81c784;
-            box-shadow: 0 0 8px #81c784;
-        }
-
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.2);
-            }
-
-            70% {
-                box-shadow: 0 0 0 4px rgba(0, 255, 0, 0);
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(0, 255, 0, 0);
-            }
-        }
-    </style>
-</head>
-
-<body>
-
-    <header>
-        <div class="nav-group">
-            <img src="https://cdn-icons-png.flaticon.com/512/265/265674.png" style="height:30px; display:none;"
-                onerror="this.style.display='none'">
-            <!-- Botón HOY agregado aquí -->
-            <button class="nav-btn" onclick="goToToday()"
-                style="background: var(--accent); color: black; font-weight: bold;">Hoy</button>
-            <button class="nav-btn" onclick="changeDate(-1)">❮</button>
-            <div class="date-display">
-                <span id="weekLabel" class="week-title">Semana --</span>
-                <span id="monthLabel" class="month-sub">...</span>
-            </div>
-            <button class="nav-btn" onclick="changeDate(1)">❯</button>
-        </div>
-
-        <div class="nav-group">
-            <span style="font-size:0.8em; color:#888;">Vista:</span>
-            <select id="viewSelector" class="lunch-selector" onchange="changeViewMode()">
-                <option value="week">Semana</option>
-                <option value="month">Mes (Horario)</option>
-                <option value="calendar">Calendario</option>
-            </select>
-
-            <span style="font-size:0.8em; color:#888; margin-left:5px;">Almuerzo:</span>
-            <select id="lunchSelector" class="lunch-selector" onchange="updateLunchTime()">
-                <option value="12">12-13</option>
-                <option value="13">13-14</option>
-                <option value="14">14-15</option>
-            </select>
-            <button class="nav-btn" id="authBtn" onclick="handleAuth()"
-                style="background:#4285F4; border:none;">G</button>
-        </div>
-    </header>
-
-    <div class="tab-bar">
-        <button class="tab-btn active" onclick="switchView('calendar', this)">📅 Calendario</button>
-        <button class="tab-btn" onclick="switchView('table', this)">📋 Reporte</button>
-        <button class="tab-btn" onclick="switchView('dashboard', this)">📊 Dashboard</button>
-        <button class="tab-btn" onclick="switchView('leaders', this)">👥 Líderes</button>
-        <button class="tab-btn" onclick="switchView('config', this)">⚙️ Config</button>
-    </div>
-
-    <div class="view-container">
-        <!-- VISTA CALENDARIO -->
-        <div id="calendar-view" class="view-section active-view">
-            <div class="calendar-grid" id="grid"></div>
-        </div>
-
-        <!-- VISTA TABLA (NUEVA) -->
-        <div id="table-view" class="view-section">
-            <div class="table-controls">
-                <input type="text" id="filterCat" class="filter-input" list="catList" placeholder="Filtrar Categoría..."
-                    oninput="renderTable()">
-                <input type="text" id="filterSub" class="filter-input" placeholder="Filtrar Subcategoría..."
-                    oninput="renderTable()">
-                <datalist id="catList"></datalist>
-            </div>
-            <div style="overflow-x:auto;">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Tipo</th>
-                            <th>Inicio</th>
-                            <th>Fin</th>
-                            <th>Categoría</th>
-                            <th>Subcategoría</th>
-                            <th>Líder</th>
-                            <th>Detalle</th>
-                            <th>Costo Total</th>
-                            <th>Tiempo</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- VISTA LÍDERES -->
-        <div id="leaders-view" class="view-section" style="padding:20px;">
-            <p style="color:#888; font-size:0.9em; margin-top:0;">Asigna rápidamente tareas sin dueño o revisa la carga
-                de cada líder.</p>
-
-            <div id="leadersContainer">
-                <!-- Se llena con JS (Tareas sin asignar + Tareas por líder) -->
-            </div>
-        </div>
-
-        <!-- VISTA CONFIGURACIÓN (NUEVA) -->
-        <div id="config-view" class="view-section" style="padding:20px;">
-            <div class="stat-box"
-                style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
-                <h3>Configuración de Listas Predeterminadas</h3>
-                <p style="color:#888; font-size:0.85em;">Agrega elementos para que aparezcan como sugerencias al
-                    planificar o asignar tareas.</p>
-
-                <div style="margin-top:20px;">
-                    <h4 style="margin-bottom:8px;">Categorías</h4>
-                    <div style="display:flex; gap:10px; margin-bottom:10px;">
-                        <input type="text" id="newDefaultCat" class="input-dark" placeholder="Nueva categoría...">
-                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;"
-                            onclick="addDefault('categories', 'newDefaultCat')">Añadir</button>
-                    </div>
-                    <div id="listDefaultCats" style="display:flex; flex-wrap:wrap; gap:8px; max-height:180px; overflow-y:auto; padding-right:5px; align-content: flex-start;"></div>
-                </div>
-
-                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
-                    <h4 style="margin-bottom:8px;">Subcategorías</h4>
-                    <div style="display:flex; gap:10px; margin-bottom:10px;">
-                        <input type="text" id="newDefaultSub" class="input-dark" placeholder="Nueva subcategoría...">
-                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;"
-                            onclick="addDefault('subcategories', 'newDefaultSub')">Añadir</button>
-                    </div>
-                    <div id="listDefaultSubs" style="display:flex; flex-wrap:wrap; gap:8px; max-height:180px; overflow-y:auto; padding-right:5px; align-content: flex-start;"></div>
-                </div>
-
-                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
-                    <h4 style="margin-bottom:8px;">Procesos / Departamentos</h4>
-                    <div style="display:flex; gap:10px; margin-bottom:10px;">
-                        <input type="text" id="newDefaultProcess" class="input-dark" placeholder="Nuevo proceso...">
-                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;"
-                            onclick="addDefault('processes', 'newDefaultProcess')">Añadir</button>
-                    </div>
-                    <div id="listDefaultProcesses" style="display:flex; flex-wrap:wrap; gap:8px; max-height:180px; overflow-y:auto; padding-right:5px; align-content: flex-start;"></div>
-                </div>
-
-                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
-                    <h4 style="margin-bottom:8px;">Líderes / Técnicos</h4>
-                    <div style="display:flex; gap:10px; margin-bottom:10px;">
-                        <input type="text" id="newDefaultLeader" class="input-dark" placeholder="Nuevo líder...">
-                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;"
-                            onclick="addDefault('leaders', 'newDefaultLeader')">Añadir</button>
-                    </div>
-                    <div id="listDefaultLeaders" style="display:flex; flex-wrap:wrap; gap:8px; max-height:180px; overflow-y:auto; padding-right:5px; align-content: flex-start;"></div>
-                </div>
-
-                <!-- BOTONES DE IMPORTACIÓN MASIVA -->
-                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
-                    <h4 style="margin-bottom:8px;">Importación Masiva</h4>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <button class="btn btn-save" style="flex:1; min-width:150px;" onclick="openCSVImporter()">📂
-                            Importar CSV</button>
-                        <button class="btn btn-save" style="flex:1; min-width:150px;" onclick="openTextImporter()">📝
-                            Pegar Texto</button>
-                    </div>
-                </div>
-
-                <!-- NUEVO: CONFIGURACIÓN DE TURNOS -->
-                <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
-                    <h4 style="margin-bottom:8px;">Turnos por Día de la Semana</h4>
-                    <p style="color:#888; font-size:0.8em; margin-top:0;">Asigna líderes para que aparezcan en el
-                        encabezado del calendario.</p>
-                    <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap: wrap;">
-                        <select id="shiftDay" class="input-dark" style="flex:1; min-width: 100px;">
-                            <option value="1">Lunes</option>
-                            <option value="2">Martes</option>
-                            <option value="3">Miércoles</option>
-                            <option value="4">Jueves</option>
-                            <option value="5">Viernes</option>
-                            <option value="6">Sábado</option>
-                            <option value="0">Domingo</option>
-                        </select>
-                        <input type="text" id="shiftLeader" class="input-dark" list="leadersList"
-                            placeholder="Líder en turno..." style="flex:2; min-width: 150px;">
-                        <button class="btn btn-save" style="flex:0 0 auto; padding:8px 15px;"
-                            onclick="addShift()">Asignar</button>
-                    </div>
-                    <div id="listShifts"
-                        style="display:flex; flex-direction:column; gap:5px; font-size:0.9em; background:#1a1a1a; padding:10px; border-radius:5px;">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- VISTA DASHBOARD -->
-        <div id="dashboard-view" class="view-section" style="padding:20px;">
-            <div class="stat-box"
-                style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
-                <h3>Resumen Financiero (Semana Visible)</h3>
-                <h1 id="dashCost" style="color:#4caf50; margin:5px 0;">Q0.00</h1>
-                <p style="color:#888; font-size:0.8em;">Calculado proporcionalmente según las horas en pantalla.</p>
-                <div id="dashBreakdown"
-                    style="margin-top:10px; padding-top:10px; border-top:1px solid #333; font-size:0.9em;">
-                    <!-- Breakdown JS -->
-                </div>
-            </div>
-
-            <!-- NUEVO: GRÁFICO DE PRIORIDADES -->
-            <div class="stat-box"
-                style="background:var(--card-color); padding:15px; border-radius:8px; border:1px solid #333;">
-                <h3>Tareas Pendientes por Prioridad</h3>
-                <p style="color:#888; font-size:0.8em; margin-top:-10px; margin-bottom:15px;">Incluye tareas 'Por hacer'
-                    y 'En progreso'.</p>
-
-                <div class="chart-row">
-                    <div class="chart-label">Urgente</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-urgent" class="chart-bar-fill neon-red"></div>
-                    </div>
-                    <div id="count-urgent" class="chart-count">0</div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-label">Alta</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-high" class="chart-bar-fill neon-yellow"></div>
-                    </div>
-                    <div id="count-high" class="chart-count">0</div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-label">Media</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-medium" class="chart-bar-fill neon-blue"></div>
-                    </div>
-                    <div id="count-medium" class="chart-count">0</div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-label">Baja</div>
-                    <div class="chart-bar-bg">
-                        <div id="bar-low" class="chart-bar-fill soft-green"></div>
-                    </div>
-                    <div id="count-low" class="chart-count">0</div>
-                </div>
-            </div>
-
-            <button class="btn btn-save" onclick="exportCSV()">📥 Exportar Excel Completo</button>
-        </div>
-    </div>
-
-    <!-- MODAL NUEVA/EDITAR TAREA -->
-    <div id="modalTask" class="modal">
-        <div class="modal-content">
-            <h3 id="modalTitle">Planificar Tarea</h3>
-
-            <!-- NUEVO: Alerta de Almuerzo -->
-            <div id="lunchWarning"
-                style="display:none; background:#ff980033; border:1px solid #ff9800; color:#ffb74d; padding:8px; border-radius:4px; font-size:0.8em; margin-bottom:12px;">
-                ⚠️ <b>Horario de Almuerzo:</b> Estás asignando una tarea en hora de almuerzo. Asegúrate de asignar a
-                otro técnico disponible.
-            </div>
-
-            <div class="form-row">
-                <label>Categoría</label>
-                <input type="text" id="inpCat" class="input-dark" list="catListRef"
-                    placeholder="Ej: Corrugadora Fosber 2" oninput="filterSubcategories()">
-                <datalist id="catListRef"></datalist>
-            </div>
-
-            <div class="form-row">
-                <label>Subcategoría</label>
-                <input type="text" id="inpSub" class="input-dark" list="subListRef" placeholder="Ej: Twin">
-                <datalist id="subListRef"></datalist>
-            </div>
-
-            <div class="form-row">
-                <label>Proceso/Departamento</label>
-                <input type="text" id="inpProcess" class="input-dark" list="processListRef" placeholder="Ej: ELECTRICO">
-                <datalist id="processListRef"></datalist>
-            </div>
-
-            <div class="form-row">
-                <label>Detalle</label>
-                <input type="text" id="inpDetail" class="input-dark"
-                    placeholder="Ej: Proyecto abc o Mantenimiento Preventivo">
-            </div>
-
-            <div class="form-row" style="display:flex; gap:10px;">
-                <div style="flex:1">
-                    <label>Tipo</label>
-                    <select id="inpMaintType" class="input-dark">
-                        <option value="preventivo" selected>🛡️ Preventivo</option>
-                        <option value="correctivo">🔧 Correctivo</option>
-                        <option value="proyecto">🏗️ Proyecto</option>
-                    </select>
-                </div>
-                <div style="flex:1">
-                    <label>Prioridad</label>
-                    <select id="inpPriority" class="input-dark">
-                        <option value="urgent">Urgente (Rojo)</option>
-                        <option value="high">Alta (Amarillo)</option>
-                        <option value="medium" selected>Media (Celeste)</option>
-                        <option value="low">Baja (Verde)</option>
-                    </select>
-                </div>
-            </div>
-
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-
-            <div class="form-row" style="display:flex; gap:10px;">
-                <div style="flex:1"><label>Hora Inicio</label><select id="inpStartHour" class="input-dark"></select>
-                </div>
-                <div style="flex:1"><label>Hora Fin</label><select id="inpEndHour" class="input-dark"></select></div>
-            </div>
-
-            <div class="form-row" style="display:flex; gap:10px;">
-                <div style="flex:1"><label>Desde</label><input type="date" id="inpDateStart" class="input-dark"></div>
-                <div style="flex:1"><label>Hasta</label><input type="date" id="inpDateEnd" class="input-dark"></div>
-            </div>
-
-            <div class="form-row">
-                <label>Días a incluir en el rango base</label>
-                <div
-                    style="display:flex; gap:10px; flex-wrap:wrap; font-size:0.9em; padding: 5px 0; background: #222; border-radius: 5px; padding: 10px; border: 1px solid #444;">
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-1" checked> Lun</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-2" checked> Mar</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-3" checked> Mié</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-4" checked> Jue</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox"
-                            id="day-5" checked> Vie</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input
-                            type="checkbox" id="day-6"> Sáb</label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#f0ad4e;"><input
-                            type="checkbox" id="day-0"> Dom</label>
-                </div>
-            </div>
-
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-
-            <!-- NUEVO: SECCIÓN DE ASIGNACIÓN DE PERSONAL EN EL MODAL -->
-            <div class="form-row">
-                <label>Asignación de Personal y Días</label>
-                <p style="font-size:0.75em; color:#888; margin-top:-5px;">Agrega a los técnicos y marca qué días
-                    trabajarán en esta tarea.</p>
-                <div id="assignList">
-                    <!-- Filas dinámicas aquí -->
-                </div>
-                <button class="btn btn-sm btn-add" style="background:#00bcd4; color:black; font-weight:bold;"
-                    onclick="addAssignRow()">+ Agregar Técnico/Líder</button>
-            </div>
-
-            <!-- Sección de Tareas Recurrentes -->
-            <div class="form-row" style="margin-top:20px;">
-                <label
-                    style="display:flex; align-items:center; gap:5px; color:#fff; cursor:pointer; background:#1a1a1a; padding:10px; border-radius:5px; border:1px solid #333;">
-                    <input type="checkbox" id="inpRepeatCheck" onchange="toggleRepeatUI()"> 🔁 Repetir esta tarea
-                    (Recurrente)
-                </label>
-                <div id="repeatUI"
-                    style="display:none; gap:10px; margin-top:5px; background:#222; padding:10px; border-radius:5px; border:1px solid #444;">
-                    <div style="display:flex; align-items:center; gap:5px;">
-                        Cada <input type="number" id="inpRepeatNum" class="input-dark" style="width:60px; padding:5px;"
-                            value="1" min="1">
-                        <select id="inpRepeatUnit" class="input-dark" style="width:110px; padding:5px;">
-                            <option value="weeks">Semana(s)</option>
-                            <option value="months">Mes(es)</option>
-                            <option value="years">Año(s)</option>
-                        </select>
-                    </div>
-                    <div style="margin-top:8px;">
-                        Hasta la fecha <input type="date" id="inpRepeatUntil" class="input-dark" style="padding:5px;">
-                    </div>
-                </div>
-            </div>
-
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-
-            <div class="form-row">
-                <label>Desglose de Costos (Global para todo el rango)</label>
-                <div id="costList">
-                    <!-- Filas dinámicas aquí -->
-                </div>
-                <button class="btn btn-sm btn-add" onclick="addCostRow()">+ Agregar Costo</button>
-                <div class="total-display" id="totalCostDisplay">Q0.00</div>
-            </div>
-
-            <input type="hidden" id="editingGroupId">
-
-            <div class="btn-row">
-                <button class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
-                <button class="btn btn-save" onclick="saveTaskRange()">Guardar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL IMPORTAR CSV -->
-    <div id="modalCSV" class="modal">
-        <div class="modal-content" style="max-width:600px;">
-            <h3>📂 Importar desde CSV</h3>
-            <p style="color:#888; font-size:0.85em;">Importa categorías, técnicos y más desde un archivo CSV.</p>
-
-            <div class="form-row">
-                <label>Paso 1: Nombre del Gerente de Mantenimiento</label>
-                <input type="text" id="csvManagerName" class="input-dark" placeholder="Ej: Jorge Pérez">
-                <p style="font-size:0.75em; color:#888; margin-top:5px;">Solo se importarán filas donde "Encargado"
-                    coincida con este nombre.</p>
-            </div>
-
-            <div class="form-row">
-                <label>Paso 2: Seleccionar archivo CSV</label>
-                <input type="file" id="csvFileInput" accept=".csv" class="input-dark" style="padding:8px;"
-                    onchange="previewCSV()">
-                <div id="csvPreview"
-                    style="margin-top:10px; padding:10px; background:#1a1a1a; border-radius:5px; display:none;">
-                    <p style="margin:0; font-size:0.9em;"><b>📊 Vista previa:</b></p>
-                    <p id="csvStats" style="margin:5px 0; font-size:0.85em; color:#888;"></p>
-                </div>
-            </div>
-
-            <div class="form-row" id="csvTypeSection" style="display:none;">
-                <label>Paso 3: Tipo de Importación</label>
-                <div style="background:#1a1a1a; padding:15px; border-radius:5px; border:1px solid #333;">
-                    <label
-                        style="display:block; padding:10px; background:#222; border-radius:5px; margin-bottom:8px; cursor:pointer; border:2px solid transparent;"
-                        onclick="selectImportType('A')">
-                        <input type="radio" name="importType" value="A" checked> <b>Opción A: Solo listas maestras</b>
-                        <div style="font-size:0.8em; color:#aaa; margin-left:20px; margin-top:5px;">Importa categorías,
-                            subcategorías, procesos y técnicos. No crea tareas.</div>
-                    </label>
-                    <label
-                        style="display:block; padding:10px; background:#222; border-radius:5px; margin-bottom:8px; cursor:pointer; border:2px solid transparent;"
-                        onclick="selectImportType('B')">
-                        <input type="radio" name="importType" value="B"> <b>Opción B: Historial (tareas completadas)</b>
-                        <div style="font-size:0.8em; color:#aaa; margin-left:20px; margin-top:5px;">Crea tareas con
-                            fechas originales del CSV, marcadas como completadas ✅</div>
-                    </label>
-                    <label
-                        style="display:block; padding:10px; background:#222; border-radius:5px; cursor:pointer; border:2px solid transparent;"
-                        onclick="selectImportType('C')">
-                        <input type="radio" name="importType" value="C"> <b>Opción C: Plantillas (tareas futuras)</b>
-                        <div style="font-size:0.8em; color:#aaa; margin-left:20px; margin-top:5px;">Crea tareas
-                            programadas desde HOY en adelante 📅</div>
-                    </label>
-                </div>
-            </div>
-
-            <div id="csvResults"
-                style="display:none; margin-top:15px; padding:15px; background:#1a3320; border:1px solid #00ff0050; border-radius:5px;">
-                <h4 style="margin-top:0; color:#00ff00;">✅ Importación Exitosa</h4>
-                <div id="csvResultsContent" style="font-size:0.9em;"></div>
-            </div>
-
-            <div class="btn-row">
-                <button class="btn btn-cancel" onclick="closeCSVModal()">Cancelar</button>
-                <button class="btn btn-save" id="btnImportCSV" onclick="executeCSVImport()" disabled>Importar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL IMPORTAR TEXTO -->
-    <div id="modalText" class="modal">
-        <div class="modal-content">
-            <h3>📝 Pegar Lista de Texto</h3>
-
-            <div class="form-row">
-                <label>Tipo de datos</label>
-                <select id="textImportType" class="input-dark">
-                    <option value="categories">Categorías (Máquinas)</option>
-                    <option value="subcategories">Subcategorías (Secciones)</option>
-                    <option value="processes">Procesos/Departamentos</option>
-                    <option value="leaders">Líderes/Técnicos</option>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label>Pegar texto (una entrada por línea)</label>
-                <textarea id="textImportArea" class="input-dark" rows="10"
-                    placeholder="Corrugadora Fosber 1&#10;Corrugadora Fosber 2&#10;Impresora Ward 14&#10;..."
-                    oninput="previewTextImport()"></textarea>
-            </div>
-
-            <div id="textPreview"
-                style="margin-top:10px; padding:10px; background:#1a1a1a; border-radius:5px; font-size:0.85em; color:#888;">
-            </div>
-
-            <div class="btn-row">
-                <button class="btn btn-cancel" onclick="closeTextModal()">Cancelar</button>
-                <button class="btn btn-save" onclick="executeTextImport()">Importar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL OPCIONES -->
-    <div id="modalOptions" class="modal">
-        <div class="modal-content">
-            <h3 id="optTitle">Opciones</h3>
-            <p id="optSub" style="color:#888; font-size:0.9em; margin-bottom:20px;"></p>
-
-            <div class="btn-row" style="flex-direction:column;">
-                <button class="btn btn-play" onclick="actionStartTimer()">⏱️ Cronómetro (Start/Stop)</button>
-                <button class="btn" style="background:#555; color:white;" onclick="actionEditTask()">✏️ Editar
-                    Serie</button>
-                <button class="btn" style="background:#00bcd4; color:black;" onclick="actionDuplicateTask()">📋 Duplicar
-                    Serie</button>
-                <button class="btn btn-delete" onclick="actionDeleteTask()">🗑️ Eliminar Serie</button>
-                <button class="btn btn-cancel"
-                    onclick="document.getElementById('modalOptions').style.display='none'">Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Google Scripts -->
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-
-    <script>
+﻿
         const CLIENT_ID = 'TU_CLIENT_ID';
         const API_KEY = 'TU_API_KEY';
 
@@ -1064,7 +17,7 @@
             managerName: localStorage.getItem('managerName') || '' // NUEVO: Para filtro CSV
         };
 
-        // Migración de datos viejos (assignee string -> assignees array)
+        // MigraciÃ³n de datos viejos (assignee string -> assignees array)
         state.tasks.forEach(t => {
             if (t.assignee && !t.assignees) t.assignees = [t.assignee];
             if (!t.assignees) t.assignees = [];
@@ -1093,7 +46,7 @@
             updateDashboard();
             updateDatalists();
             renderLeaders();
-            renderConfigLists(); // Inicializar listas de configuración
+            renderConfigLists(); // Inicializar listas de configuraciÃ³n
         }
 
         // --- CALENDARIO ---
@@ -1122,16 +75,16 @@
             grid.style.height = 'auto';
 
             grid.appendChild(createDiv('header-corner', ''));
-            const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            const dayNames = ['Dom', 'Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b'];
 
             for (let i = 0; i < daysCount; i++) {
                 const d = new Date(startDate); d.setDate(d.getDate() + i);
                 const isToday = isSameDay(d, new Date());
                 const dayName = dayNames[d.getDay()];
 
-                // NUEVO: Renderizar líderes de turno
+                // NUEVO: Renderizar lÃ­deres de turno
                 const onDuty = state.shifts[d.getDay()] || [];
-                const onDutyStr = onDuty.length > 0 ? `<div style="font-size:0.7em; color:#88d8b0; line-height: 1.2; margin-top:5px; word-break: break-word; text-align:center;">👷 ${onDuty.join(', ')}</div>` : '';
+                const onDutyStr = onDuty.length > 0 ? `<div style="font-size:0.7em; color:#88d8b0; line-height: 1.2; margin-top:5px; word-break: break-word; text-align:center;">ðŸ‘· ${onDuty.join(', ')}</div>` : '';
 
                 grid.appendChild(createDiv(`day-header ${isToday ? 'today' : ''}`, `<div>${dayName}</div><div style="font-size:1.1em; font-weight:bold;">${d.getDate()}</div>${onDutyStr}`));
             }
@@ -1151,7 +104,7 @@
                     if (h === state.lunchHour) {
                         div.className = `slot lunch-row ${isToday ? 'today-col' : ''}`;
                         if (i === 3 || (state.viewMode === 'month' && i % 7 === 3)) {
-                            // Cambiado a posición absoluta para no estorbar a las tareas apiladas
+                            // Cambiado a posiciÃ³n absoluta para no estorbar a las tareas apiladas
                             const lbl = document.createElement('span');
                             lbl.style.cssText = "position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:0.7em; color:#555; pointer-events:none; z-index:1;";
                             lbl.textContent = "ALMUERZO";
@@ -1169,7 +122,7 @@
                         }
                     };
 
-                    // NUEVA LÓGICA: Filtrar para permitir múltiples tareas en la misma hora
+                    // NUEVA LÃ“GICA: Filtrar para permitir mÃºltiples tareas en la misma hora
                     const slotTasks = state.tasks.filter(t => t.date === dateStr && t.hour === h);
 
                     if (slotTasks.length > 0) {
@@ -1196,23 +149,26 @@
             const firstDay = new Date(year, month, 1);
             const lastDay = new Date(year, month + 1, 0);
             
-            const startOffset = firstDay.getDay(); 
-            const daysInMonth = lastDay.getDate();
+            // removed.getDay(); 
+            // removed.getDate();
             const rowsCount = Math.ceil((daysInMonth + startOffset) / 7);
             
             grid.style.gridTemplateColumns = `repeat(7, minmax(120px, 1fr))`;
             grid.style.gridTemplateRows = `auto repeat(${rowsCount}, minmax(100px, 1fr))`;
             grid.style.height = 'calc(100vh - 160px)';
             
-            const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            const dayNames = ['Dom', 'Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b'];
             
             for(let i=0; i<7; i++) {
                 grid.appendChild(createDiv('day-header', `<div>${dayNames[i]}</div>`));
             }
             
+            // removed.getDay(); 
             for(let i=0; i<startOffset; i++) {
                 grid.appendChild(createDiv('slot weekend-col', ''));
             }
+            
+            // removed.getDate();
             for(let d=1; d<=daysInMonth; d++) {
                 const dateObj = new Date(year, month, d);
                 const dateStr = formatDate(dateObj);
@@ -1268,9 +224,9 @@
             const color = stringToColor(cat);
 
             let typeIcon = '';
-            if (task.maintenanceType === 'preventivo') typeIcon = '🛡️';
-            else if (task.maintenanceType === 'correctivo') typeIcon = '🔧';
-            else if (task.maintenanceType === 'proyecto') typeIcon = '🏗️';
+            if (task.maintenanceType === 'preventivo') typeIcon = 'ðŸ›¡ï¸';
+            else if (task.maintenanceType === 'correctivo') typeIcon = 'ðŸ”§';
+            else if (task.maintenanceType === 'proyecto') typeIcon = 'ðŸ—ï¸';
 
             const assigneesStr = (task.assignees && task.assignees.length > 0) ? task.assignees.join(', ') : '';
 
@@ -1284,20 +240,20 @@
                         </div>
                     </div>
                     <div style="color:#aaa;">${sub}</div>
-                    ${assigneesStr ? `<div style="font-size:0.75em; color:#88d8b0; margin-top:2px;">👤 ${assigneesStr}</div>` : ''}
+                    ${assigneesStr ? `<div style="font-size:0.75em; color:#88d8b0; margin-top:2px;">ðŸ‘¤ ${assigneesStr}</div>` : ''}
                     ${task.seconds > 0 ? `<div style="text-align:right; font-family:monospace; font-size:0.9em;">${formatTime(task.seconds)}</div>` : ''}
                 </div>
             `;
         }
 
-        // --- GESTIÓN DE PERSONAL (MODAL) ---
+        // --- GESTIÃ“N DE PERSONAL (MODAL) ---
         function addAssignRow(name = '', days = [1, 2, 3, 4, 5]) {
             const container = document.getElementById('assignList');
             const div = document.createElement('div');
             div.className = 'assign-row';
 
             let daysHtml = '';
-            const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            const dayNames = ['Dom', 'Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b'];
             [1, 2, 3, 4, 5, 6, 0].forEach(d => {
                 const checked = days.includes(d) ? 'checked' : '';
                 const color = (d === 0 || d === 6) ? '#f0ad4e' : '#fff';
@@ -1306,7 +262,7 @@
 
             div.innerHTML = `
                 <div style="display:flex; gap:10px; margin-bottom:8px;">
-                    <input type="text" class="input-dark assign-name" list="leadersList" placeholder="Líder o Técnico..." value="${name}" style="flex:1;">
+                    <input type="text" class="input-dark assign-name" list="leadersList" placeholder="LÃ­der o TÃ©cnico..." value="${name}" style="flex:1;">
                     <button class="btn-sm btn-remove" onclick="this.parentElement.parentElement.remove()">X</button>
                 </div>
                 <div style="display:flex; flex-wrap:wrap; padding-left:5px;">
@@ -1332,7 +288,7 @@
             return assignments;
         }
 
-        // --- GESTIÓN DE COSTOS DINÁMICOS ---
+        // --- GESTIÃ“N DE COSTOS DINÃMICOS ---
         function addCostRow(name = '', val = '') {
             const container = document.getElementById('costList');
             const div = document.createElement('div');
@@ -1374,9 +330,9 @@
             return { breakdown, total };
         }
 
-        // --- GESTIÓN DE TAREAS ---
+        // --- GESTIÃ“N DE TAREAS ---
         function openModalNew(dateStr, hour) {
-            document.getElementById('modalTitle').textContent = "Nueva Planificación";
+            document.getElementById('modalTitle').textContent = "Nueva PlanificaciÃ³n";
             document.getElementById('editingGroupId').value = "";
 
             // Mostrar advertencia si es almuerzo
@@ -1386,17 +342,17 @@
 
             document.getElementById('inpCat').value = "";
             document.getElementById('inpSub').value = "";
-            filterSubcategories(); // Filtrar subcategorías reseteadas
+            filterSubcategories(); // Filtrar subcategorÃ­as reseteadas
             document.getElementById('inpProcess').value = "";
             document.getElementById('inpDetail').value = "";
             document.getElementById('inpMaintType').value = "preventivo";
             document.getElementById('inpPriority').value = "medium";
 
-            // Determinar el día de la semana clickeado
+            // Determinar el dÃ­a de la semana clickeado
             const clickedDate = new Date(dateStr + "T00:00:00");
             const clickedDay = clickedDate.getDay();
 
-            // MODIFICADO: Resetear días (L-V por defecto, si hizo clic en S-D, lo marca)
+            // MODIFICADO: Resetear dÃ­as (L-V por defecto, si hizo clic en S-D, lo marca)
             [0, 1, 2, 3, 4, 5, 6].forEach(d => {
                 if (d >= 1 && d <= 5) {
                     document.getElementById(`day-${d}`).checked = true;
@@ -1407,7 +363,7 @@
 
             // Resetear Asignaciones
             document.getElementById('assignList').innerHTML = '';
-            addAssignRow(); // Agrega una fila vacía por defecto
+            addAssignRow(); // Agrega una fila vacÃ­a por defecto
 
             // Resetear Recurrencia
             document.getElementById('inpRepeatCheck').checked = false;
@@ -1447,7 +403,7 @@
             const recurrenceData = repeatCheck ? { checked: true, num: repeatNum, unit: repeatUnit, until: repeatUntil } : null;
 
             const selectedDays = [0, 1, 2, 3, 4, 5, 6].filter(d => document.getElementById(`day-${d}`).checked);
-            if (selectedDays.length === 0) return alert("Debe seleccionar al menos un día de la semana.");
+            if (selectedDays.length === 0) return alert("Debe seleccionar al menos un dÃ­a de la semana.");
 
             const { breakdown, total } = getCostBreakdownFromUI();
 
@@ -1459,7 +415,7 @@
 
             if (!cat || hEnd <= hStart || dateEnd < dateStart) return alert("Verifique datos de fechas y horas.");
 
-            // --- LÓGICA DE PRESERVACIÓN HISTÓRICA ---
+            // --- LÃ“GICA DE PRESERVACIÃ“N HISTÃ“RICA ---
             let executedTasks = [];
             if (editId) {
                 executedTasks = state.tasks.filter(t => t.groupId === editId && (t.seconds > 0 || t.status === 'done' || t.status === 'running'));
@@ -1477,7 +433,7 @@
                     t.selectedDays = selectedDays;
                     t.baseStartDate = document.getElementById('inpDateStart').value;
                     t.baseEndDate = document.getElementById('inpDateEnd').value;
-                    // No sobreescribimos los assignees de las tareas ejecutadas para preservar la historia de quién la hizo.
+                    // No sobreescribimos los assignees de las tareas ejecutadas para preservar la historia de quiÃ©n la hizo.
                 });
             }
 
@@ -1496,14 +452,14 @@
                 currentTaskCode = `T-${((codes.length > 0 ? Math.max(...codes) : 0) + 1).toString().padStart(3, '0')}`;
             }
 
-            // --- CÁLCULO DE INTERVALOS RECURRENTES ---
+            // --- CÃLCULO DE INTERVALOS RECURRENTES ---
             let intervals = [];
             let currS = new Date(dateStart); currS.setHours(0, 0, 0, 0);
             let currE = new Date(dateEnd); currE.setHours(0, 0, 0, 0);
             let limitD = repeatCheck && repeatUntil ? new Date(repeatUntil) : new Date(currE);
             limitD.setHours(23, 59, 59, 999);
 
-            let maxLoops = 500; // Límite de seguridad
+            let maxLoops = 500; // LÃ­mite de seguridad
             while (currS <= limitD && maxLoops-- > 0) {
                 intervals.push({ s: new Date(currS), e: new Date(currE) });
 
@@ -1514,7 +470,7 @@
                 else if (repeatUnit === 'years') { currS.setFullYear(currS.getFullYear() + repeatNum); currE.setFullYear(currE.getFullYear() + repeatNum); }
             }
 
-            // --- GENERACIÓN DE NUEVOS SLOTS ---
+            // --- GENERACIÃ“N DE NUEVOS SLOTS ---
             let potentialSlots = [];
             intervals.forEach(inv => {
                 let cursor = new Date(inv.s);
@@ -1533,11 +489,11 @@
             let finalNewSlots = potentialSlots.filter(ps => !executedTasks.some(et => et.date === ps.date && et.hour === ps.hour));
 
             let totalSlots = executedTasks.length + finalNewSlots.length;
-            if (totalSlots === 0) return alert("El rango y días seleccionados no generan ninguna hora laborable.");
+            if (totalSlots === 0) return alert("El rango y dÃ­as seleccionados no generan ninguna hora laborable.");
 
             const costPerSlot = total / totalSlots;
 
-            // Actualizar costos de las tareas ejecutadas (históricas)
+            // Actualizar costos de las tareas ejecutadas (histÃ³ricas)
             executedTasks.forEach(t => {
                 t.cost = costPerSlot;
                 t.originalTotal = total;
@@ -1549,7 +505,7 @@
                 const slotDateObj = new Date(slot.date + "T00:00:00");
                 const dayOfWeek = slotDateObj.getDay();
 
-                // Determinar quién trabaja este día según la configuración del modal
+                // Determinar quiÃ©n trabaja este dÃ­a segÃºn la configuraciÃ³n del modal
                 const slotAssignees = assignments.filter(a => a.days.includes(dayOfWeek)).map(a => a.name);
 
                 state.tasks.push({
@@ -1565,7 +521,7 @@
                     priority: priority,
                     title: `${cat} ${sub}`,
                     taskCode: currentTaskCode,
-                    assignees: slotAssignees, // Array de técnicos para este día
+                    assignees: slotAssignees, // Array de tÃ©cnicos para este dÃ­a
                     cost: costPerSlot,
                     originalTotal: total,
                     breakdown: breakdown,
@@ -1602,14 +558,14 @@
             document.getElementById('editingGroupId').value = first.groupId;
 
             document.getElementById('inpCat').value = first.category || first.title.split(' ')[0];
-            filterSubcategories(); // Amarrar listas de acuerdo a la categoría cargada
+            filterSubcategories(); // Amarrar listas de acuerdo a la categorÃ­a cargada
             document.getElementById('inpSub').value = first.subcategory || '';
             document.getElementById('inpProcess').value = first.process || '';
             document.getElementById('inpDetail').value = first.detail || '';
             document.getElementById('inpMaintType').value = first.maintenanceType || 'preventivo';
             document.getElementById('inpPriority').value = first.priority || 'medium';
 
-            // Cargar Asignaciones leyendo los días de cada persona en la serie
+            // Cargar Asignaciones leyendo los dÃ­as de cada persona en la serie
             document.getElementById('assignList').innerHTML = '';
             const assignmentsMap = {};
             group.forEach(t => {
@@ -1625,7 +581,7 @@
             if (names.length > 0) {
                 names.forEach(name => addAssignRow(name, Array.from(assignmentsMap[name])));
             } else {
-                addAssignRow(); // Fila vacía si no había nadie
+                addAssignRow(); // Fila vacÃ­a si no habÃ­a nadie
             }
 
             // Cargar Recurrencia
@@ -1639,7 +595,7 @@
             }
             toggleRepeatUI();
 
-            // Cargar días seleccionados
+            // Cargar dÃ­as seleccionados
             if (first.selectedDays) {
                 [0, 1, 2, 3, 4, 5, 6].forEach(d => document.getElementById(`day-${d}`).checked = first.selectedDays.includes(d));
             }
@@ -1712,15 +668,15 @@
             document.getElementById('dashCost').textContent = `Q${total.toFixed(2)}`;
 
             // Calcular desglose proporcional visual
-            // Como el cost per slot ya está dividido, podemos intentar reconstruir categorías
+            // Como el cost per slot ya estÃ¡ dividido, podemos intentar reconstruir categorÃ­as
             // Nota: Esto es aproximado si los slots tienen costos parciales.
             let breakdownStats = {};
             visibleTasks.forEach(t => {
                 if (t.breakdown) {
-                    // La tarea tiene un desglose global. Su costo de slot es una fracción.
-                    // Calculamos la fracción que representa este slot del total original
+                    // La tarea tiene un desglose global. Su costo de slot es una fracciÃ³n.
+                    // Calculamos la fracciÃ³n que representa este slot del total original
                     // t.cost = costo de este slot. t.originalTotal = costo total.
-                    const ratio = t.cost / (t.originalTotal || 1); // Cuánto pesa este slot
+                    const ratio = t.cost / (t.originalTotal || 1); // CuÃ¡nto pesa este slot
 
                     t.breakdown.forEach(b => {
                         if (!breakdownStats[b.name]) breakdownStats[b.name] = 0;
@@ -1742,8 +698,8 @@
             html += '</ul>';
             document.getElementById('dashBreakdown').innerHTML = html;
 
-            // --- LÓGICA DEL GRÁFICO DE PRIORIDADES ---
-            // Filtrar tareas que no estén terminadas
+            // --- LÃ“GICA DEL GRÃFICO DE PRIORIDADES ---
+            // Filtrar tareas que no estÃ©n terminadas
             const activeTasks = state.tasks.filter(t => t.status === 'planned' || t.status === 'running');
 
             // Agrupar por groupId para contar el proyecto/serie como 1 sola tarea
@@ -1761,7 +717,7 @@
                 if (priorityCounts[p] !== undefined) priorityCounts[p]++;
             });
 
-            // Encontrar el valor máximo para escalar las barras (mínimo 1 para no dividir por 0)
+            // Encontrar el valor mÃ¡ximo para escalar las barras (mÃ­nimo 1 para no dividir por 0)
             const maxCount = Math.max(...Object.values(priorityCounts), 1);
 
             // Actualizar barras en el DOM
@@ -1802,7 +758,7 @@
             });
 
             const summaryTasks = Array.from(groupedTasks.values()).map(group => {
-                // Ordenar los bloques cronológicamente
+                // Ordenar los bloques cronolÃ³gicamente
                 group.slots.sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour);
 
                 const firstSlot = group.slots[0];
@@ -1814,7 +770,7 @@
                 // Llave para ordenar la tabla (por fecha de inicio)
                 group.sortKey = firstSlot.date + firstSlot.hour.toString().padStart(2, '0');
 
-                // Si TODOS los bloques están terminados, marcar el grupo como terminado
+                // Si TODOS los bloques estÃ¡n terminados, marcar el grupo como terminado
                 if (group.slots.every(s => s.status === 'done')) {
                     group.status = 'done';
                 }
@@ -1822,7 +778,7 @@
                 return group;
             });
 
-            // 3. Ordenar por fecha de inicio (descendente, lo más nuevo arriba)
+            // 3. Ordenar por fecha de inicio (descendente, lo mÃ¡s nuevo arriba)
             summaryTasks.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 
             // 4. Aplicar filtros y pintar la tabla
@@ -1835,7 +791,7 @@
 
                 let typeLabel = '-';
                 if (t.maintenanceType) {
-                    typeLabel = (t.maintenanceType === 'preventivo' ? '🛡️ ' : (t.maintenanceType === 'correctivo' ? '🔧 ' : '🏗️ ')) +
+                    typeLabel = (t.maintenanceType === 'preventivo' ? 'ðŸ›¡ï¸ ' : (t.maintenanceType === 'correctivo' ? 'ðŸ”§ ' : 'ðŸ—ï¸ ')) +
                         t.maintenanceType.charAt(0).toUpperCase() + t.maintenanceType.slice(1);
                 }
 
@@ -1856,18 +812,18 @@
                     <td>${t.detail || t.title}</td>
                     <td>Q${t.totalCost.toFixed(2)}</td>
                     <td style="font-family:monospace;">${formatTime(t.totalSeconds)}</td>
-                    <td>${t.status === 'done' ? '✅' : (t.status === 'running' ? '▶️' : '📅')}</td>
+                    <td>${t.status === 'done' ? 'âœ…' : (t.status === 'running' ? 'â–¶ï¸' : 'ðŸ“…')}</td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        // --- VISTA LÍDERES ---
+        // --- VISTA LÃDERES ---
         function renderLeaders() {
             const container = document.getElementById('leadersContainer');
             container.innerHTML = '';
 
-            // Agrupar tareas únicas por groupId
+            // Agrupar tareas Ãºnicas por groupId
             const uniqueGroups = new Map();
             state.tasks.forEach(t => {
                 if (!uniqueGroups.has(t.groupId)) {
@@ -1902,11 +858,11 @@
             if (unassignedGroups.length > 0) {
                 html += `
                     <div class="leader-card" style="border: 1px solid #f44336; background: rgba(244, 67, 54, 0.05);">
-                        <h3 style="color:#f44336; margin-top:0; border-bottom:1px solid #f44336; padding-bottom:10px;">⚠️ Tareas Sin Asignación</h3>
+                        <h3 style="color:#f44336; margin-top:0; border-bottom:1px solid #f44336; padding-bottom:10px;">âš ï¸ Tareas Sin AsignaciÃ³n</h3>
                 `;
 
                 unassignedGroups.forEach(g => {
-                    const typeIcon = g.maintenanceType === 'preventivo' ? '🛡️' : (g.maintenanceType === 'correctivo' ? '🔧' : (g.maintenanceType === 'proyecto' ? '🏗️' : ''));
+                    const typeIcon = g.maintenanceType === 'preventivo' ? 'ðŸ›¡ï¸' : (g.maintenanceType === 'correctivo' ? 'ðŸ”§' : (g.maintenanceType === 'proyecto' ? 'ðŸ—ï¸' : ''));
                     html += `
                         <div style="background:#1e1e1e; padding:12px; border-radius:6px; margin-bottom:10px; border:1px solid #444; cursor:pointer;" onclick="openOptionsById(${g.id})">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1920,7 +876,7 @@
                             <div style="font-size:0.85em; color:#aaa; margin:5px 0 10px 0;">${g.detail || g.subcategory || 'Sin detalles adicionales'}</div>
                             
                             <div style="display:flex; gap:8px;">
-                                <input type="text" id="quickAssign_${g.groupId}" list="leadersList" placeholder="Técnico(s) separados por coma..." class="input-dark" style="padding:8px; flex:1;" onclick="event.stopPropagation()">
+                                <input type="text" id="quickAssign_${g.groupId}" list="leadersList" placeholder="TÃ©cnico(s) separados por coma..." class="input-dark" style="padding:8px; flex:1;" onclick="event.stopPropagation()">
                                 <button class="btn btn-save" style="padding:8px 15px; flex:0 0 auto;" onclick="event.stopPropagation(); quickAssign('${g.groupId}')">Asignar</button>
                             </div>
                         </div>
@@ -1929,7 +885,7 @@
                 html += `</div>`;
             }
 
-            // 2. RENDERIZAR TAREAS ASIGNADAS POR LÍDER
+            // 2. RENDERIZAR TAREAS ASIGNADAS POR LÃDER
             const sortedLeaders = Array.from(leadersMap.keys()).sort((a, b) => a.localeCompare(b));
 
             sortedLeaders.forEach(leader => {
@@ -1937,7 +893,7 @@
                 html += `
                     <div class="leader-card">
                         <div class="leader-header">
-                            <h3 style="margin:0; color:var(--accent);">👤 ${leader}</h3>
+                            <h3 style="margin:0; color:var(--accent);">ðŸ‘¤ ${leader}</h3>
                             <span style="background:#333; padding:4px 10px; border-radius:12px; font-size:0.8em; font-weight:bold;">${tasks.length} proyectos</span>
                         </div>
                         <table class="data-table" style="font-size:0.85em; margin-top:10px;">
@@ -1947,7 +903,7 @@
 
                 tasks.forEach(t => {
                     const prioColor = t.priority === 'urgent' ? '#ff003c' : (t.priority === 'high' ? '#fffb00' : (t.priority === 'medium' ? '#00e5ff' : '#81c784'));
-                    const typeIcon = t.maintenanceType === 'preventivo' ? '🛡️' : (t.maintenanceType === 'correctivo' ? '🔧' : (t.maintenanceType === 'proyecto' ? '🏗️' : ''));
+                    const typeIcon = t.maintenanceType === 'preventivo' ? 'ðŸ›¡ï¸' : (t.maintenanceType === 'correctivo' ? 'ðŸ”§' : (t.maintenanceType === 'proyecto' ? 'ðŸ—ï¸' : ''));
 
                     html += `
                         <tr style="cursor:pointer;" onclick="openOptionsById(${t.id})">
@@ -1958,8 +914,8 @@
                             </td>
                             <td><b>${t.category}</b><br><span style="color:#aaa">${t.detail || t.subcategory}</span></td>
                             <td>
-                                ${t.status === 'done' ? '✅ Finalizada' : (t.status === 'running' ? '▶️ En Progreso' : '📅 Pendiente')}
-                                ${t.totalSecs > 0 ? `<br><span style="font-family:monospace; color:#888;">⏱️ ${formatTime(t.totalSecs)}</span>` : ''}
+                                ${t.status === 'done' ? 'âœ… Finalizada' : (t.status === 'running' ? 'â–¶ï¸ En Progreso' : 'ðŸ“… Pendiente')}
+                                ${t.totalSecs > 0 ? `<br><span style="font-family:monospace; color:#888;">â±ï¸ ${formatTime(t.totalSecs)}</span>` : ''}
                             </td>
                         </tr>
                     `;
@@ -1971,7 +927,7 @@
             container.innerHTML = html;
         }
 
-        // NUEVA FUNCIÓN: Asignación rápida desde la bandeja de "Sin asignar"
+        // NUEVA FUNCIÃ“N: AsignaciÃ³n rÃ¡pida desde la bandeja de "Sin asignar"
         function quickAssign(groupId) {
             const input = document.getElementById(`quickAssign_${groupId}`);
             const val = input.value.trim();
@@ -2020,7 +976,7 @@
             } else {
                 if (state.activeTaskId) stopTimer();
 
-                // --- MAGIA: Mover tarea al día y hora actuales ---
+                // --- MAGIA: Mover tarea al dÃ­a y hora actuales ---
                 const now = new Date();
                 task.date = formatDate(now);
                 task.hour = now.getHours();
@@ -2035,7 +991,7 @@
                 saveLocal();
                 renderApp();
 
-                // Scroll automático para centrar la pantalla en la tarea en progreso
+                // Scroll automÃ¡tico para centrar la pantalla en la tarea en progreso
                 setTimeout(() => {
                     const hourEl = document.getElementById(`hour-${task.hour}`);
                     if (hourEl) hourEl.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2044,7 +1000,7 @@
         }
         function actionDeleteTask() {
             const task = state.tasks.find(t => t.id === state.activeOptionsId);
-            if (confirm("¿Eliminar toda la serie?")) {
+            if (confirm("Â¿Eliminar toda la serie?")) {
                 state.tasks = state.tasks.filter(t => t.groupId !== task.groupId);
                 saveLocal(); renderApp();
                 document.getElementById('modalOptions').style.display = 'none';
@@ -2075,12 +1031,12 @@
         function isSameDay(d1, d2) { return formatDate(d1) === formatDate(d2); }
         function createDiv(cls, html) { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; return d; }
 
-        // Nueva función para el botón Hoy
+        // Nueva funciÃ³n para el botÃ³n Hoy
         function goToToday() {
             state.currentDate = new Date();
             renderApp();
 
-            // Forzar vista de calendario si estaba en otra pestaña
+            // Forzar vista de calendario si estaba en otra pestaÃ±a
             switchView('calendar', document.querySelector('.tab-btn'));
 
             // Auto-scroll a las 7:00 AM
@@ -2122,10 +1078,10 @@
             document.getElementById('catList').innerHTML = optsCats;
             document.getElementById('catListRef').innerHTML = optsCats;
 
-            // Reubicamos el seteo de subcategorías en una función atada a la categoría
+            // Reubicamos el seteo de subcategorÃ­as en una funciÃ³n atada a la categorÃ­a
             filterSubcategories();
 
-            // Extraer líderes de los arrays assignees
+            // Extraer lÃ­deres de los arrays assignees
             const dynLeaders = [];
             state.tasks.forEach(t => { if (t.assignees) dynLeaders.push(...t.assignees); });
             const leaders = [...new Set([...dynLeaders, ...state.defaultLeaders])].filter(Boolean);
@@ -2133,7 +1089,7 @@
             if (document.getElementById('leadersList')) document.getElementById('leadersList').innerHTML = optsLeaders;
         }
 
-        // NUEVA FUNCIÓN: Amarra las subcategorías (secciones) a la categoría (máquina)
+        // NUEVA FUNCIÃ“N: Amarra las subcategorÃ­as (secciones) a la categorÃ­a (mÃ¡quina)
         function filterSubcategories() {
             const catInput = document.getElementById('inpCat');
             if (!catInput) return; // Por si acaso estemos en otra vista
@@ -2142,11 +1098,11 @@
             let subs = [];
 
             if (!cat) {
-                // Si está vacío, mostrar todas (dinámicas históricas y las default)
+                // Si estÃ¡ vacÃ­o, mostrar todas (dinÃ¡micas histÃ³ricas y las default)
                 const dynSubs = state.tasks.map(t => t.subcategory);
                 subs = [...new Set([...dynSubs, ...state.defaultSubcategories])].filter(Boolean);
             } else {
-                // Filtrar solo las que coincidan históricamente con esta máquina
+                // Filtrar solo las que coincidan histÃ³ricamente con esta mÃ¡quina
                 const dynSubsForCat = state.tasks
                     .filter(t => (t.category || t.title.split(' ')[0]).toLowerCase() === cat)
                     .map(t => t.subcategory)
@@ -2155,7 +1111,7 @@
                 if (dynSubsForCat.length > 0) {
                     subs = [...new Set(dynSubsForCat)];
                 } else {
-                    // Máquina nueva, no tiene subcategorías previas, mostrar defaults de secciones.
+                    // MÃ¡quina nueva, no tiene subcategorÃ­as previas, mostrar defaults de secciones.
                     subs = [...new Set([...state.defaultSubcategories])].filter(Boolean);
                 }
             }
@@ -2165,7 +1121,7 @@
             if (subListRef) subListRef.innerHTML = optsSubs;
         }
 
-        // --- FUNCIONES DE CONFIGURACIÓN ---
+        // --- FUNCIONES DE CONFIGURACIÃ“N ---
         function renderConfigLists() {
             const renderList = (arr, containerId, type) => {
                 if (!arr || arr.length === 0) {
@@ -2187,13 +1143,13 @@
             renderList(state.defaultLeaders, 'listDefaultLeaders', 'leaders');
 
             // NUEVO: Renderizar lista de turnos
-            const dayNamesLong = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+            const dayNamesLong = ['Domingo', 'Lunes', 'Martes', 'MiÃ©rcoles', 'Jueves', 'Viernes', 'SÃ¡bado'];
             let shiftsHtml = '';
             for (let d = 0; d < 7; d++) {
                 if (state.shifts[d] && state.shifts[d].length > 0) {
                     shiftsHtml += `<div style="margin-bottom: 8px;"><strong style="color:var(--accent); display:inline-block; width:75px;">${dayNamesLong[d]}:</strong> `;
                     state.shifts[d].forEach((ldr, idx) => {
-                        shiftsHtml += `<span style="background:#333; padding:3px 8px; border-radius:12px; margin-right:5px; display:inline-block; margin-bottom:4px;">${ldr} <span style="color:#f44336; cursor:pointer; margin-left:5px; font-weight:bold;" onclick="removeShift(${d}, ${idx})">×</span></span>`;
+                        shiftsHtml += `<span style="background:#333; padding:3px 8px; border-radius:12px; margin-right:5px; display:inline-block; margin-bottom:4px;">${ldr} <span style="color:#f44336; cursor:pointer; margin-left:5px; font-weight:bold;" onclick="removeShift(${d}, ${idx})">Ã—</span></span>`;
                     });
                     shiftsHtml += `</div>`;
                 }
@@ -2249,7 +1205,7 @@
             updateDatalists();
         }
 
-        // --- FUNCIONES DE IMPORTACIÓN CSV ---
+        // --- FUNCIONES DE IMPORTACIÃ“N CSV ---
         let csvData = null;
 
         function openCSVImporter() {
@@ -2322,11 +1278,11 @@
                     filteredData = data.filter(row => row[encargadoCol] === managerName);
                 }
 
-                // Mostrar estadísticas
+                // Mostrar estadÃ­sticas
                 document.getElementById('csvStats').innerHTML = `
-                    📊 <b>Total de filas:</b> ${data.length}<br>
-                    ${managerName ? `✅ <b>Filas del gerente "${managerName}":</b> ${filteredData.length}<br>` : ''}
-                    ${managerName && filteredData.length < data.length ? `❌ <b>Filas descartadas:</b> ${data.length - filteredData.length}` : ''}
+                    ðŸ“Š <b>Total de filas:</b> ${data.length}<br>
+                    ${managerName ? `âœ… <b>Filas del gerente "${managerName}":</b> ${filteredData.length}<br>` : ''}
+                    ${managerName && filteredData.length < data.length ? `âŒ <b>Filas descartadas:</b> ${data.length - filteredData.length}` : ''}
                 `;
 
                 document.getElementById('csvPreview').style.display = 'block';
@@ -2358,7 +1314,7 @@
                 state.managerName = managerName;
             }
 
-            // Extraer valores únicos
+            // Extraer valores Ãºnicos
             const categories = new Set();
             const subcategories = new Set();
             const processes = new Set();
@@ -2389,28 +1345,28 @@
 
             // Mostrar resultados
             let resultsHTML = `
-                <p><b>📊 Resultados de la importación:</b></p>
+                <p><b>ðŸ“Š Resultados de la importaciÃ³n:</b></p>
                 <ul style="margin:5px 0; padding-left:20px; font-size:0.9em;">
-                    <li>${categories.size} categorías encontradas (${newCats.length} nuevas)</li>
-                    <li>${subcategories.size} subcategorías encontradas (${newSubs.length} nuevas)</li>
+                    <li>${categories.size} categorÃ­as encontradas (${newCats.length} nuevas)</li>
+                    <li>${subcategories.size} subcategorÃ­as encontradas (${newSubs.length} nuevas)</li>
                     <li>${processes.size} procesos encontrados (${newProcs.length} nuevos)</li>
-                    <li>${leaders.size} técnicos encontrados (${newLeaders.length} nuevos)</li>
+                    <li>${leaders.size} tÃ©cnicos encontrados (${newLeaders.length} nuevos)</li>
                     <li>${data.length} filas procesadas</li>
                 </ul>
             `;
 
-            // OPCIÓN B: IMPORTAR HISTORIAL (tareas completadas con fechas originales)
+            // OPCIÃ“N B: IMPORTAR HISTORIAL (tareas completadas con fechas originales)
             if (importType === 'B') {
                 const fechaCol = csvData.headers.find(h => h.toLowerCase().includes('fecha') && h.toLowerCase().includes('contabiliz'));
                 const descCol = csvData.headers.find(h => h.toLowerCase().includes('descripcion'));
 
                 if (!fechaCol) {
-                    resultsHTML += `<p style="color:#f44336;">❌ Error: No se encontró columna de "Fecha Contabilizacion" en el CSV.</p>`;
+                    resultsHTML += `<p style="color:#f44336;">âŒ Error: No se encontrÃ³ columna de "Fecha Contabilizacion" en el CSV.</p>`;
                 } else {
                     let tasksCreated = 0;
                     const tasksByDate = new Map(); // Para distribuir horarios
 
-                    // Generar código de tarea base
+                    // Generar cÃ³digo de tarea base
                     const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
                     let nextTaskNum = (codes.length > 0 ? Math.max(...codes) : 0) + 1;
 
@@ -2426,7 +1382,7 @@
                         const taskDate = new Date(year, month - 1, day);
                         const dateStr = formatDate(taskDate);
 
-                        // Asignar hora: distribuir desde 00:00 hasta 06:00 si hay varias el mismo día
+                        // Asignar hora: distribuir desde 00:00 hasta 06:00 si hay varias el mismo dÃ­a
                         if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, []);
                         const tasksOnDate = tasksByDate.get(dateStr);
                         const hour = Math.min(tasksOnDate.length, 6); // 00:00 a 06:00
@@ -2457,27 +1413,27 @@
                             recurrence: null,
                             baseStartDate: dateStr,
                             baseEndDate: dateStr,
-                            status: 'done', // ✅ Marcada como completada
+                            status: 'done', // âœ… Marcada como completada
                             seconds: 0
                         });
 
                         tasksCreated++;
                     });
 
-                    resultsHTML += `<p style="color:#4caf50;">✅ <b>${tasksCreated}</b> tareas históricas creadas y marcadas como completadas.</p>`;
-                    resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Las tareas fueron distribuidas en horarios de 00:00 a 06:00 según la cantidad por día.</p>`;
+                    resultsHTML += `<p style="color:#4caf50;">âœ… <b>${tasksCreated}</b> tareas histÃ³ricas creadas y marcadas como completadas.</p>`;
+                    resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Las tareas fueron distribuidas en horarios de 00:00 a 06:00 segÃºn la cantidad por dÃ­a.</p>`;
                 }
             }
 
-            // OPCIÓN C: CREAR PLANTILLAS FUTURAS CON ANÁLISIS PREDICTIVO
+            // OPCIÃ“N C: CREAR PLANTILLAS FUTURAS CON ANÃLISIS PREDICTIVO
             if (importType === 'C') {
                 const fechaCol = csvData.headers.find(h => h.toLowerCase().includes('fecha') && h.toLowerCase().includes('contabiliz'));
                 const descCol = csvData.headers.find(h => h.toLowerCase().includes('descripcion'));
 
                 if (!fechaCol) {
-                    resultsHTML += `<p style="color:#f44336;">❌ Error: No se encontró columna de "Fecha Contabilizacion" en el CSV.</p>`;
+                    resultsHTML += `<p style="color:#f44336;">âŒ Error: No se encontrÃ³ columna de "Fecha Contabilizacion" en el CSV.</p>`;
                 } else {
-                    // Agrupar por identificador único (Maquinaria + Seccion + Departamento + Descripcion)
+                    // Agrupar por identificador Ãºnico (Maquinaria + Seccion + Departamento + Descripcion)
                     const groupedRecords = new Map();
 
                     data.forEach(row => {
@@ -2507,7 +1463,7 @@
 
                     // Analizar frecuencia y proyectar
                     let tasksCreated = 0;
-                    let analysisHTML = '<div style="margin-top:15px; padding:15px; background:#1a1a1a; border-radius:8px; border:1px solid #333;"><h4 style="margin-top:0; color:var(--accent);">📈 Análisis de Frecuencia</h4>';
+                    let analysisHTML = '<div style="margin-top:15px; padding:15px; background:#1a1a1a; border-radius:8px; border:1px solid #333;"><h4 style="margin-top:0; color:var(--accent);">ðŸ“ˆ AnÃ¡lisis de Frecuencia</h4>';
 
                     const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
                     let nextTaskNum = (codes.length > 0 ? Math.max(...codes) : 0) + 1;
@@ -2527,7 +1483,7 @@
                             if (diffDays > 0) intervals.push(diffDays);
                         }
 
-                        let avgFrequency = 30; // Default: 30 días
+                        let avgFrequency = 30; // Default: 30 dÃ­as
                         if (intervals.length > 0) {
                             avgFrequency = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
                         }
@@ -2536,7 +1492,7 @@
                         const projectedDate = new Date(lastDate);
                         projectedDate.setDate(projectedDate.getDate() + avgFrequency);
 
-                        // Si la fecha proyectada ya pasó, programar para mañana
+                        // Si la fecha proyectada ya pasÃ³, programar para maÃ±ana
                         const taskDate = projectedDate > today ? projectedDate : new Date(today.getTime() + 24 * 60 * 60 * 1000);
                         const dateStr = formatDate(taskDate);
 
@@ -2553,7 +1509,7 @@
                             category: record.category,
                             subcategory: record.subcategory,
                             process: record.process,
-                            detail: `${record.detail} (Proyectada cada ${avgFrequency} días)`,
+                            detail: `${record.detail} (Proyectada cada ${avgFrequency} dÃ­as)`,
                             maintenanceType: 'preventivo',
                             priority: 'medium',
                             title: `${record.category} ${record.subcategory}`,
@@ -2566,24 +1522,24 @@
                             recurrence: null,
                             baseStartDate: dateStr,
                             baseEndDate: dateStr,
-                            status: 'planned', // 📅 Tarea futura
+                            status: 'planned', // ðŸ“… Tarea futura
                             seconds: 0
                         });
 
-                        // Agregar al análisis
-                        const displayFreq = avgFrequency === 30 && intervals.length === 0 ? 'Por defecto: 30 días' : `Cada ${avgFrequency} días`;
+                        // Agregar al anÃ¡lisis
+                        const displayFreq = avgFrequency === 30 && intervals.length === 0 ? 'Por defecto: 30 dÃ­as' : `Cada ${avgFrequency} dÃ­as`;
                         analysisHTML += `
                             <div style="background:#222; padding:12px; border-radius:6px; margin-bottom:10px; border-left:4px solid ${stringToColor(record.category)};">
                                 <div style="font-weight:bold; color:${stringToColor(record.category)}; margin-bottom:5px;">${record.category} - ${record.subcategory}</div>
                                 <div style="font-size:0.85em; color:#aaa; margin-bottom:8px;">${record.detail}</div>
                                 <div style="display:grid; grid-template-columns: auto 1fr; gap:8px; font-size:0.85em;">
-                                    <span style="color:#888;">Última vez:</span>
+                                    <span style="color:#888;">Ãšltima vez:</span>
                                     <span style="color:#fff;">${lastDate.toLocaleDateString('es')}</span>
                                     
                                     <span style="color:#888;">Frecuencia:</span>
                                     <span style="color:#88d8b0;">${displayFreq}</span>
                                     
-                                    <span style="color:#888;">📅 Se PROYECTA para:</span>
+                                    <span style="color:#888;">ðŸ“… Se PROYECTA para:</span>
                                     <span style="color:#00bcd4; font-weight:bold;">${taskDate.toLocaleDateString('es')}</span>
                                 </div>
                             </div>
@@ -2594,8 +1550,8 @@
 
                     analysisHTML += '</div>';
 
-                    resultsHTML += `<p style="color:#4caf50;">✅ <b>${tasksCreated}</b> tareas proyectadas creadas desde HOY en adelante.</p>`;
-                    resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Basadas en ${data.length} registros históricos. El usuario puede ajustar fechas después.</p>`;
+                    resultsHTML += `<p style="color:#4caf50;">âœ… <b>${tasksCreated}</b> tareas proyectadas creadas desde HOY en adelante.</p>`;
+                    resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Basadas en ${data.length} registros histÃ³ricos. El usuario puede ajustar fechas despuÃ©s.</p>`;
                     resultsHTML += analysisHTML;
                 }
             }
@@ -2608,7 +1564,7 @@
             updateDatalists();
         }
 
-        // --- FUNCIONES DE IMPORTACIÓN DE TEXTO ---
+        // --- FUNCIONES DE IMPORTACIÃ“N DE TEXTO ---
         function openTextImporter() {
             document.getElementById('modalText').style.display = 'flex';
             document.getElementById('textImportArea').value = '';
@@ -2631,9 +1587,9 @@
             }
 
             preview.innerHTML = `
-                📊 <b>${lines.length}</b> líneas detectadas<br>
-                ✓ <b>${unique.length}</b> elementos únicos<br>
-                ${lines.length !== unique.length ? `<span style="color:#ffb74d;">⚠️ ${lines.length - unique.length} duplicados eliminados</span>` : ''}
+                ðŸ“Š <b>${lines.length}</b> lÃ­neas detectadas<br>
+                âœ“ <b>${unique.length}</b> elementos Ãºnicos<br>
+                ${lines.length !== unique.length ? `<span style="color:#ffb74d;">âš ï¸ ${lines.length - unique.length} duplicados eliminados</span>` : ''}
             `;
         }
 
@@ -2665,7 +1621,7 @@
             updateDatalists();
             closeTextModal();
 
-            alert(`✅ Importación exitosa!\n\n${added} elementos nuevos agregados a ${type === 'categories' ? 'Categorías' : type === 'subcategories' ? 'Subcategorías' : type === 'processes' ? 'Procesos' : 'Líderes'}.`);
+            alert(`âœ… ImportaciÃ³n exitosa!\n\n${added} elementos nuevos agregados a ${type === 'categories' ? 'CategorÃ­as' : type === 'subcategories' ? 'SubcategorÃ­as' : type === 'processes' ? 'Procesos' : 'LÃ­deres'}.`);
         }
 
         // Actualizar datalist de procesos
@@ -2686,7 +1642,7 @@
             const optsProcs = procs.map(p => `<option value="${p}">`).join('');
             if (document.getElementById('processListRef')) document.getElementById('processListRef').innerHTML = optsProcs;
 
-            // Extraer líderes de los arrays assignees
+            // Extraer lÃ­deres de los arrays assignees
             const dynLeaders = [];
             state.tasks.forEach(t => { if (t.assignees) dynLeaders.push(...t.assignees); });
             const leaders = [...new Set([...dynLeaders, ...state.defaultLeaders])].filter(Boolean);
@@ -2697,7 +1653,4 @@
         function exportCSV() { /* Export logic */ }
         function handleAuth() { alert("Configurar API Google"); }
         function gapiLoaded() { } function gisLoaded() { }
-    </script>
-</body>
-
-</html>
+    
