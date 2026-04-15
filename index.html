@@ -595,34 +595,22 @@
             <div class="calendar-grid" id="grid"></div>
         </div>
 
-        <!-- VISTA TABLA (NUEVA) -->
-        <div id="table-view" class="view-section">
-            <div class="table-controls">
-                <input type="text" id="filterCat" class="filter-input" list="catList" placeholder="Filtrar Categoría..."
-                    oninput="renderTable()">
-                <input type="text" id="filterSub" class="filter-input" placeholder="Filtrar Subcategoría..."
-                    oninput="renderTable()">
+        <!-- VISTA TABLA (NUEVA KANBAN POR TIPO) -->
+        <div id="table-view" class="view-section" style="padding: 20px;">
+            <div class="table-controls" style="margin-bottom:20px; background:var(--card-color); padding:15px; border-radius:8px;">
+                <input type="text" id="filterCat" class="filter-input" list="catList" placeholder="Filtrar Categoría..." oninput="renderTable()" style="margin-bottom:10px;">
+                <input type="text" id="filterSub" class="filter-input" placeholder="Filtrar Subcategoría..." oninput="renderTable()" style="margin-bottom:10px;">
+                <select id="filterType" class="input-dark filter-input" style="margin-left:10px; margin-bottom:10px; padding:8px; border-radius:5px;" onchange="renderTable()">
+                    <option value="">📋 Todos los Tipos</option>
+                    <option value="preventivo">🛡️ Preventivo</option>
+                    <option value="correctivo">🔧 Correctivo</option>
+                    <option value="proyecto">🏗️ Proyecto</option>
+                    <option value="otro">⚙️ Otro</option>
+                </select>
                 <datalist id="catList"></datalist>
             </div>
-            <div style="overflow-x:auto;">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Tipo</th>
-                            <th>Inicio</th>
-                            <th>Fin</th>
-                            <th>Categoría</th>
-                            <th>Subcategoría</th>
-                            <th>Líder</th>
-                            <th>Detalle</th>
-                            <th>Costo Total</th>
-                            <th>Tiempo</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody"></tbody>
-                </table>
+            <div id="kanbanContainer" style="display:flex; flex-direction:column; gap:30px;">
+                <!-- Contenido generado por renderTable() -->
             </div>
         </div>
 
@@ -1041,6 +1029,7 @@
 
             <div class="btn-row" style="flex-direction:column;">
                 <button class="btn btn-play" onclick="actionStartTimer()">⏱️ Cronómetro (Start/Stop)</button>
+                <button id="btnToggleDone" class="btn" style="background:#4caf50; color:white;" onclick="actionToggleDone()">✅ Marcar como Hecha</button>
                 <button class="btn" style="background:#4285F4; color:white;" onclick="addToGoogleCalendar()">📅 Añadir a Google Calendar</button>
                 <button class="btn" style="background:#555; color:white;" onclick="actionEditTask()">✏️ Editar
                     Serie</button>
@@ -1171,6 +1160,7 @@
                         }
                     } else {
                         div.className = `slot ${isWeekend ? 'weekend-col' : ''} ${isToday ? 'today-col' : ''}`;
+                        div.style.paddingBottom = "30px"; // Asegurar espacio clicable cuando está lleno
                     }
 
                     // MODIFICADO: Asignar el evento de clic primero
@@ -1195,16 +1185,7 @@
                             };
                             div.appendChild(cardEl);
                         });
-
-                        // Añadir botón explícito de crear nueva tarea para facilitar uso cuando hay muchos items
-                        const addBtn = document.createElement('div');
-                        addBtn.innerHTML = '+ Trabajo Simultáneo';
-                        addBtn.style.cssText = "text-align:center; font-size:0.75em; color:#fff; background:rgba(255,255,255,0.15); border-radius:4px; padding:3px; margin-top:5px; cursor:pointer; font-weight:bold;";
-                        addBtn.onclick = (e) => {
-                            e.stopPropagation();
-                            openModalNew(dateStr, h);
-                        };
-                        div.appendChild(addBtn);
+                        // Eliminado botón explícito para priorizar el clic en el área vacía del padding
                     }
 
                     grid.appendChild(div);
@@ -1244,11 +1225,17 @@
                 const div = document.createElement('div');
                 div.className = `slot ${isWeekend ? 'weekend-col' : ''} ${isToday ? 'today-col' : ''}`;
                 div.style.padding = "5px";
+                div.style.paddingBottom = "30px"; // Asegura espacio vacío para clics
                 
                 const dayBadge = document.createElement('div');
-                dayBadge.style.cssText = "text-align: right; font-weight: bold; font-size: 1.1em; margin-bottom: 5px; color: #888;";
+                dayBadge.style.cssText = "text-align: right; font-weight: bold; font-size: 1.1em; margin-bottom: 5px; color: #888; cursor: pointer;";
                 if(isToday) dayBadge.style.color = "var(--accent)";
                 dayBadge.innerHTML = d;
+                dayBadge.title = "Añadir tarea a este día";
+                dayBadge.onclick = (e) => {
+                    e.stopPropagation(); // Evitar saltos de evento
+                    openModalNew(dateStr, 8); // Default 8 AM
+                };
                 div.appendChild(dayBadge);
                 
                 div.onclick = (e) => {
@@ -1287,18 +1274,6 @@
                     div.appendChild(cardEl);
                 });
 
-                // Botón siempre disponible para agregar otra tarea al grupo
-                if (dayTasks.length > 0) {
-                    const addBtn = document.createElement('div');
-                    addBtn.innerHTML = '+ Nuevo';
-                    addBtn.style.cssText = "display:inline-block; font-size:0.75em; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:2px 5px; margin-top:5px; cursor:pointer;";
-                    addBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        openModalNew(dateStr, 8);
-                    };
-                    div.appendChild(addBtn);
-                }
-                
                 grid.appendChild(div);
             }
         }
@@ -1835,7 +1810,7 @@
             document.getElementById('dashTasksCount').textContent = `${completedCount} hechas / ${totalTasks} totales`;
             
             // Función generadora de gráficos de barras simples y elegantes
-            const renderBars = (statsObj, containerId, colorsMap) => {
+            const renderBars = (statsObj, containerId, colorsMap, clickCallbackName = null) => {
                 const container = document.getElementById(containerId);
                 if(!container) return;
                 
@@ -1848,11 +1823,13 @@
                     const pct = (val / max) * 100;
                     const color = typeof colorsMap === 'function' ? colorsMap(label) : (colorsMap[label] || colorsMap['default'] || '#00bcd4');
                     
-                    // Formato para tooltip o label info (moneda si es costo, cant si es item)
                     const formatVal = Number.isInteger(val) ? val.toLocaleString() : `Q${val.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+                    
+                    const pointerStyle = clickCallbackName ? 'cursor:pointer;' : '';
+                    const clickAction = clickCallbackName ? `onclick="${clickCallbackName}('${label}')"` : '';
 
                     html += `
-                        <div style="margin-bottom:12px; display:flex; align-items:center;">
+                        <div style="margin-bottom:12px; display:flex; align-items:center; ${pointerStyle}" ${clickAction}>
                             <div title="${label}" style="width:100px; font-size:0.9em; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; padding-right:10px;">
                                 ${label}
                             </div>
@@ -1877,9 +1854,9 @@
                 return pColors[key];
             });
             
-            // Gráfico: Tipos
+            // Gráfico: Tipos (Con enlace al reporte)
             const tColors = { 'Preventivo': '#4caf50', 'Correctivo': '#ff3366', 'Proyecto': '#9c27b0', 'Otro': '#888' };
-            renderBars(typeStats, 'dashTypeChart', tColors);
+            renderBars(typeStats, 'dashTypeChart', tColors, 'jumpToReport');
             
             // Gráfico: Top 5 Categorías por Costo
             const sortedCats = Object.entries(catCostStats).sort((a,b)=>b[1]-a[1]).slice(0, 5);
@@ -1889,11 +1866,23 @@
         }
 
         // --- VISTA TABLA ---
+        function jumpToReport(typeFilter) {
+            const fType = document.getElementById('filterType');
+            if(fType) fType.value = typeFilter.toLowerCase();
+            switchView('table', document.querySelectorAll('.tab-btn')[1]);
+            renderTable();
+        }
+
+        // --- VISTA TABLA KANBAN ---
         function renderTable() {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
+            const container = document.getElementById('kanbanContainer');
+            if(!container) return;
+            container.innerHTML = '';
+            
             const fCat = document.getElementById('filterCat').value.toLowerCase();
             const fSub = document.getElementById('filterSub').value.toLowerCase();
+            const fTypeBox = document.getElementById('filterType');
+            const fType = fTypeBox ? fTypeBox.value.toLowerCase() : "";
 
             const groupedTasks = new Map();
 
@@ -1917,64 +1906,110 @@
             });
 
             const summaryTasks = Array.from(groupedTasks.values()).map(group => {
-                // Ordenar los bloques cronológicamente
                 group.slots.sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour);
-
                 const firstSlot = group.slots[0];
                 const lastSlot = group.slots[group.slots.length - 1];
 
                 group.startStr = `${firstSlot.date} ${firstSlot.hour}:00`;
                 group.endStr = `${lastSlot.date} ${lastSlot.hour + 1}:00`;
-
-                // Llave para ordenar la tabla (por fecha de inicio)
                 group.sortKey = firstSlot.date + firstSlot.hour.toString().padStart(2, '0');
 
-                // Si TODOS los bloques están terminados, marcar el grupo como terminado
                 if (group.slots.every(s => s.status === 'done')) {
                     group.status = 'done';
+                } else if (group.slots.some(s => s.status === 'running')) {
+                    group.status = 'running';
+                } else {
+                    group.status = 'planned';
                 }
 
                 return group;
             });
 
-            // 3. Ordenar por fecha de inicio (descendente, lo más nuevo arriba)
             summaryTasks.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 
-            // 4. Aplicar filtros y pintar la tabla
+            const kanbanData = {
+                'preventivo': { typeName: '🛡️ Preventivos', planned: [], running: [], done: [] },
+                'correctivo': { typeName: '🔧 Correctivos', planned: [], running: [], done: [] },
+                'proyecto': { typeName: '🏗️ Proyectos', planned: [], running: [], done: [] },
+                'otro': { typeName: '⚙️ Otros', planned: [], running: [], done: [] }
+            };
+
             summaryTasks.forEach(t => {
                 const cat = (t.category || t.title.split(' ')[0]).toLowerCase();
                 const sub = (t.subcategory || '').toLowerCase();
+                const typeRaw = (t.maintenanceType || 'otro').toLowerCase();
+                const effectiveType = kanbanData[typeRaw] ? typeRaw : 'otro';
 
                 if (fCat && !cat.includes(fCat)) return;
                 if (fSub && !sub.includes(fSub)) return;
+                if (fType && fType !== effectiveType && fType !== 'todos los tipos') return;
 
-                let typeLabel = '-';
-                if (t.maintenanceType) {
-                    typeLabel = (t.maintenanceType === 'preventivo' ? '🛡️ ' : (t.maintenanceType === 'correctivo' ? '🔧 ' : '🏗️ ')) +
-                        t.maintenanceType.charAt(0).toUpperCase() + t.maintenanceType.slice(1);
-                }
-
-                const tr = document.createElement('tr');
-                tr.style.cursor = 'pointer';
-                tr.onclick = () => openOptionsById(t.id);
-                const assigneesArr = Array.from(t.allAssignees);
-                const assignStr = assigneesArr.length > 0 ? assigneesArr.join(', ') : '<span style="color:#888; font-style:italic;">Sin asignar</span>';
-
-                tr.innerHTML = `
-                    <td><span class="task-id-badge">${t.taskCode || 'N/A'}</span></td>
-                    <td>${typeLabel}</td>
-                    <td>${t.startStr}</td>
-                    <td>${t.endStr}</td>
-                    <td style="color:${stringToColor(t.category || cat)}; font-weight:bold;">${t.category || cat.toUpperCase()}</td>
-                    <td>${t.subcategory || ''}</td>
-                    <td>${assignStr}</td>
-                    <td>${t.detail || t.title}</td>
-                    <td>Q${t.totalCost.toFixed(2)}</td>
-                    <td style="font-family:monospace;">${formatTime(t.totalSeconds)}</td>
-                    <td>${t.status === 'done' ? '✅' : (t.status === 'running' ? '▶️' : '📅')}</td>
-                `;
-                tbody.appendChild(tr);
+                const status = t.status || 'planned'; 
+                kanbanData[effectiveType][status].push(t);
             });
+
+            let renderedSections = 0;
+
+            for(const [typeKey, typeData] of Object.entries(kanbanData)) {
+                if (fType && fType !== typeKey && fType !== 'todos los tipos' && fType !== 'otro' && fType !== '') continue;
+                if (typeData.planned.length === 0 && typeData.running.length === 0 && typeData.done.length === 0) continue;
+                
+                renderedSections++;
+
+                const renderCol = (title, items, colColor) => {
+                    let colHtml = `<div style="flex:1; min-width:280px; max-width:33%; background:#1a1a1a; padding:15px; border-radius:8px; border-top:4px solid ${colColor}; display:flex; flex-direction:column; max-height: 400px;">
+                                    <h4 style="margin-top:0; margin-bottom:10px; color:#ddd; display:flex; justify-content:space-between;">
+                                        <span>${title}</span> 
+                                        <span style="font-size:0.8em; color:#888; background:#333; padding:2px 8px; border-radius:10px;">${items.length}</span>
+                                    </h4>
+                                    <div style="overflow-y:auto; flex:1; padding-right:5px; display:flex; flex-direction:column; gap:10px;">`;
+                    
+                    items.forEach(t => {
+                        const assigneesStr = Array.from(t.allAssignees).join(', ');
+                        const color = stringToColor(t.category || t.title);
+                        colHtml += `
+                            <div class="task-card ${t.status}" style="border-left-color:${color}; cursor:pointer; padding:12px; margin:0;" onclick="openOptionsById('${t.id}')">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:5px;">
+                                    <div style="font-weight:bold; color:${color}; font-size:1.1em;">${t.category || t.title}</div>
+                                    <div class="task-id-badge">${t.taskCode || ''}</div>
+                                </div>
+                                <div style="color:#aaa; font-size:0.9em; margin-bottom:8px;">${t.subcategory || ''}</div>
+                                <div style="font-size:0.8em; color:#88d8b0; margin-bottom:8px;">🕒 Iniciado: ${t.startStr}</div>
+                                ${t.detail ? `<div style="font-size:0.8em; color:#ccc; margin-bottom:8px; line-height:1.3;">${t.detail}</div>` : ''}
+                                <div style="display:flex; justify-content:space-between; font-size:0.8em; margin-top:10px; border-top:1px solid #333; padding-top:8px;">
+                                    <span style="color:#888;">👷 ${assigneesStr || 'Sin asignar'}</span>
+                                    <span style="color:var(--accent); font-weight:bold;">Q${t.totalCost.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    if (items.length === 0) {
+                        colHtml += `<div style="text-align:center; color:#555; font-style:italic; padding:20px 0;">Vacío</div>`;
+                    }
+                    
+                    colHtml += `</div></div>`;
+                    return colHtml;
+                };
+
+                const section = document.createElement('div');
+                section.style.cssText = "background:var(--card-color); padding:20px; border-radius:10px; border:1px solid #333;";
+                section.innerHTML = `
+                    <h3 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #444; padding-bottom:10px; color:white; font-size:1.3em;">
+                        ${typeData.typeName}
+                    </h3>
+                    <div style="display:flex; flex-wrap:wrap; gap:20px;">
+                        ${renderCol('📅 Por Hacer', typeData.planned, '#00bcd4')}
+                        ${renderCol('▶️ En Progreso', typeData.running, '#ff9800')}
+                        ${renderCol('✅ Terminado', typeData.done, '#4caf50')}
+                    </div>
+                `;
+                container.appendChild(section);
+            }
+            
+            if(renderedSections === 0) {
+                container.innerHTML = '<div style="text-align:center; padding:50px; color:#888;"><h3>No hay tareas con los filtros actuales.</h3><p>Verifica las categorías u opciones seleccionadas.</p></div>';
+            }
         }
 
         // --- VISTA LÍDERES ---
@@ -2114,12 +2149,44 @@
             state.activeOptionsId = task.id;
             document.getElementById('optTitle').textContent = task.category || task.title;
             document.getElementById('optSub').textContent = `${task.subcategory || ''} - ${task.detail || ''}`;
+            
+            const btnDone = document.getElementById('btnToggleDone');
+            if (btnDone) {
+                if (task.status === 'done') {
+                    btnDone.innerHTML = '⏪ Deshacer (Marcar como Pendiente)';
+                    btnDone.style.background = '#888';
+                } else {
+                    btnDone.innerHTML = '✅ Marcar como Hecha';
+                    btnDone.style.background = '#4caf50';
+                }
+            }
+
             document.getElementById('modalOptions').style.display = 'flex';
         }
 
         function openOptionsById(id) {
             const task = state.tasks.find(t => t.id === id);
             if (task) openOptions(task);
+        }
+
+        function actionToggleDone() {
+            const task = state.tasks.find(t => t.id === state.activeOptionsId);
+            if (!task) return;
+            document.getElementById('modalOptions').style.display = 'none';
+
+            // Actuar sobre todo el grupo de horas al mismo tiempo (serie)
+            const groupTasks = state.tasks.filter(t => t.groupId === task.groupId);
+            
+            if (task.status === 'done') {
+                groupTasks.forEach(t => t.status = 'planned');
+            } else {
+                groupTasks.forEach(t => {
+                    t.status = 'done';
+                    if (state.activeTaskId === t.id) stopTimer();
+                });
+            }
+            saveLocal();
+            renderApp();
         }
 
         function actionStartTimer() {
