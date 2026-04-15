@@ -1251,6 +1251,8 @@
                 }
 
                 const tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
+                tr.onclick = () => openOptionsById(t.id);
                 const assigneesArr = Array.from(t.allAssignees);
                 const assignStr = assigneesArr.length > 0 ? assigneesArr.join(', ') : '<span style="color:#888; font-style:italic;">Sin asignar</span>';
 
@@ -1317,7 +1319,7 @@
                 unassignedGroups.forEach(g => {
                     const typeIcon = g.maintenanceType === 'preventivo' ? '🛡️' : (g.maintenanceType === 'correctivo' ? '🔧' : (g.maintenanceType === 'proyecto' ? '🏗️' : ''));
                     html += `
-                        <div style="background:#1e1e1e; padding:12px; border-radius:6px; margin-bottom:10px; border:1px solid #444;">
+                        <div style="background:#1e1e1e; padding:12px; border-radius:6px; margin-bottom:10px; border:1px solid #444; cursor:pointer;" onclick="openOptionsById(${g.id})">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
                                 <div>
                                     <span style="font-size:1.2em;" title="${g.maintenanceType}">${typeIcon}</span>
@@ -1329,8 +1331,8 @@
                             <div style="font-size:0.85em; color:#aaa; margin:5px 0 10px 0;">${g.detail || g.subcategory || 'Sin detalles adicionales'}</div>
                             
                             <div style="display:flex; gap:8px;">
-                                <input type="text" id="quickAssign_${g.groupId}" list="leadersList" placeholder="Técnico(s) separados por coma..." class="input-dark" style="padding:8px; flex:1;">
-                                <button class="btn btn-save" style="padding:8px 15px; flex:0 0 auto;" onclick="quickAssign('${g.groupId}')">Asignar</button>
+                                <input type="text" id="quickAssign_${g.groupId}" list="leadersList" placeholder="Técnico(s) separados por coma..." class="input-dark" style="padding:8px; flex:1;" onclick="event.stopPropagation()">
+                                <button class="btn btn-save" style="padding:8px 15px; flex:0 0 auto;" onclick="event.stopPropagation(); quickAssign('${g.groupId}')">Asignar</button>
                             </div>
                         </div>
                     `;
@@ -1359,7 +1361,7 @@
                     const typeIcon = t.maintenanceType === 'preventivo' ? '🛡️' : (t.maintenanceType === 'correctivo' ? '🔧' : (t.maintenanceType === 'proyecto' ? '🏗️' : ''));
                     
                     html += `
-                        <tr>
+                        <tr style="cursor:pointer;" onclick="openOptionsById(${t.id})">
                             <td><span class="task-id-badge">${t.taskCode || '-'}</span></td>
                             <td style="text-align:center;">
                                 <div style="font-size:1.2em; margin-bottom:4px;" title="${t.maintenanceType || ''}">${typeIcon}</div>
@@ -1409,6 +1411,11 @@
             document.getElementById('optTitle').textContent = task.category || task.title;
             document.getElementById('optSub').textContent = `${task.subcategory || ''} - ${task.detail || ''}`;
             document.getElementById('modalOptions').style.display = 'flex';
+        }
+
+        function openOptionsById(id) {
+            const task = state.tasks.find(t => t.id === id);
+            if(task) openOptions(task);
         }
 
         function actionStartTimer() {
