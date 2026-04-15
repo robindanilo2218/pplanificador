@@ -1118,6 +1118,8 @@
             }
 
             grid.style.gridTemplateColumns = `50px repeat(${daysCount}, minmax(130px, 1fr))`;
+            grid.style.gridTemplateRows = '';
+            grid.style.height = 'auto';
 
             grid.appendChild(createDiv('header-corner', ''));
             const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -1194,7 +1196,13 @@
             const firstDay = new Date(year, month, 1);
             const lastDay = new Date(year, month + 1, 0);
             
-            grid.style.gridTemplateColumns = `repeat(7, 1fr)`;
+            const startOffset = firstDay.getDay(); 
+            const daysInMonth = lastDay.getDate();
+            const rowsCount = Math.ceil((daysInMonth + startOffset) / 7);
+            
+            grid.style.gridTemplateColumns = `repeat(7, minmax(120px, 1fr))`;
+            grid.style.gridTemplateRows = `auto repeat(${rowsCount}, minmax(100px, 1fr))`;
+            grid.style.height = 'calc(100vh - 160px)';
             
             const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
             
@@ -1216,7 +1224,6 @@
                 
                 const div = document.createElement('div');
                 div.className = `slot ${isWeekend ? 'weekend-col' : ''} ${isToday ? 'today-col' : ''}`;
-                div.style.minHeight = "120px";
                 div.style.padding = "5px";
                 
                 const dayBadge = document.createElement('div');
