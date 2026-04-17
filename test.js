@@ -1,1656 +1,883 @@
-﻿
-const CLIENT_ID = 'TU_CLIENT_ID';
-const API_KEY = 'TU_API_KEY';
 
-let state = {
-    currentDate: new Date(),
-    viewMode: localStorage.getItem('viewMode') || 'week',
-    lunchHour: parseInt(localStorage.getItem('lunchHour')) || 12,
-    tasks: JSON.parse(localStorage.getItem('tasks')) || [],
-    activeTaskId: null,
-    timer: null,
-    defaultCategories: JSON.parse(localStorage.getItem('defaultCategories')) || [],
-    defaultSubcategories: JSON.parse(localStorage.getItem('defaultSubcategories')) || [],
-    defaultLeaders: JSON.parse(localStorage.getItem('defaultLeaders')) || [],
-    defaultProcesses: JSON.parse(localStorage.getItem('defaultProcesses')) || [], // NUEVO
-    shifts: JSON.parse(localStorage.getItem('shifts')) || { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
-    managerName: localStorage.getItem('managerName') || '' // NUEVO: Para filtro CSV
-};
-
-// Migracion de datos viejos (assignee string -> assignees array)
-state.tasks.forEach(t => {
-    if (t.assignee && !t.assignees) t.assignees = [t.assignee];
-    if (!t.assignees) t.assignees = [];
-    delete t.assignee;
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    populateHourSelects();
-    document.getElementById('lunchSelector').value = state.lunchHour;
-    document.getElementById('viewSelector').value = state.viewMode;
-    renderApp();
-    restoreTimer();
-
-    // Auto-scroll a las 7:00 AM para no ver la medianoche de entrada
-    setTimeout(() => {
-        const startHourEl = document.getElementById('hour-7');
-        if (startHourEl) startHourEl.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 300);
-});
-
-// --- RENDERIZADO GLOBAL ---
-function renderApp() {
-    renderHeader();
-    renderGrid();
-    renderTable();
-    updateDashboard();
-    updateDatalists();
-    renderLeaders();
-    renderConfigLists(); // Inicializar listas de configuraciÃ³n
-}
-
-// --- CALENDARIO ---
-function renderGrid() {
-    const grid = document.getElementById('grid');
-    grid.innerHTML = '';
-
-    if (state.viewMode === 'calendar') {
-        renderTraditionalCalendar(grid);
-        return;
-    }
-
-
-    let daysCount = 7;
-    let startDate = getStartOfWeek(state.currentDate);
-
-    if (state.viewMode === 'month') {
-        const year = state.currentDate.getFullYear();
-        const month = state.currentDate.getMonth();
-        daysCount = new Date(year, month + 1, 0).getDate();
-        startDate = new Date(year, month, 1);
-    }
-
-    grid.style.gridTemplateColumns = `50px repeat(${daysCount}, minmax(130px, 1fr))`;
-    grid.style.gridTemplateRows = '';
-    grid.style.height = 'auto';
-
-    grid.appendChild(createDiv('header-corner', ''));
-    const dayNames = ['Dom', 'Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b'];
-
-    for (let i = 0; i < daysCount; i++) {
-        const d = new Date(startDate); d.setDate(d.getDate() + i);
-        const isToday = isSameDay(d, new Date());
-        const dayName = dayNames[d.getDay()];
-
-        // NUEVO: Renderizar lÃ­deres de turno
-        const onDuty = state.shifts[d.getDay()] || [];
-        const onDutyStr = onDuty.length > 0 ? `<div style="font-size:0.7em; color:#88d8b0; line-height: 1.2; margin-top:5px; word-break: break-word; text-align:center;">ðŸ‘· ${onDuty.join(', ')}</div>` : '';
-
-        grid.appendChild(createDiv(`day-header ${isToday ? 'today' : ''}`, `<div>${dayName}</div><div style="font-size:1.1em; font-weight:bold;">${d.getDate()}</div>${onDutyStr}`));
-    }
-
-    for (let h = 0; h <= 23; h++) {
-        const timeCol = createDiv('time-col', `${h}:00`);
-        timeCol.id = `hour-${h}`;
-        grid.appendChild(timeCol);
-
-        for (let i = 0; i < daysCount; i++) {
-            const d = new Date(startDate); d.setDate(d.getDate() + i);
-            const dateStr = formatDate(d);
-            const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
-            const isToday = isSameDay(d, new Date());
-            const div = document.createElement('div');
-
-            if (h === state.lunchHour) {
-                div.className = `slot lunch-row ${isToday ? 'today-col' : ''}`;
-                if (i === 3 || (state.viewMode === 'month' && i % 7 === 3)) {
-                    // Cambiado a posiciÃ³n absoluta para no estorbar a las tareas apiladas
-                    const lbl = document.createElement('span');
-                    lbl.style.cssText = "position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:0.7em; color:#555; pointer-events:none; z-index:1;";
-                    lbl.textContent = "ALMUERZO";
-                    div.appendChild(lbl);
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+                    navigator.serviceWorker.register('./sw.js').catch(err => console.error('Error PWA:', err));
                 }
+            });
+        }
+
+        const codeRegex = /^[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+$/;
+        
+        // --- BASE DE DATOS LOCAL ---
+        const DB_NAME = 'BodegaDB';
+        const STORE_ANALISIS = 'analisisStore';
+        const STORE_HISTORIAL = 'historialStore';
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 3);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_ANALISIS)) db.createObjectStore(STORE_ANALISIS);
+                    if (!db.objectStoreNames.contains(STORE_HISTORIAL)) db.createObjectStore(STORE_HISTORIAL, { keyPath: 'id_solicitud' });
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // --- SISTEMA DE CARRITO, HISTORIAL Y PDF ---
+        let carrito = [];
+        let itemActualSeleccionado = null; 
+
+        async function guardarCompraEnHistorial(solicitudId, items) {
+            try {
+                const db = await initDB();
+                const tx = db.transaction(STORE_HISTORIAL, 'readwrite');
+                const store = tx.objectStore(STORE_HISTORIAL);
+                store.put({ id_solicitud: solicitudId, fecha_log: new Date().getTime(), items: items });
+            } catch (error) { console.error("Error guardando historial", error); }
+        }
+
+        async function obtenerHistorial() {
+            try {
+                const db = await initDB();
+                return new Promise((resolve) => {
+                    const tx = db.transaction(STORE_HISTORIAL, 'readonly');
+                    const store = tx.objectStore(STORE_HISTORIAL);
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => resolve([]);
+                });
+            } catch (error) { return []; }
+        }
+
+        const formatQ = (val) => val !== null && val !== undefined ? Math.round(val) : '-';
+        function formatFechaCorto(timestamp) {
+            if (!timestamp || isNaN(timestamp)) return "-"; 
+            const d = new Date(timestamp);
+            if (isNaN(d.getTime())) return "-";
+            const localDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
+            return localDate.toLocaleDateString('es-GT');
+        }
+
+        function abrirModalDetalle(fila) {
+            itemActualSeleccionado = fila;
+            document.getElementById('detDesc').innerText = fila.inv.descripcion;
+            document.getElementById('detCodigo').innerText = `COD: ${fila.inv.codigo} | PN: ${fila.inv.noParte || '-'}`;
+            document.getElementById('detStock').innerText = fila.inv.cantidad;
+            document.getElementById('detEstado').innerHTML = `<span class="badge ${fila.estadoClase} text-xs shadow-sm">${fila.estado}</span>`;
+            document.getElementById('detDemanda').innerText = fila.demandaAnual !== null ? fila.demandaAnual : "N/A";
+            document.getElementById('detProyeccion').innerText = fila.proyeccionTexto;
+            document.getElementById('detPrimeraSalida').innerText = formatFechaCorto(fila.primeraSalida);
+            document.getElementById('detUltimaSalida').innerText = formatFechaCorto(fila.ultimaSalida);
+            document.getElementById('detQ0').innerText = formatQ(fila.qConsumo[0]);
+            document.getElementById('detQ1').innerText = formatQ(fila.qConsumo[1]);
+            document.getElementById('detQ2').innerText = formatQ(fila.qConsumo[2]);
+            document.getElementById('detQ3').innerText = formatQ(fila.qConsumo[3]);
+            document.getElementById('detQ4').innerText = formatQ(fila.qConsumo[4]);
+            document.getElementById('detMaquinas').innerText = fila.maquinasUnicas;
+
+            document.getElementById('inpCant').value = 1;
+            document.getElementById('inpMaquina').value = '';
+            document.getElementById('inpSerie').value = '';
+            document.getElementById('inpModelo').value = '';
+            document.getElementById('inpSeccion').value = '';
+            document.getElementById('inpTecnico').value = '';
+            document.getElementById('inpFechaSug').value = new Date().toISOString().split('T')[0];
+
+            document.getElementById('modalDetalle').classList.remove('hidden');
+            setTimeout(() => document.getElementById('inpCant').focus(), 100);
+        }
+
+        function cerrarModalDetalle() { document.getElementById('modalDetalle').classList.add('hidden'); itemActualSeleccionado = null; }
+
+        function actualizarBadgeCarrito() {
+            const badge = document.getElementById('cartBadge');
+            if(carrito.length > 0) { badge.innerText = carrito.length; badge.classList.remove('hidden'); } 
+            else { badge.classList.add('hidden'); }
+        }
+
+        function agregarAlCarrito() {
+            if(!itemActualSeleccionado) return;
+            const cant = parseFloat(document.getElementById('inpCant').value);
+            const maq = document.getElementById('inpMaquina').value.trim();
+            const sec = document.getElementById('inpSeccion').value.trim() || "-";
+
+            if(isNaN(cant) || cant <= 0) { alert("Ingrese una cantidad válida."); return; }
+            if(!maq) { alert("Especifique la máquina o destino."); return; }
+
+            carrito.push({
+                codigo: itemActualSeleccionado.inv.codigo,
+                noParte: itemActualSeleccionado.inv.noParte || "-",
+                descripcion: itemActualSeleccionado.inv.descripcion,
+                cant: cant,
+                maquina: maq,
+                serie: document.getElementById('inpSerie').value.trim() || "-",
+                modelo: document.getElementById('inpModelo').value.trim() || "-",
+                seccion: sec,
+                tecnico: document.getElementById('inpTecnico').value.trim() || "-",
+                fechaSugerida: document.getElementById('inpFechaSug').value
+            });
+
+            actualizarBadgeCarrito();
+            cerrarModalDetalle();
+        }
+
+        function abrirCarrito() {
+            const contenedor = document.getElementById('contenedorItemsCarrito');
+            if(carrito.length === 0) {
+                contenedor.innerHTML = '<p class="text-center text-gray-500 my-10">El carrito está vacío.</p>';
             } else {
-                div.className = `slot ${isWeekend ? 'weekend-col' : ''} ${isToday ? 'today-col' : ''}`;
-            }
-
-            // MODIFICADO: Asignar el evento de clic primero
-            div.onclick = (e) => {
-                // Si el clic es directamente en el div (no en una tarjeta), abrir modal
-                if (e.target === div || e.target.closest('.slot') === div && !e.target.closest('.task-card')) {
-                    openModalNew(dateStr, h);
-                }
-            };
-
-            // NUEVA LÃ“GICA: Filtrar para permitir mÃºltiples tareas en la misma hora
-            const slotTasks = state.tasks.filter(t => t.date === dateStr && t.hour === h);
-
-            if (slotTasks.length > 0) {
-                slotTasks.forEach(task => {
-                    const cardWrapper = document.createElement('div');
-                    cardWrapper.innerHTML = renderCard(task);
-                    const cardEl = cardWrapper.firstElementChild;
-                    cardEl.onclick = (e) => {
-                        e.stopPropagation();
-                        openOptions(task);
-                    };
-                    div.appendChild(cardEl);
-                });
-            }
-
-            grid.appendChild(div);
-        }
-    }
-}
-
-function renderTraditionalCalendar(grid) {
-    const year = state.currentDate.getFullYear();
-    const month = state.currentDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-
-    // removed.getDay(); 
-    // removed.getDate();
-    const rowsCount = Math.ceil((daysInMonth + startOffset) / 7);
-
-    grid.style.gridTemplateColumns = `repeat(7, minmax(120px, 1fr))`;
-    grid.style.gridTemplateRows = `auto repeat(${rowsCount}, minmax(100px, 1fr))`;
-    grid.style.height = 'calc(100vh - 160px)';
-
-    const dayNames = ['Dom', 'Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b'];
-
-    for (let i = 0; i < 7; i++) {
-        grid.appendChild(createDiv('day-header', `<div>${dayNames[i]}</div>`));
-    }
-
-    // removed.getDay(); 
-    for (let i = 0; i < startOffset; i++) {
-        grid.appendChild(createDiv('slot weekend-col', ''));
-    }
-
-    // removed.getDate();
-    for (let d = 1; d <= daysInMonth; d++) {
-        const dateObj = new Date(year, month, d);
-        const dateStr = formatDate(dateObj);
-        const isWeekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-        const isToday = isSameDay(dateObj, new Date());
-
-        const div = document.createElement('div');
-        div.className = `slot ${isWeekend ? 'weekend-col' : ''} ${isToday ? 'today-col' : ''}`;
-        div.style.padding = "5px";
-
-        const dayBadge = document.createElement('div');
-        dayBadge.style.cssText = "text-align: right; font-weight: bold; font-size: 1.1em; margin-bottom: 5px; color: #888;";
-        if (isToday) dayBadge.style.color = "var(--accent)";
-        dayBadge.innerHTML = d;
-        div.appendChild(dayBadge);
-
-        div.onclick = (e) => {
-            if (e.target === div || e.target === dayBadge || e.target.closest('.slot') === div && !e.target.closest('.task-card')) {
-                openModalNew(dateStr, 8); // Default 8 AM
-            }
-        };
-
-        const dayTasks = state.tasks.filter(t => t.date === dateStr);
-        dayTasks.sort((a, b) => a.hour - b.hour);
-
-        dayTasks.forEach(task => {
-            const cardWrapper = document.createElement('div');
-            cardWrapper.innerHTML = renderCard(task);
-            const cardEl = cardWrapper.firstElementChild;
-
-            const titleDiv = cardEl.querySelector('.card-title');
-            if (titleDiv) {
-                const timeSpan = document.createElement('span');
-                timeSpan.style.cssText = "font-weight:normal; color:#fff; font-size: 0.9em; margin-right:4px; background: rgba(255,255,255,0.1); padding: 0 4px; border-radius: 4px;";
-                timeSpan.textContent = `${task.hour}:00`;
-                titleDiv.prepend(timeSpan);
-            }
-
-            cardEl.onclick = (e) => {
-                e.stopPropagation();
-                openOptions(task);
-            };
-            div.appendChild(cardEl);
-        });
-
-        grid.appendChild(div);
-    }
-}
-
-function renderCard(task) {
-    const cat = task.category || task.title.split(' ')[0];
-    const sub = task.subcategory || '';
-    const color = stringToColor(cat);
-
-    let typeIcon = '';
-    if (task.maintenanceType === 'preventivo') typeIcon = 'ðŸ›¡ï¸';
-    else if (task.maintenanceType === 'correctivo') typeIcon = 'ðŸ”§';
-    else if (task.maintenanceType === 'proyecto') typeIcon = 'ðŸ—ï¸';
-
-    const assigneesStr = (task.assignees && task.assignees.length > 0) ? task.assignees.join(', ') : '';
-
-    return `
-                <div class="task-card ${task.status}" style="border-left-color:${color}">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                        <div style="font-weight:bold; color:${color}; white-space:nowrap; overflow:hidden; padding-right:5px;">${cat}</div>
-                        <div style="display:flex; gap:4px; align-items:center;">
-                            ${typeIcon ? `<span style="font-size:0.9em;" title="${task.maintenanceType}">${typeIcon}</span>` : ''}
-                            <div class="task-id-badge">${task.taskCode || ''}</div>
-                        </div>
-                    </div>
-                    <div style="color:#aaa;">${sub}</div>
-                    ${assigneesStr ? `<div style="font-size:0.75em; color:#88d8b0; margin-top:2px;">ðŸ‘¤ ${assigneesStr}</div>` : ''}
-                    ${task.seconds > 0 ? `<div style="text-align:right; font-family:monospace; font-size:0.9em;">${formatTime(task.seconds)}</div>` : ''}
-                </div>
-            `;
-}
-
-// --- GESTIÃ“N DE PERSONAL (MODAL) ---
-function addAssignRow(name = '', days = [1, 2, 3, 4, 5]) {
-    const container = document.getElementById('assignList');
-    const div = document.createElement('div');
-    div.className = 'assign-row';
-
-    let daysHtml = '';
-    const dayNames = ['Dom', 'Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b'];
-    [1, 2, 3, 4, 5, 6, 0].forEach(d => {
-        const checked = days.includes(d) ? 'checked' : '';
-        const color = (d === 0 || d === 6) ? '#f0ad4e' : '#fff';
-        daysHtml += `<label style="margin-right:8px; font-size:0.8em; color:${color};"><input type="checkbox" value="${d}" class="assign-day-chk" ${checked}> ${dayNames[d]}</label>`;
-    });
-
-    div.innerHTML = `
-                <div style="display:flex; gap:10px; margin-bottom:8px;">
-                    <input type="text" class="input-dark assign-name" list="leadersList" placeholder="LÃ­der o TÃ©cnico..." value="${name}" style="flex:1;">
-                    <button class="btn-sm btn-remove" onclick="this.parentElement.parentElement.remove()">X</button>
-                </div>
-                <div style="display:flex; flex-wrap:wrap; padding-left:5px;">
-                    ${daysHtml}
-                </div>
-            `;
-    container.appendChild(div);
-}
-
-function getAssignmentsFromUI() {
-    const assignments = [];
-    document.querySelectorAll('.assign-row').forEach(row => {
-        const nameStr = row.querySelector('.assign-name').value.trim();
-        const days = Array.from(row.querySelectorAll('.assign-day-chk:checked')).map(chk => parseInt(chk.value));
-        if (nameStr && days.length > 0) {
-            // Si el usuario escribe varios separados por coma (ej: "Juan, Pedro")
-            nameStr.split(',').forEach(n => {
-                const cleanName = n.trim();
-                if (cleanName) assignments.push({ name: cleanName, days });
-            });
-        }
-    });
-    return assignments;
-}
-
-// --- GESTIÃ“N DE COSTOS DINÃMICOS ---
-function addCostRow(name = '', val = '') {
-    const container = document.getElementById('costList');
-    const div = document.createElement('div');
-    div.className = 'cost-row';
-    div.innerHTML = `
-                <input type="text" class="input-dark cost-name" placeholder="Concepto (ej: Mano de obra)" value="${name}">
-                <input type="number" class="input-dark cost-val" placeholder="0.00" value="${val}" oninput="updateTotalCostDisplay()">
-                <button class="btn-sm btn-remove" onclick="this.parentElement.remove(); updateTotalCostDisplay()">X</button>
-            `;
-    container.appendChild(div);
-    updateTotalCostDisplay();
-}
-
-function updateTotalCostDisplay() {
-    let total = 0;
-    document.querySelectorAll('.cost-val').forEach(inp => {
-        total += parseFloat(inp.value) || 0;
-    });
-    document.getElementById('totalCostDisplay').textContent = `Q${total.toFixed(2)}`;
-    return total;
-}
-
-function getCostBreakdownFromUI() {
-    const breakdown = [];
-    let total = 0;
-    document.querySelectorAll('.cost-row').forEach(row => {
-        const nameInput = row.querySelector('.cost-name');
-        const valInput = row.querySelector('.cost-val');
-
-        if (!nameInput || !valInput) return; // Evita el error "Cannot read properties of null"
-
-        const name = nameInput.value.trim();
-        const val = parseFloat(valInput.value) || 0;
-        if (name) {
-            breakdown.push({ name, value: val });
-            total += val;
-        }
-    });
-    return { breakdown, total };
-}
-
-// --- GESTIÃ“N DE TAREAS ---
-function openModalNew(dateStr, hour) {
-    document.getElementById('modalTitle').textContent = "Nueva PlanificaciÃ³n";
-    document.getElementById('editingGroupId').value = "";
-
-    // Mostrar advertencia si es almuerzo
-    const isLunch = (hour === state.lunchHour);
-    const warningEl = document.getElementById('lunchWarning');
-    if (warningEl) warningEl.style.display = isLunch ? 'block' : 'none';
-
-    document.getElementById('inpCat').value = "";
-    document.getElementById('inpSub').value = "";
-    filterSubcategories(); // Filtrar subcategorÃ­as reseteadas
-    document.getElementById('inpProcess').value = "";
-    document.getElementById('inpDetail').value = "";
-    document.getElementById('inpMaintType').value = "preventivo";
-    document.getElementById('inpPriority').value = "medium";
-
-    // Determinar el dÃ­a de la semana clickeado
-    const clickedDate = new Date(dateStr + "T00:00:00");
-    const clickedDay = clickedDate.getDay();
-
-    // MODIFICADO: Resetear dÃ­as (L-V por defecto, si hizo clic en S-D, lo marca)
-    [0, 1, 2, 3, 4, 5, 6].forEach(d => {
-        if (d >= 1 && d <= 5) {
-            document.getElementById(`day-${d}`).checked = true;
-        } else {
-            document.getElementById(`day-${d}`).checked = (d === clickedDay);
-        }
-    });
-
-    // Resetear Asignaciones
-    document.getElementById('assignList').innerHTML = '';
-    addAssignRow(); // Agrega una fila vacÃ­a por defecto
-
-    // Resetear Recurrencia
-    document.getElementById('inpRepeatCheck').checked = false;
-    document.getElementById('inpRepeatNum').value = 1;
-    document.getElementById('inpRepeatUnit').value = "weeks";
-    document.getElementById('inpRepeatUntil').value = "";
-    toggleRepeatUI();
-
-    // Limpiar y resetear costos
-    document.getElementById('costList').innerHTML = '';
-    addCostRow('Mano de Obra', '');
-    addCostRow('Repuestos', '');
-
-    document.getElementById('inpDateStart').value = dateStr;
-    document.getElementById('inpDateEnd').value = dateStr;
-    document.getElementById('inpStartHour').value = hour;
-    document.getElementById('inpEndHour').value = hour + 1;
-
-    document.getElementById('modalTask').style.display = 'flex';
-}
-
-function saveTaskRange() {
-    const cat = document.getElementById('inpCat').value.trim();
-    const sub = document.getElementById('inpSub').value.trim();
-    const process = document.getElementById('inpProcess').value.trim();
-    const detail = document.getElementById('inpDetail').value.trim();
-    const maintType = document.getElementById('inpMaintType').value;
-    const priority = document.getElementById('inpPriority').value;
-
-    const assignments = getAssignmentsFromUI();
-
-    // Recurrencia
-    const repeatCheck = document.getElementById('inpRepeatCheck').checked;
-    const repeatNum = Math.max(1, parseInt(document.getElementById('inpRepeatNum').value) || 1);
-    const repeatUnit = document.getElementById('inpRepeatUnit').value;
-    const repeatUntil = document.getElementById('inpRepeatUntil').value;
-    const recurrenceData = repeatCheck ? { checked: true, num: repeatNum, unit: repeatUnit, until: repeatUntil } : null;
-
-    const selectedDays = [0, 1, 2, 3, 4, 5, 6].filter(d => document.getElementById(`day-${d}`).checked);
-    if (selectedDays.length === 0) return alert("Debe seleccionar al menos un dÃ­a de la semana.");
-
-    const { breakdown, total } = getCostBreakdownFromUI();
-
-    const dateStart = new Date(document.getElementById('inpDateStart').value + "T00:00:00");
-    const dateEnd = new Date(document.getElementById('inpDateEnd').value + "T00:00:00");
-    const hStart = parseInt(document.getElementById('inpStartHour').value);
-    const hEnd = parseInt(document.getElementById('inpEndHour').value);
-    const editId = document.getElementById('editingGroupId').value;
-
-    if (!cat || hEnd <= hStart || dateEnd < dateStart) return alert("Verifique datos de fechas y horas.");
-
-    // --- LÃ“GICA DE PRESERVACIÃ“N HISTÃ“RICA ---
-    let executedTasks = [];
-    if (editId) {
-        executedTasks = state.tasks.filter(t => t.groupId === editId && (t.seconds > 0 || t.status === 'done' || t.status === 'running'));
-        state.tasks = state.tasks.filter(t => !(t.groupId === editId && t.seconds === 0 && t.status === 'planned'));
-
-        executedTasks.forEach(t => {
-            t.category = cat;
-            t.subcategory = sub;
-            t.process = process;
-            t.detail = detail;
-            t.maintenanceType = maintType;
-            t.priority = priority;
-            t.title = `${cat} ${sub}`;
-            t.recurrence = recurrenceData;
-            t.selectedDays = selectedDays;
-            t.baseStartDate = document.getElementById('inpDateStart').value;
-            t.baseEndDate = document.getElementById('inpDateEnd').value;
-            // No sobreescribimos los assignees de las tareas ejecutadas para preservar la historia de quiÃ©n la hizo.
-        });
-    }
-
-    const newGroupId = editId || ('GRP_' + Date.now());
-
-    let currentTaskCode = "";
-    if (editId && executedTasks.length > 0) {
-        currentTaskCode = executedTasks[0].taskCode;
-    } else if (editId) {
-        const existing = state.tasks.find(t => t.groupId === editId);
-        if (existing) currentTaskCode = existing.taskCode;
-    }
-
-    if (!currentTaskCode) {
-        const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
-        currentTaskCode = `T-${((codes.length > 0 ? Math.max(...codes) : 0) + 1).toString().padStart(3, '0')}`;
-    }
-
-    // --- CÃLCULO DE INTERVALOS RECURRENTES ---
-    let intervals = [];
-    let currS = new Date(dateStart); currS.setHours(0, 0, 0, 0);
-    let currE = new Date(dateEnd); currE.setHours(0, 0, 0, 0);
-    let limitD = repeatCheck && repeatUntil ? new Date(repeatUntil) : new Date(currE);
-    limitD.setHours(23, 59, 59, 999);
-
-    let maxLoops = 500; // LÃ­mite de seguridad
-    while (currS <= limitD && maxLoops-- > 0) {
-        intervals.push({ s: new Date(currS), e: new Date(currE) });
-
-        if (!repeatCheck) break; // Si no repite, solo hace el primero
-
-        if (repeatUnit === 'weeks') { currS.setDate(currS.getDate() + repeatNum * 7); currE.setDate(currE.getDate() + repeatNum * 7); }
-        else if (repeatUnit === 'months') { currS.setMonth(currS.getMonth() + repeatNum); currE.setMonth(currE.getMonth() + repeatNum); }
-        else if (repeatUnit === 'years') { currS.setFullYear(currS.getFullYear() + repeatNum); currE.setFullYear(currE.getFullYear() + repeatNum); }
-    }
-
-    // --- GENERACIÃ“N DE NUEVOS SLOTS ---
-    let potentialSlots = [];
-    intervals.forEach(inv => {
-        let cursor = new Date(inv.s);
-        while (cursor <= inv.e) {
-            let day = cursor.getDay();
-            if (selectedDays.includes(day)) {
-                for (let h = hStart; h < hEnd; h++) {
-                    if (h !== state.lunchHour) potentialSlots.push({ date: formatDate(cursor), hour: h });
-                }
-            }
-            cursor.setDate(cursor.getDate() + 1);
-        }
-    });
-
-    // Evitar duplicar un slot planeado justo donde ya hay uno ejecutado
-    let finalNewSlots = potentialSlots.filter(ps => !executedTasks.some(et => et.date === ps.date && et.hour === ps.hour));
-
-    let totalSlots = executedTasks.length + finalNewSlots.length;
-    if (totalSlots === 0) return alert("El rango y dÃ­as seleccionados no generan ninguna hora laborable.");
-
-    const costPerSlot = total / totalSlots;
-
-    // Actualizar costos de las tareas ejecutadas (histÃ³ricas)
-    executedTasks.forEach(t => {
-        t.cost = costPerSlot;
-        t.originalTotal = total;
-        t.breakdown = breakdown;
-    });
-
-    // Crear las tareas planeadas
-    finalNewSlots.forEach(slot => {
-        const slotDateObj = new Date(slot.date + "T00:00:00");
-        const dayOfWeek = slotDateObj.getDay();
-
-        // Determinar quiÃ©n trabaja este dÃ­a segÃºn la configuraciÃ³n del modal
-        const slotAssignees = assignments.filter(a => a.days.includes(dayOfWeek)).map(a => a.name);
-
-        state.tasks.push({
-            id: Date.now() + Math.random(),
-            groupId: newGroupId,
-            date: slot.date,
-            hour: slot.hour,
-            category: cat,
-            subcategory: sub,
-            process: process,
-            detail: detail,
-            maintenanceType: maintType,
-            priority: priority,
-            title: `${cat} ${sub}`,
-            taskCode: currentTaskCode,
-            assignees: slotAssignees, // Array de tÃ©cnicos para este dÃ­a
-            cost: costPerSlot,
-            originalTotal: total,
-            breakdown: breakdown,
-            selectedDays: selectedDays,
-            recurrence: recurrenceData,
-            baseStartDate: document.getElementById('inpDateStart').value,
-            baseEndDate: document.getElementById('inpDateEnd').value,
-            status: 'planned',
-            seconds: 0
-        });
-    });
-
-    saveLocal();
-    closeModal();
-    renderApp();
-}
-
-function toggleRepeatUI() {
-    const isChecked = document.getElementById('inpRepeatCheck').checked;
-    document.getElementById('repeatUI').style.display = isChecked ? 'block' : 'none';
-}
-
-function actionEditTask() {
-    const task = state.tasks.find(t => t.id === state.activeOptionsId);
-    if (!task) return;
-
-    const group = state.tasks.filter(t => t.groupId === task.groupId);
-    group.sort((a, b) => (a.date + a.hour).localeCompare(b.date + b.hour));
-    const first = group[0];
-
-    document.getElementById('modalOptions').style.display = 'none';
-    document.getElementById('modalTask').style.display = 'flex';
-    document.getElementById('modalTitle').textContent = "Editar Serie";
-    document.getElementById('editingGroupId').value = first.groupId;
-
-    document.getElementById('inpCat').value = first.category || first.title.split(' ')[0];
-    filterSubcategories(); // Amarrar listas de acuerdo a la categorÃ­a cargada
-    document.getElementById('inpSub').value = first.subcategory || '';
-    document.getElementById('inpProcess').value = first.process || '';
-    document.getElementById('inpDetail').value = first.detail || '';
-    document.getElementById('inpMaintType').value = first.maintenanceType || 'preventivo';
-    document.getElementById('inpPriority').value = first.priority || 'medium';
-
-    // Cargar Asignaciones leyendo los dÃ­as de cada persona en la serie
-    document.getElementById('assignList').innerHTML = '';
-    const assignmentsMap = {};
-    group.forEach(t => {
-        const [y, m, d] = t.date.split('-');
-        const dayOfWeek = new Date(y, m - 1, d).getDay();
-        (t.assignees || []).forEach(name => {
-            if (!assignmentsMap[name]) assignmentsMap[name] = new Set();
-            assignmentsMap[name].add(dayOfWeek);
-        });
-    });
-
-    const names = Object.keys(assignmentsMap);
-    if (names.length > 0) {
-        names.forEach(name => addAssignRow(name, Array.from(assignmentsMap[name])));
-    } else {
-        addAssignRow(); // Fila vacÃ­a si no habÃ­a nadie
-    }
-
-    // Cargar Recurrencia
-    if (first.recurrence) {
-        document.getElementById('inpRepeatCheck').checked = first.recurrence.checked;
-        document.getElementById('inpRepeatNum').value = first.recurrence.num;
-        document.getElementById('inpRepeatUnit').value = first.recurrence.unit;
-        document.getElementById('inpRepeatUntil').value = first.recurrence.until;
-    } else {
-        document.getElementById('inpRepeatCheck').checked = false;
-    }
-    toggleRepeatUI();
-
-    // Cargar dÃ­as seleccionados
-    if (first.selectedDays) {
-        [0, 1, 2, 3, 4, 5, 6].forEach(d => document.getElementById(`day-${d}`).checked = first.selectedDays.includes(d));
-    }
-
-    // Cargar Costos
-    document.getElementById('costList').innerHTML = '';
-    if (first.breakdown && Array.isArray(first.breakdown)) {
-        first.breakdown.forEach(item => addCostRow(item.name, item.value));
-    } else if (first.originalTotal) { addCostRow('Costo General', first.originalTotal); }
-    else { addCostRow('Mano de Obra', ''); addCostRow('Repuestos', ''); }
-    updateTotalCostDisplay();
-
-    // Cargar Fechas y Horas Originales Base
-    document.getElementById('inpDateStart').value = first.baseStartDate || first.date;
-    document.getElementById('inpDateEnd').value = first.baseEndDate || group[group.length - 1].date;
-
-    const dayTasks = group.filter(t => t.date === (first.baseStartDate || first.date));
-    if (dayTasks.length > 0) {
-        document.getElementById('inpStartHour').value = Math.min(...dayTasks.map(t => t.hour));
-        document.getElementById('inpEndHour').value = Math.max(...dayTasks.map(t => t.hour)) + 1;
-    }
-}
-
-function actionDuplicateTask() {
-    actionEditTask(); // Carga todos los datos en el modal
-
-    document.getElementById('modalTitle').textContent = "Duplicar Serie";
-    document.getElementById('editingGroupId').value = ""; // Al limpiar esto, se crea un nuevo ID y Grupo
-
-    // Ajustar fechas para que empiecen HOY
-    const today = new Date();
-    const startInput = document.getElementById('inpDateStart');
-    const endInput = document.getElementById('inpDateEnd');
-
-    const oldStart = new Date(startInput.value + "T00:00:00");
-    const oldEnd = new Date(endInput.value + "T00:00:00");
-    const diffTime = Math.abs(oldEnd - oldStart);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    startInput.value = formatDate(today);
-
-    const newEnd = new Date(today);
-    newEnd.setDate(newEnd.getDate() + diffDays);
-    endInput.value = formatDate(newEnd);
-
-    // Ajustar la fecha "Hasta" de recurrencia si existe
-    const repeatUntilInput = document.getElementById('inpRepeatUntil');
-    if (repeatUntilInput.value) {
-        const oldUntil = new Date(repeatUntilInput.value + "T00:00:00");
-        const diffUntilTime = Math.abs(oldUntil - oldStart);
-        const diffUntilDays = Math.ceil(diffUntilTime / (1000 * 60 * 60 * 24));
-        const newUntil = new Date(today);
-        newUntil.setDate(newUntil.getDate() + diffUntilDays);
-        repeatUntilInput.value = formatDate(newUntil);
-    }
-}
-
-// --- DASHBOARD & UTILS ---
-function updateDashboard() {
-    // Filtrar solo tareas de la semana actual para mostrar costos reales de la semana
-    const s = getStartOfWeek(state.currentDate);
-    const e = new Date(s); e.setDate(e.getDate() + 7);
-
-    const visibleTasks = state.tasks.filter(t => {
-        const d = new Date(t.date);
-        return d >= s && d < e;
-    });
-
-    const total = visibleTasks.reduce((a, b) => a + (b.cost || 0), 0);
-    document.getElementById('dashCost').textContent = `Q${total.toFixed(2)}`;
-
-    // Calcular desglose proporcional visual
-    // Como el cost per slot ya estÃ¡ dividido, podemos intentar reconstruir categorÃ­as
-    // Nota: Esto es aproximado si los slots tienen costos parciales.
-    let breakdownStats = {};
-    visibleTasks.forEach(t => {
-        if (t.breakdown) {
-            // La tarea tiene un desglose global. Su costo de slot es una fracciÃ³n.
-            // Calculamos la fracciÃ³n que representa este slot del total original
-            // t.cost = costo de este slot. t.originalTotal = costo total.
-            const ratio = t.cost / (t.originalTotal || 1); // CuÃ¡nto pesa este slot
-
-            t.breakdown.forEach(b => {
-                if (!breakdownStats[b.name]) breakdownStats[b.name] = 0;
-                // Sumamos la parte proporcional de este concepto para esta hora
-                if (t.originalTotal > 0) {
-                    breakdownStats[b.name] += (b.value * (t.cost / t.originalTotal));
-                }
-            });
-        } else {
-            if (!breakdownStats['General']) breakdownStats['General'] = 0;
-            breakdownStats['General'] += t.cost;
-        }
-    });
-
-    let html = '<ul style="padding-left:15px; margin:0;">';
-    for (const [key, val] of Object.entries(breakdownStats)) {
-        html += `<li><b>${key}:</b> Q${val.toFixed(2)}</li>`;
-    }
-    html += '</ul>';
-    document.getElementById('dashBreakdown').innerHTML = html;
-
-    // --- LÃ“GICA DEL GRÃFICO DE PRIORIDADES ---
-    // Filtrar tareas que no estÃ©n terminadas
-    const activeTasks = state.tasks.filter(t => t.status === 'planned' || t.status === 'running');
-
-    // Agrupar por groupId para contar el proyecto/serie como 1 sola tarea
-    const uniqueTasks = new Map();
-    activeTasks.forEach(t => {
-        if (!uniqueTasks.has(t.groupId)) {
-            uniqueTasks.set(t.groupId, t);
-        }
-    });
-
-    // Contar prioridades
-    const priorityCounts = { urgent: 0, high: 0, medium: 0, low: 0 };
-    uniqueTasks.forEach(t => {
-        const p = t.priority || 'medium';
-        if (priorityCounts[p] !== undefined) priorityCounts[p]++;
-    });
-
-    // Encontrar el valor mÃ¡ximo para escalar las barras (mÃ­nimo 1 para no dividir por 0)
-    const maxCount = Math.max(...Object.values(priorityCounts), 1);
-
-    // Actualizar barras en el DOM
-    ['urgent', 'high', 'medium', 'low'].forEach(p => {
-        const count = priorityCounts[p];
-        const percentage = (count / maxCount) * 100;
-        document.getElementById(`bar-${p}`).style.width = `${percentage}%`;
-        document.getElementById(`count-${p}`).textContent = count;
-    });
-}
-
-// --- VISTA TABLA ---
-function renderTable() {
-    const tbody = document.getElementById('tableBody');
-    tbody.innerHTML = '';
-    const fCat = document.getElementById('filterCat').value.toLowerCase();
-    const fSub = document.getElementById('filterSub').value.toLowerCase();
-
-    const groupedTasks = new Map();
-
-    state.tasks.forEach(t => {
-        if (!groupedTasks.has(t.groupId)) {
-            groupedTasks.set(t.groupId, {
-                ...t,
-                slots: [t],
-                totalCost: t.cost || 0,
-                totalSeconds: t.seconds || 0,
-                allAssignees: new Set(t.assignees || [])
-            });
-        } else {
-            const group = groupedTasks.get(t.groupId);
-            group.slots.push(t);
-            group.totalCost += (t.cost || 0);
-            group.totalSeconds += (t.seconds || 0);
-            (t.assignees || []).forEach(a => group.allAssignees.add(a));
-            if (t.status === 'running') group.status = 'running';
-        }
-    });
-
-    const summaryTasks = Array.from(groupedTasks.values()).map(group => {
-        // Ordenar los bloques cronolÃ³gicamente
-        group.slots.sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour);
-
-        const firstSlot = group.slots[0];
-        const lastSlot = group.slots[group.slots.length - 1];
-
-        group.startStr = `${firstSlot.date} ${firstSlot.hour}:00`;
-        group.endStr = `${lastSlot.date} ${lastSlot.hour + 1}:00`;
-
-        // Llave para ordenar la tabla (por fecha de inicio)
-        group.sortKey = firstSlot.date + firstSlot.hour.toString().padStart(2, '0');
-
-        // Si TODOS los bloques estÃ¡n terminados, marcar el grupo como terminado
-        if (group.slots.every(s => s.status === 'done')) {
-            group.status = 'done';
-        }
-
-        return group;
-    });
-
-    // 3. Ordenar por fecha de inicio (descendente, lo mÃ¡s nuevo arriba)
-    summaryTasks.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
-
-    // 4. Aplicar filtros y pintar la tabla
-    summaryTasks.forEach(t => {
-        const cat = (t.category || t.title.split(' ')[0]).toLowerCase();
-        const sub = (t.subcategory || '').toLowerCase();
-
-        if (fCat && !cat.includes(fCat)) return;
-        if (fSub && !sub.includes(fSub)) return;
-
-        let typeLabel = '-';
-        if (t.maintenanceType) {
-            typeLabel = (t.maintenanceType === 'preventivo' ? 'ðŸ›¡ï¸ ' : (t.maintenanceType === 'correctivo' ? 'ðŸ”§ ' : 'ðŸ—ï¸ ')) +
-                t.maintenanceType.charAt(0).toUpperCase() + t.maintenanceType.slice(1);
-        }
-
-        const tr = document.createElement('tr');
-        tr.style.cursor = 'pointer';
-        tr.onclick = () => openOptionsById(t.id);
-        const assigneesArr = Array.from(t.allAssignees);
-        const assignStr = assigneesArr.length > 0 ? assigneesArr.join(', ') : '<span style="color:#888; font-style:italic;">Sin asignar</span>';
-
-        tr.innerHTML = `
-                    <td><span class="task-id-badge">${t.taskCode || 'N/A'}</span></td>
-                    <td>${typeLabel}</td>
-                    <td>${t.startStr}</td>
-                    <td>${t.endStr}</td>
-                    <td style="color:${stringToColor(t.category || cat)}; font-weight:bold;">${t.category || cat.toUpperCase()}</td>
-                    <td>${t.subcategory || ''}</td>
-                    <td>${assignStr}</td>
-                    <td>${t.detail || t.title}</td>
-                    <td>Q${t.totalCost.toFixed(2)}</td>
-                    <td style="font-family:monospace;">${formatTime(t.totalSeconds)}</td>
-                    <td>${t.status === 'done' ? 'âœ…' : (t.status === 'running' ? 'â–¶ï¸' : 'ðŸ“…')}</td>
-                `;
-        tbody.appendChild(tr);
-    });
-}
-
-// --- VISTA LÃDERES ---
-function renderLeaders() {
-    const container = document.getElementById('leadersContainer');
-    container.innerHTML = '';
-
-    // Agrupar tareas Ãºnicas por groupId
-    const uniqueGroups = new Map();
-    state.tasks.forEach(t => {
-        if (!uniqueGroups.has(t.groupId)) {
-            uniqueGroups.set(t.groupId, {
-                ...t,
-                totalSecs: 0,
-                allAssignees: new Set(t.assignees || [])
-            });
-        } else {
-            const g = uniqueGroups.get(t.groupId);
-            g.totalSecs += (t.seconds || 0);
-            (t.assignees || []).forEach(a => g.allAssignees.add(a));
-        }
-    });
-
-    const unassignedGroups = [];
-    const leadersMap = new Map();
-
-    uniqueGroups.forEach(g => {
-        if (g.allAssignees.size === 0) {
-            unassignedGroups.push(g);
-        } else {
-            g.allAssignees.forEach(leader => {
-                if (!leadersMap.has(leader)) leadersMap.set(leader, []);
-                leadersMap.get(leader).push(g);
-            });
-        }
-    });
-
-    // 1. RENDERIZAR BANDEJA DE TAREAS SIN ASIGNAR
-    let html = '';
-    if (unassignedGroups.length > 0) {
-        html += `
-                    <div class="leader-card" style="border: 1px solid #f44336; background: rgba(244, 67, 54, 0.05);">
-                        <h3 style="color:#f44336; margin-top:0; border-bottom:1px solid #f44336; padding-bottom:10px;">âš ï¸ Tareas Sin AsignaciÃ³n</h3>
-                `;
-
-        unassignedGroups.forEach(g => {
-            const typeIcon = g.maintenanceType === 'preventivo' ? 'ðŸ›¡ï¸' : (g.maintenanceType === 'correctivo' ? 'ðŸ”§' : (g.maintenanceType === 'proyecto' ? 'ðŸ—ï¸' : ''));
-            html += `
-                        <div style="background:#1e1e1e; padding:12px; border-radius:6px; margin-bottom:10px; border:1px solid #444; cursor:pointer;" onclick="openOptionsById(${g.id})">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <div>
-                                    <span style="font-size:1.2em;" title="${g.maintenanceType}">${typeIcon}</span>
-                                    <span class="task-id-badge" style="margin: 0 5px;">${g.taskCode || '-'}</span>
-                                    <b style="color:${stringToColor(g.category)}">${g.category}</b>
-                                </div>
-                                <span style="font-size:0.8em; color:#aaa; background:#333; padding:2px 6px; border-radius:4px;">${g.date}</span>
-                            </div>
-                            <div style="font-size:0.85em; color:#aaa; margin:5px 0 10px 0;">${g.detail || g.subcategory || 'Sin detalles adicionales'}</div>
-                            
-                            <div style="display:flex; gap:8px;">
-                                <input type="text" id="quickAssign_${g.groupId}" list="leadersList" placeholder="TÃ©cnico(s) separados por coma..." class="input-dark" style="padding:8px; flex:1;" onclick="event.stopPropagation()">
-                                <button class="btn btn-save" style="padding:8px 15px; flex:0 0 auto;" onclick="event.stopPropagation(); quickAssign('${g.groupId}')">Asignar</button>
-                            </div>
-                        </div>
-                    `;
-        });
-        html += `</div>`;
-    }
-
-    // 2. RENDERIZAR TAREAS ASIGNADAS POR LÃDER
-    const sortedLeaders = Array.from(leadersMap.keys()).sort((a, b) => a.localeCompare(b));
-
-    sortedLeaders.forEach(leader => {
-        const tasks = leadersMap.get(leader);
-        html += `
-                    <div class="leader-card">
-                        <div class="leader-header">
-                            <h3 style="margin:0; color:var(--accent);">ðŸ‘¤ ${leader}</h3>
-                            <span style="background:#333; padding:4px 10px; border-radius:12px; font-size:0.8em; font-weight:bold;">${tasks.length} proyectos</span>
-                        </div>
-                        <table class="data-table" style="font-size:0.85em; margin-top:10px;">
-                            <thead><tr><th>ID</th><th>Tipo/Prio</th><th>Tarea</th><th>Estado / Tiempo</th></tr></thead>
+                contenedor.innerHTML = `
+                    <div class="overflow-x-auto border rounded bg-white shadow-sm">
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="bg-gray-100 text-gray-700">
+                                <tr>
+                                    <th class="px-4 py-2 border-b">Código</th>
+                                    <th class="px-4 py-2 border-b">Descripción</th>
+                                    <th class="px-4 py-2 border-b text-center">Cant.</th>
+                                    <th class="px-4 py-2 border-b">Destino (Sección)</th>
+                                    <th class="px-4 py-2 border-b text-center">Acción</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                `;
-
-        tasks.forEach(t => {
-            const prioColor = t.priority === 'urgent' ? '#ff003c' : (t.priority === 'high' ? '#fffb00' : (t.priority === 'medium' ? '#00e5ff' : '#81c784'));
-            const typeIcon = t.maintenanceType === 'preventivo' ? 'ðŸ›¡ï¸' : (t.maintenanceType === 'correctivo' ? 'ðŸ”§' : (t.maintenanceType === 'proyecto' ? 'ðŸ—ï¸' : ''));
-
-            html += `
-                        <tr style="cursor:pointer;" onclick="openOptionsById(${t.id})">
-                            <td><span class="task-id-badge">${t.taskCode || '-'}</span></td>
-                            <td style="text-align:center;">
-                                <div style="font-size:1.2em; margin-bottom:4px;" title="${t.maintenanceType || ''}">${typeIcon}</div>
-                                <div style="width:12px; height:12px; border-radius:50%; background:${prioColor}; box-shadow: 0 0 5px ${prioColor}; margin:auto;"></div>
-                            </td>
-                            <td><b>${t.category}</b><br><span style="color:#aaa">${t.detail || t.subcategory}</span></td>
-                            <td>
-                                ${t.status === 'done' ? 'âœ… Finalizada' : (t.status === 'running' ? 'â–¶ï¸ En Progreso' : 'ðŸ“… Pendiente')}
-                                ${t.totalSecs > 0 ? `<br><span style="font-family:monospace; color:#888;">â±ï¸ ${formatTime(t.totalSecs)}</span>` : ''}
-                            </td>
-                        </tr>
-                    `;
-        });
-
-        html += `</tbody></table></div>`;
-    });
-
-    container.innerHTML = html;
-}
-
-// NUEVA FUNCIÃ“N: AsignaciÃ³n rÃ¡pida desde la bandeja de "Sin asignar"
-function quickAssign(groupId) {
-    const input = document.getElementById(`quickAssign_${groupId}`);
-    const val = input.value.trim();
-    if (!val) return alert("Escriba al menos un nombre.");
-
-    const names = val.split(',').map(n => n.trim()).filter(Boolean);
-
-    let found = false;
-    state.tasks.forEach(t => {
-        if (t.groupId === groupId) {
-            // Reemplaza o agrega a todos los bloques de la serie
-            t.assignees = names;
-            found = true;
-        }
-    });
-
-    if (found) {
-        saveLocal();
-        renderApp();
-    }
-}
-
-// --- HELPERS ---
-function openOptions(task) {
-    state.activeOptionsId = task.id;
-    document.getElementById('optTitle').textContent = task.category || task.title;
-    document.getElementById('optSub').textContent = `${task.subcategory || ''} - ${task.detail || ''}`;
-    document.getElementById('modalOptions').style.display = 'flex';
-}
-
-function openOptionsById(id) {
-    const task = state.tasks.find(t => t.id === id);
-    if (task) openOptions(task);
-}
-
-function actionStartTimer() {
-    const task = state.tasks.find(t => t.id === state.activeOptionsId);
-    document.getElementById('modalOptions').style.display = 'none';
-
-    if (task.status === 'running') {
-        // Detener tarea
-        task.status = 'done';
-        stopTimer();
-        saveLocal();
-        renderApp();
-    } else {
-        if (state.activeTaskId) stopTimer();
-
-        // --- MAGIA: Mover tarea al dÃ­a y hora actuales ---
-        const now = new Date();
-        task.date = formatDate(now);
-        task.hour = now.getHours();
-
-        task.status = 'running';
-        state.activeTaskId = task.id;
-
-        // Forzar la vista a la semana/mes actual para ver la tarea moverse
-        state.currentDate = new Date();
-
-        startTimer();
-        saveLocal();
-        renderApp();
-
-        // Scroll automÃ¡tico para centrar la pantalla en la tarea en progreso
-        setTimeout(() => {
-            const hourEl = document.getElementById(`hour-${task.hour}`);
-            if (hourEl) hourEl.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 300);
-    }
-}
-function actionDeleteTask() {
-    const task = state.tasks.find(t => t.id === state.activeOptionsId);
-    if (confirm("Â¿Eliminar toda la serie?")) {
-        state.tasks = state.tasks.filter(t => t.groupId !== task.groupId);
-        saveLocal(); renderApp();
-        document.getElementById('modalOptions').style.display = 'none';
-    }
-}
-function startTimer() { if (state.timer) clearInterval(state.timer); state.timer = setInterval(() => { const t = state.tasks.find(x => x.id === state.activeTaskId); if (t) { t.seconds++; renderApp(); saveLocal(); } }, 1000); }
-function stopTimer() { clearInterval(state.timer); state.activeTaskId = null; }
-function restoreTimer() { const r = state.tasks.find(t => t.status === 'running'); if (r) { state.activeTaskId = r.id; startTimer(); } }
-function switchView(viewName, btn) { document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active-view')); document.getElementById(viewName + '-view').classList.add('active-view'); document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active')); if (btn) btn.classList.add('active'); }
-function updateLunchTime() { state.lunchHour = parseInt(document.getElementById('lunchSelector').value); localStorage.setItem('lunchHour', state.lunchHour); renderApp(); }
-function changeViewMode() { state.viewMode = document.getElementById('viewSelector').value; localStorage.setItem('viewMode', state.viewMode); renderApp(); }
-
-// Actualizamos saveLocal para guardar configuraciones
-function saveLocal() {
-    localStorage.setItem('tasks', JSON.stringify(state.tasks));
-    localStorage.setItem('defaultCategories', JSON.stringify(state.defaultCategories));
-    localStorage.setItem('defaultSubcategories', JSON.stringify(state.defaultSubcategories));
-    localStorage.setItem('defaultLeaders', JSON.stringify(state.defaultLeaders));
-    localStorage.setItem('defaultProcesses', JSON.stringify(state.defaultProcesses));
-    localStorage.setItem('shifts', JSON.stringify(state.shifts));
-    localStorage.setItem('managerName', state.managerName);
-}
-
-function closeModal() { document.getElementById('modalTask').style.display = 'none'; }
-function populateHourSelects() { let html = ''; for (let i = 0; i <= 23; i++) html += `<option value="${i}">${i}:00</option>`; document.getElementById('inpStartHour').innerHTML = html; document.getElementById('inpEndHour').innerHTML = html; }
-function getStartOfWeek(d) { const date = new Date(d); const day = date.getDay(); const diff = date.getDate() - day + (day === 0 ? -6 : 1); return new Date(date.setDate(diff)); }
-function formatDate(d) { return d.toISOString().split('T')[0]; }
-function isSameDay(d1, d2) { return formatDate(d1) === formatDate(d2); }
-function createDiv(cls, html) { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; return d; }
-
-// Nueva funciÃ³n para el botÃ³n Hoy
-function goToToday() {
-    state.currentDate = new Date();
-    renderApp();
-
-    // Forzar vista de calendario si estaba en otra pestaÃ±a
-    switchView('calendar', document.querySelector('.tab-btn'));
-
-    // Auto-scroll a las 7:00 AM
-    setTimeout(() => {
-        const startHourEl = document.getElementById('hour-7');
-        if (startHourEl) startHourEl.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 300);
-}
-
-function changeDate(n) {
-    if (state.viewMode === 'week') {
-        state.currentDate.setDate(state.currentDate.getDate() + (n * 7));
-    } else {
-        state.currentDate.setMonth(state.currentDate.getMonth() + n);
-    }
-    renderApp();
-}
-
-function stringToColor(str) { let hash = 0; for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash); return `hsl(${hash % 360}, 60%, 45%)`; }
-function formatTime(s) { return new Date(s * 1000).toISOString().substr(11, 8); }
-function getWeekNumber(d) { d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7)); var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return Math.ceil((((d - yearStart) / 86400000) + 1) / 7); }
-
-function renderHeader() {
-    if (state.viewMode === 'week') {
-        const s = getStartOfWeek(state.currentDate); const e = new Date(s); e.setDate(e.getDate() + 6);
-        document.getElementById('weekLabel').textContent = `Semana ${getWeekNumber(s)}`;
-        document.getElementById('monthLabel').textContent = `${s.getDate()} ${s.toLocaleDateString('es', { month: 'short' })} - ${e.getDate()} ${e.toLocaleDateString('es', { month: 'short' })}`;
-    } else {
-        document.getElementById('weekLabel').textContent = state.currentDate.toLocaleDateString('es', { month: 'long', year: 'numeric' }).toUpperCase();
-        document.getElementById('monthLabel').textContent = 'Vista Mensual';
-    }
-}
-
-// Modificado para fusionar tareas actuales con configuraciones por defecto
-function updateDatalists() {
-    const dynCats = state.tasks.map(t => t.category || t.title.split(' ')[0]);
-    const cats = [...new Set([...dynCats, ...state.defaultCategories])].filter(Boolean);
-    const optsCats = cats.map(c => `<option value="${c}">`).join('');
-    document.getElementById('catList').innerHTML = optsCats;
-    document.getElementById('catListRef').innerHTML = optsCats;
-
-    // Reubicamos el seteo de subcategorÃ­as en una funciÃ³n atada a la categorÃ­a
-    filterSubcategories();
-
-    // Extraer lÃ­deres de los arrays assignees
-    const dynLeaders = [];
-    state.tasks.forEach(t => { if (t.assignees) dynLeaders.push(...t.assignees); });
-    const leaders = [...new Set([...dynLeaders, ...state.defaultLeaders])].filter(Boolean);
-    const optsLeaders = leaders.map(l => `<option value="${l}">`).join('');
-    if (document.getElementById('leadersList')) document.getElementById('leadersList').innerHTML = optsLeaders;
-}
-
-// NUEVA FUNCIÃ“N: Amarra las subcategorÃ­as (secciones) a la categorÃ­a (mÃ¡quina)
-function filterSubcategories() {
-    const catInput = document.getElementById('inpCat');
-    if (!catInput) return; // Por si acaso estemos en otra vista
-
-    const cat = catInput.value.trim().toLowerCase();
-    let subs = [];
-
-    if (!cat) {
-        // Si estÃ¡ vacÃ­o, mostrar todas (dinÃ¡micas histÃ³ricas y las default)
-        const dynSubs = state.tasks.map(t => t.subcategory);
-        subs = [...new Set([...dynSubs, ...state.defaultSubcategories])].filter(Boolean);
-    } else {
-        // Filtrar solo las que coincidan histÃ³ricamente con esta mÃ¡quina
-        const dynSubsForCat = state.tasks
-            .filter(t => (t.category || t.title.split(' ')[0]).toLowerCase() === cat)
-            .map(t => t.subcategory)
-            .filter(Boolean);
-
-        if (dynSubsForCat.length > 0) {
-            subs = [...new Set(dynSubsForCat)];
-        } else {
-            // MÃ¡quina nueva, no tiene subcategorÃ­as previas, mostrar defaults de secciones.
-            subs = [...new Set([...state.defaultSubcategories])].filter(Boolean);
-        }
-    }
-
-    const optsSubs = subs.map(c => `<option value="${c}">`).join('');
-    const subListRef = document.getElementById('subListRef');
-    if (subListRef) subListRef.innerHTML = optsSubs;
-}
-
-// --- FUNCIONES DE CONFIGURACIÃ“N ---
-function renderConfigLists() {
-    const renderList = (arr, containerId, type) => {
-        if (!arr || arr.length === 0) {
-            document.getElementById(containerId).innerHTML = '<span style="color:#888; font-style:italic; padding:10px; display:block;">No hay elementos. Agrega uno arriba.</span>';
-            return;
-        }
-        const html = arr.map((item, index) => `
-                    <div style="background:#222; border:1px solid #444; padding:4px 10px; border-radius:15px; display:inline-flex; align-items:center; gap:8px; font-size:0.9em;">
-                        <span>${item}</span>
-                        <button style="background:none; border:none; color:#f44336; cursor:pointer; font-weight:bold; font-size:1.2em; padding:0; margin:0; line-height:1;" onclick="removeDefault('${type}', ${index})">&times;</button>
+                                ${carrito.map((item, index) => `
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="px-4 py-2 font-mono text-xs font-bold text-blue-700">${item.codigo}</td>
+                                        <td class="px-4 py-2 text-xs font-semibold">${item.descripcion}</td>
+                                        <td class="px-4 py-2 text-center font-black text-lg text-orange-600">${item.cant}</td>
+                                        <td class="px-4 py-2 text-xs"><b>${item.maquina}</b><br><span class="text-gray-500">${item.seccion}</span></td>
+                                        <td class="px-4 py-2 text-center">
+                                            <button onclick="eliminarDelCarrito(${index})" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1 px-2 rounded transition" title="Eliminar">❌</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
                     </div>
-                `).join('');
-        document.getElementById(containerId).innerHTML = html;
-    };
-
-    renderList(state.defaultCategories, 'listDefaultCats', 'categories');
-    renderList(state.defaultSubcategories, 'listDefaultSubs', 'subcategories');
-    renderList(state.defaultProcesses, 'listDefaultProcesses', 'processes');
-    renderList(state.defaultLeaders, 'listDefaultLeaders', 'leaders');
-
-    // NUEVO: Renderizar lista de turnos
-    const dayNamesLong = ['Domingo', 'Lunes', 'Martes', 'MiÃ©rcoles', 'Jueves', 'Viernes', 'SÃ¡bado'];
-    let shiftsHtml = '';
-    for (let d = 0; d < 7; d++) {
-        if (state.shifts[d] && state.shifts[d].length > 0) {
-            shiftsHtml += `<div style="margin-bottom: 8px;"><strong style="color:var(--accent); display:inline-block; width:75px;">${dayNamesLong[d]}:</strong> `;
-            state.shifts[d].forEach((ldr, idx) => {
-                shiftsHtml += `<span style="background:#333; padding:3px 8px; border-radius:12px; margin-right:5px; display:inline-block; margin-bottom:4px;">${ldr} <span style="color:#f44336; cursor:pointer; margin-left:5px; font-weight:bold;" onclick="removeShift(${d}, ${idx})">Ã—</span></span>`;
-            });
-            shiftsHtml += `</div>`;
-        }
-    }
-    document.getElementById('listShifts').innerHTML = shiftsHtml || '<span style="color:#888; font-style:italic;">Sin turnos configurados.</span>';
-}
-
-// NUEVO: Funciones de manejo de turnos
-function addShift() {
-    const day = document.getElementById('shiftDay').value;
-    const leader = document.getElementById('shiftLeader').value.trim();
-    if (!leader) return;
-    if (!state.shifts[day]) state.shifts[day] = [];
-    if (!state.shifts[day].includes(leader)) {
-        state.shifts[day].push(leader);
-        saveLocal();
-        renderConfigLists();
-        renderGrid(); // Refrescar solo el calendario para ver el cambio
-    }
-    document.getElementById('shiftLeader').value = '';
-}
-
-function removeShift(day, index) {
-    state.shifts[day].splice(index, 1);
-    saveLocal();
-    renderConfigLists();
-    renderGrid();
-}
-
-function addDefault(type, inputId) {
-    const val = document.getElementById(inputId).value.trim();
-    if (!val) return;
-
-    if (type === 'categories' && !state.defaultCategories.includes(val)) state.defaultCategories.push(val);
-    if (type === 'subcategories' && !state.defaultSubcategories.includes(val)) state.defaultSubcategories.push(val);
-    if (type === 'processes' && !state.defaultProcesses.includes(val)) state.defaultProcesses.push(val);
-    if (type === 'leaders' && !state.defaultLeaders.includes(val)) state.defaultLeaders.push(val);
-
-    document.getElementById(inputId).value = ''; // Limpiar input
-    saveLocal();
-    renderConfigLists();
-    updateDatalists(); // Refrescar los selectores/datalists globalmente
-}
-
-function removeDefault(type, index) {
-    if (type === 'categories') state.defaultCategories.splice(index, 1);
-    if (type === 'subcategories') state.defaultSubcategories.splice(index, 1);
-    if (type === 'processes') state.defaultProcesses.splice(index, 1);
-    if (type === 'leaders') state.defaultLeaders.splice(index, 1);
-
-    saveLocal();
-    renderConfigLists();
-    updateDatalists();
-}
-
-// --- FUNCIONES DE IMPORTACIÃ“N CSV ---
-let csvData = null;
-
-function openCSVImporter() {
-    document.getElementById('modalCSV').style.display = 'flex';
-    document.getElementById('csvManagerName').value = state.managerName;
-    document.getElementById('csvFileInput').value = '';
-    document.getElementById('csvPreview').style.display = 'none';
-    document.getElementById('csvTypeSection').style.display = 'none';
-    document.getElementById('csvResults').style.display = 'none';
-    document.getElementById('btnImportCSV').disabled = true;
-}
-
-function closeCSVModal() {
-    document.getElementById('modalCSV').style.display = 'none';
-    csvData = null;
-}
-
-function previewCSV() {
-    const fileInput = document.getElementById('csvFileInput');
-    const file = fileInput.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        const text = e.target.result;
-        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-        if (lines.length < 2) {
-            alert('El archivo CSV debe tener al menos un encabezado y una fila de datos.');
-            return;
-        }
-
-        // Parsear CSV simple (asume delimitador de coma)
-        const rows = lines.map(line => {
-            const cells = [];
-            let current = '';
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    cells.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            cells.push(current.trim());
-            return cells;
-        });
-
-        const headers = rows[0].map(h => h.replace(/"/g, '').trim());
-        const data = rows.slice(1).map(row => {
-            const obj = {};
-            headers.forEach((h, i) => {
-                obj[h] = row[i] ? row[i].replace(/"/g, '').trim() : '';
-            });
-            return obj;
-        });
-
-        csvData = { headers, data };
-
-        // Filtrar por gerente
-        const managerName = document.getElementById('csvManagerName').value.trim();
-        const encargadoCol = headers.find(h => h.toLowerCase().includes('encargado'));
-
-        let filteredData = data;
-        if (managerName && encargadoCol) {
-            filteredData = data.filter(row => row[encargadoCol] === managerName);
-        }
-
-        // Mostrar estadÃ­sticas
-        document.getElementById('csvStats').innerHTML = `
-                    ðŸ“Š <b>Total de filas:</b> ${data.length}<br>
-                    ${managerName ? `âœ… <b>Filas del gerente "${managerName}":</b> ${filteredData.length}<br>` : ''}
-                    ${managerName && filteredData.length < data.length ? `âŒ <b>Filas descartadas:</b> ${data.length - filteredData.length}` : ''}
                 `;
+            }
+            document.getElementById('modalCarrito').classList.remove('hidden');
+        }
 
-        document.getElementById('csvPreview').style.display = 'block';
-        document.getElementById('csvTypeSection').style.display = 'block';
-        document.getElementById('btnImportCSV').disabled = false;
+        function cerrarCarrito() { document.getElementById('modalCarrito').classList.add('hidden'); }
+        function eliminarDelCarrito(index) { carrito.splice(index, 1); actualizarBadgeCarrito(); abrirCarrito(); }
+        function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrito?")) { carrito = []; actualizarBadgeCarrito(); abrirCarrito(); } }
 
-        // Guardar datos filtrados
-        csvData.filteredData = filteredData;
-    };
-    reader.readAsText(file);
-}
+        // --- GENERADOR DE PDF (NUEVA FUNCIÓN) ---
+        function generarPdfCarrito() {
+            if(carrito.length === 0) return alert("El carrito está vacío. Añade repuestos primero.");
+            
+            const d = new Date();
+            const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
+                          d.getDate().toString().padStart(2, '0') + d.getHours().toString().padStart(2, '0') + 
+                          d.getMinutes().toString().padStart(2, '0') + d.getSeconds().toString().padStart(2, '0');
 
-function selectImportType(type) {
-    document.querySelectorAll('input[name="importType"]').forEach(r => {
-        r.checked = (r.value === type);
-        r.parentElement.style.border = r.checked ? '2px solid var(--accent)' : '2px solid transparent';
-    });
-}
+            // Crear el div oculto para el formato del PDF
+            let printDiv = document.createElement('div');
+            printDiv.id = 'cartPrintArea';
+            printDiv.innerHTML = `
+                <div style="font-family: Arial, sans-serif; color: #000; padding: 20px;">
+                    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px;">
+                        <h1 style="color: #1e3a8a; font-size: 24px; margin:0;">EMPRESAS GALINDO</h1>
+                        <h2 style="font-size: 16px; margin: 5px 0 0 0; color:#555;">SOLICITUD TÉCNICA - DEPTO. ELÉCTRICO</h2>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size:14px;">
+                        <div><strong>No. Solicitud:</strong> ${idSol}</div>
+                        <div><strong>Fecha:</strong> ${new Date().toLocaleString('es-GT')}</div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background-color: #f3f4f6; text-align: left;">
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">#</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Código / Parte</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Descripción</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">Cant.</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Máquina / Sección</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Serie / Modelo</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Técnico</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${carrito.map((it, idx) => `
+                                <tr>
+                                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center;">${idx+1}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.codigo}</b><br><span style="font-size:10px;">PN: ${it.noParte}</span></td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;">${it.descripcion}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center; font-weight:bold;">${it.cant}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.maquina}</b><br>${it.seccion}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px; font-size:10px;">S: ${it.serie}<br>M: ${it.modelo}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;">${it.tecnico}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 60px; text-align: center;">
+                        <p>___________________________________</p>
+                        <p style="margin-top:5px; font-size:12px;">Firma / Autorización Solicitante</p>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(printDiv);
+            document.body.classList.add('printing-cart');
+            
+            window.print(); // Abre el diálogo nativo de PDF/Impresora
+            
+            // Limpieza
+            document.body.classList.remove('printing-cart');
+            document.body.removeChild(printDiv);
+        }
 
-function executeCSVImport() {
-    if (!csvData || !csvData.filteredData) return;
+        async function procesarSolicitudEmail() {
+            if(carrito.length === 0) return alert("No hay items en el carrito.");
 
-    const managerName = document.getElementById('csvManagerName').value.trim();
-    const importType = document.querySelector('input[name="importType"]:checked').value;
-    const data = csvData.filteredData;
+            const d = new Date();
+            const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
+                          d.getDate().toString().padStart(2, '0') + d.getHours().toString().padStart(2, '0') + 
+                          d.getMinutes().toString().padStart(2, '0') + d.getSeconds().toString().padStart(2, '0');
 
-    // Guardar nombre del gerente
-    if (managerName) {
-        state.managerName = managerName;
-    }
+            const destinatario = "dorozco@empresasgalindo.com";
+            const copia = "electrico.cogusa@empresasgalindo.com";
+            const asunto = encodeURIComponent(`SOLICITUD DE COMPRA REPUESTOS #${idSol} - DEPTO ELECTRICO`);
 
-    // Extraer valores Ãºnicos
-    const categories = new Set();
-    const subcategories = new Set();
-    const processes = new Set();
-    const leaders = new Set();
-
-    const maqCol = csvData.headers.find(h => h.toLowerCase().includes('maquina'));
-    const secCol = csvData.headers.find(h => h.toLowerCase().includes('seccion'));
-    const depCol = csvData.headers.find(h => h.toLowerCase().includes('departamento'));
-    const autCol = csvData.headers.find(h => h.toLowerCase().includes('autorizador'));
-
-    data.forEach(row => {
-        if (maqCol && row[maqCol]) categories.add(row[maqCol]);
-        if (secCol && row[secCol]) subcategories.add(row[secCol]);
-        if (depCol && row[depCol]) processes.add(row[depCol]);
-        if (autCol && row[autCol]) leaders.add(row[autCol]);
-    });
-
-    // Fusionar con listas existentes
-    const newCats = [...categories].filter(c => !state.defaultCategories.includes(c));
-    const newSubs = [...subcategories].filter(s => !state.defaultSubcategories.includes(s));
-    const newProcs = [...processes].filter(p => !state.defaultProcesses.includes(p));
-    const newLeaders = [...leaders].filter(l => !state.defaultLeaders.includes(l));
-
-    state.defaultCategories.push(...newCats);
-    state.defaultSubcategories.push(...newSubs);
-    state.defaultProcesses.push(...newProcs);
-    state.defaultLeaders.push(...newLeaders);
-
-    // Mostrar resultados
-    let resultsHTML = `
-                <p><b>ðŸ“Š Resultados de la importaciÃ³n:</b></p>
-                <ul style="margin:5px 0; padding-left:20px; font-size:0.9em;">
-                    <li>${categories.size} categorÃ­as encontradas (${newCats.length} nuevas)</li>
-                    <li>${subcategories.size} subcategorÃ­as encontradas (${newSubs.length} nuevas)</li>
-                    <li>${processes.size} procesos encontrados (${newProcs.length} nuevos)</li>
-                    <li>${leaders.size} tÃ©cnicos encontrados (${newLeaders.length} nuevos)</li>
-                    <li>${data.length} filas procesadas</li>
-                </ul>
+            let tablaHtml = `
+                <div style="font-family: Arial, sans-serif; color: #333; font-size: 12px; border: 1px solid #ccc; padding: 15px;">
+                    <h2 style="color:#1e3a8a; margin-top:0;">SOLICITUD DE REPUESTOS #${idSol}</h2>
+                    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; text-align: left;">
+                        <thead style="background-color: #f3f4f6; color: #1f2937;">
+                            <tr>
+                                <th>#</th><th>Código / Parte</th><th>Descripción</th><th style="text-align: center;">Cant.</th>
+                                <th>Máquina / Sección</th><th>Serie / Modelo</th><th>F. Sugerida</th><th>Técnico</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${carrito.map((item, idx) => `
+                                <tr>
+                                    <td>${idx+1}</td>
+                                    <td style="font-family: monospace;"><b>${item.codigo}</b><br><span style="font-size:10px; color:#555;">PN: ${item.noParte}</span></td>
+                                    <td>${item.descripcion}</td>
+                                    <td style="text-align: center; font-weight: bold; color: #d97706; font-size:15px;">${item.cant}</td>
+                                    <td><b>${item.maquina}</b><br>${item.seccion}</td>
+                                    <td style="font-size:10px;">S: ${item.serie}<br>M: ${item.modelo}</td>
+                                    <td>${item.fechaSugerida}</td>
+                                    <td>${item.tecnico}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
             `;
 
-    // OPCIÃ“N B: IMPORTAR HISTORIAL (tareas completadas con fechas originales)
-    if (importType === 'B') {
-        const fechaCol = csvData.headers.find(h => h.toLowerCase().includes('fecha') && h.toLowerCase().includes('contabiliz'));
-        const descCol = csvData.headers.find(h => h.toLowerCase().includes('descripcion'));
+            try {
+                await guardarCompraEnHistorial(idSol, carrito);
 
-        if (!fechaCol) {
-            resultsHTML += `<p style="color:#f44336;">âŒ Error: No se encontrÃ³ columna de "Fecha Contabilizacion" en el CSV.</p>`;
-        } else {
-            let tasksCreated = 0;
-            const tasksByDate = new Map(); // Para distribuir horarios
+                const htmlBlob = new Blob([tablaHtml], { type: 'text/html' });
+                const textBlob = new Blob(["Pega aquí con CTRL+V la tabla."], { type: 'text/plain' });
+                await navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })]);
 
-            // Generar cÃ³digo de tarea base
-            const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
-            let nextTaskNum = (codes.length > 0 ? Math.max(...codes) : 0) + 1;
+                alert(`✅ Solicitud #${idSol} generada y copiada al portapapeles.\n\nAl abrirse el correo, haz clic en el cuerpo y presiona CTRL + V.\n\n(También puedes usar el botón de 'Descargar PDF' y adjuntarlo si lo prefieres)`);
+            } catch (err) {
+                alert("No se pudo copiar automáticamente al portapapeles, pero se guardó en el historial. Puedes usar la opción de PDF al abrir el correo.");
+            } finally {
+                let cuerpoBase = encodeURIComponent(`David,\n\nAdjunto solicitud de compra #${idSol} para mantenimiento:\n\n[PRESIONA CTRL + V AQUÍ PARA PEGAR LA TABLA O ADJUNTA EL PDF]\n\nSaludos.`);
+                window.location.href = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
 
-            data.forEach(row => {
-                // Parsear fecha (formato: "2/1/2023" o similar)
-                const fechaStr = row[fechaCol];
-                if (!fechaStr) return;
+                carrito = []; actualizarBadgeCarrito(); cerrarCarrito();
+            }
+        }
 
-                const dateParts = fechaStr.split('/');
-                if (dateParts.length !== 3) return;
+        // --- RENDERIZADO DEL HISTORIAL ---
+        function abrirHistorial() {
+            document.getElementById('modalHistorial').classList.remove('hidden');
+            renderizarHistorial();
+        }
 
-                const [month, day, year] = dateParts;
-                const taskDate = new Date(year, month - 1, day);
-                const dateStr = formatDate(taskDate);
+        function cerrarHistorial() { document.getElementById('modalHistorial').classList.add('hidden'); }
 
-                // Asignar hora: distribuir desde 00:00 hasta 06:00 si hay varias el mismo dÃ­a
-                if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, []);
-                const tasksOnDate = tasksByDate.get(dateStr);
-                const hour = Math.min(tasksOnDate.length, 6); // 00:00 a 06:00
-                tasksOnDate.push(hour);
+        async function renderizarHistorial() {
+            const data = await obtenerHistorial();
+            const fTiempo = document.getElementById('histFiltroTiempo').value;
+            const fMaq = document.getElementById('histFiltroMaquina').value.toLowerCase();
+            
+            const cont = document.getElementById('contenedorHistorial');
+            const ahora = new Date().getTime();
+            const unDia = 24 * 60 * 60 * 1000;
+            const unaSemana = 7 * unDia;
 
-                const groupId = 'GRP_CSV_B_' + Date.now() + '_' + tasksCreated;
-                const taskCode = `T-${nextTaskNum.toString().padStart(3, '0')}`;
-                nextTaskNum++;
+            const selMaq = document.getElementById('histFiltroMaquina');
+            if(selMaq.options.length <= 1) {
+                const maqs = new Set();
+                data.forEach(sol => sol.items.forEach(it => maqs.add(it.maquina)));
+                [...maqs].sort().forEach(m => selMaq.innerHTML += `<option value="${m}">${m}</option>`);
+            }
 
-                state.tasks.push({
-                    id: Date.now() + Math.random(),
-                    groupId: groupId,
-                    date: dateStr,
-                    hour: hour,
-                    category: row[maqCol] || 'Importado',
-                    subcategory: row[secCol] || '',
-                    process: row[depCol] || '',
-                    detail: row[descCol] || 'Mantenimiento registrado',
-                    maintenanceType: 'correctivo',
-                    priority: 'medium',
-                    title: `${row[maqCol] || 'Importado'} ${row[secCol] || ''}`,
-                    taskCode: taskCode,
-                    assignees: row[autCol] ? [row[autCol]] : [],
-                    cost: 0,
-                    originalTotal: 0,
-                    breakdown: [],
-                    selectedDays: [taskDate.getDay()],
-                    recurrence: null,
-                    baseStartDate: dateStr,
-                    baseEndDate: dateStr,
-                    status: 'done', // âœ… Marcada como completada
-                    seconds: 0
+            if(data.length === 0) { cont.innerHTML = '<p class="text-center text-gray-500 py-10">No hay historial de compras.</p>'; return; }
+
+            let filas = [];
+            data.forEach(sol => {
+                const d = new Date(sol.fecha_log);
+                const fechaStr = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                
+                sol.items.forEach(it => {
+                    let ok = true;
+                    if(fTiempo === 'hoy' && ahora - sol.fecha_log > unDia) ok = false;
+                    if(fTiempo === 'semana' && ahora - sol.fecha_log > unaSemana) ok = false;
+                    if(fTiempo === 'mes' && (d.getMonth() !== new Date().getMonth() || d.getFullYear() !== new Date().getFullYear())) ok = false;
+                    if(fMaq !== 'todas' && it.maquina.toLowerCase() !== fMaq) ok = false;
+
+                    if(ok) filas.push({ id: sol.id_solicitud, ms: sol.fecha_log, fecha: fechaStr, it: it });
                 });
-
-                tasksCreated++;
             });
 
-            resultsHTML += `<p style="color:#4caf50;">âœ… <b>${tasksCreated}</b> tareas histÃ³ricas creadas y marcadas como completadas.</p>`;
-            resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Las tareas fueron distribuidas en horarios de 00:00 a 06:00 segÃºn la cantidad por dÃ­a.</p>`;
+            filas.sort((a,b) => b.ms - a.ms);
+
+            if(filas.length === 0) { cont.innerHTML = '<p class="text-center text-gray-500 py-10">Sin resultados.</p>'; return; }
+
+            cont.innerHTML = `
+                <div class="overflow-x-auto border rounded bg-white shadow-sm">
+                    <table class="min-w-full text-sm text-left">
+                        <thead class="bg-gray-100 text-gray-700">
+                            <tr>
+                                <th class="px-4 py-2 border-b">No. Solicitud</th>
+                                <th class="px-4 py-2 border-b">Fecha Log</th>
+                                <th class="px-4 py-2 border-b">Repuesto</th>
+                                <th class="px-4 py-2 border-b text-center">Cant.</th>
+                                <th class="px-4 py-2 border-b">Máquina / Sec.</th>
+                                <th class="px-4 py-2 border-b">Técnico</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filas.map(f => `
+                                <tr class="border-b hover:bg-gray-50 text-xs">
+                                    <td class="px-4 py-2 font-bold text-indigo-700">${f.id}</td>
+                                    <td class="px-4 py-2 text-gray-600">${f.fecha}</td>
+                                    <td class="px-4 py-2"><span class="font-mono text-blue-600 font-bold">${f.it.codigo}</span><br>${f.it.descripcion}</td>
+                                    <td class="px-4 py-2 text-center font-bold text-orange-600 text-sm">${f.it.cant}</td>
+                                    <td class="px-4 py-2"><b>${f.it.maquina}</b><br><span class="text-gray-500">${f.it.seccion}</span></td>
+                                    <td class="px-4 py-2">${f.it.tecnico}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
         }
-    }
 
-    // OPCIÃ“N C: CREAR PLANTILLAS FUTURAS CON ANÃLISIS PREDICTIVO
-    if (importType === 'C') {
-        const fechaCol = csvData.headers.find(h => h.toLowerCase().includes('fecha') && h.toLowerCase().includes('contabiliz'));
-        const descCol = csvData.headers.find(h => h.toLowerCase().includes('descripcion'));
+        // --- SISTEMA ORIGINAL INTACTO DE LECTURA Y RENDERIZADO ---
+        let TODOS_LOS_DATOS = []; 
+        let DATOS_FILTRADOS = [];
+        let PUNTERO_PAGINA = 0;
+        const REGISTROS_POR_PAGINA = 50;
 
-        if (!fechaCol) {
-            resultsHTML += `<p style="color:#f44336;">âŒ Error: No se encontrÃ³ columna de "Fecha Contabilizacion" en el CSV.</p>`;
-        } else {
-            // Agrupar por identificador Ãºnico (Maquinaria + Seccion + Departamento + Descripcion)
-            const groupedRecords = new Map();
+        function renderizarBloqueTabla() {
+            const tbody = document.getElementById('tableBody');
+            const bloque = DATOS_FILTRADOS.slice(PUNTERO_PAGINA, PUNTERO_PAGINA + REGISTROS_POR_PAGINA);
+            
+            bloque.forEach(fila => {
+                const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo, solFecha, solOrigen } = fila;
+                const tr = document.createElement('tr');
+                
+                // ASIGNAR EVENTO CLICK A LA FILA
+                tr.className = "hover:bg-blue-50 transition duration-150 cursor-pointer";
+                tr.onclick = () => abrirModalDetalle(fila);
+                
+                tr.innerHTML = `
+                    <td><div class="cell-scroll mw-120 font-bold text-xs" title="${inv.codigo}">${inv.codigo}</div></td>
+                    <td><div class="cell-scroll mw-120 text-xs text-gray-600" title="${inv.noParte || '-'}">${inv.noParte || "-"}</div></td>
+                    <td><div class="cell-scroll mw-200 text-xs" title="${inv.descripcion}">${inv.descripcion}</div></td>
+                    <td class="text-center font-bold text-blue-900 bg-blue-50">${inv.cantidad}</td>
+                    
+                    <td class="sol-col text-xs text-center">${formatFechaCorto(solFecha)}</td>
+                    <td class="sol-col text-xs text-center font-semibold text-gray-700">${solOrigen}</td>
+                    
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[0])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[1])}</td>
+                    <td class="q-col text-right font-bold text-blue-700">${formatQ(qConsumo[2])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[3])}</td>
+                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[4])}</td>
+                    <td><div class="cell-scroll mw-150 text-xs" title="${maquinasUnicas}">${maquinasUnicas}</div></td>
+                    <td class="text-xs font-semibold text-gray-700">${formatFechaCorto(inv.ultimaCompra)}</td>
+                    <td class="text-center"><span class="badge ${estadoClase}">${estado}</span></td>
+                    <td class="text-center font-bold">${vecesUsado}</td>
+                    <td class="text-center font-bold text-purple-700 bg-purple-50">${fila.demandaAnual !== null ? fila.demandaAnual : '-'}</td>
+                    <td class="text-xs">${formatFechaCorto(primeraSalida)}</td>
+                    <td class="text-xs">${formatFechaCorto(ultimaSalida)}</td>
+                    <td class="q-col text-right">${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[1] !== null ? Math.round(qDiasSalidas[1]) : '-'}</td>
+                    <td class="q-col text-right font-bold text-red-600">${qDiasSalidas[2] !== null ? Math.round(qDiasSalidas[2]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[3] !== null ? Math.round(qDiasSalidas[3]) : '-'}</td>
+                    <td class="q-col text-right">${qDiasSalidas[4] !== null ? Math.round(qDiasSalidas[4]) : '-'}</td>
+                    <td class="proj-col text-sm no-print" data-val="${proyeccionMs||0}">${proyeccionTexto}</td>
+                    <td class="proj-col text-sm hidden print:table-cell">${proyeccionTexto}</td>
+                `;
+                tbody.appendChild(tr);
+            });
 
-            data.forEach(row => {
-                const key = `${row[maqCol] || ''}_${row[secCol] || ''}_${row[depCol] || ''}_${row[descCol] || ''}`;
-                if (!groupedRecords.has(key)) {
-                    groupedRecords.set(key, {
-                        category: row[maqCol] || 'Importado',
-                        subcategory: row[secCol] || '',
-                        process: row[depCol] || '',
-                        detail: row[descCol] || 'Mantenimiento',
-                        leader: row[autCol] || '',
-                        dates: []
-                    });
+            PUNTERO_PAGINA += bloque.length;
+            document.getElementById('countVisibles').innerText = PUNTERO_PAGINA;
+            document.getElementById('countTotalFiltrados').innerText = DATOS_FILTRADOS.length;
+            
+            if (PUNTERO_PAGINA < DATOS_FILTRADOS.length) { document.getElementById('controlesPaginacion').classList.remove('hidden'); } 
+            else { document.getElementById('controlesPaginacion').classList.add('hidden'); }
+        }
+
+        async function guardarDatos(datos) {
+            const db = await initDB();
+            const tx = db.transaction(STORE_ANALISIS, 'readwrite');
+            tx.objectStore(STORE_ANALISIS).put(datos, 'datosGuardados');
+            return new Promise(r => tx.oncomplete = r);
+        }
+
+        async function cargarDatos() {
+            const db = await initDB();
+            return new Promise(r => {
+                const req = db.transaction(STORE_ANALISIS, 'readonly').objectStore(STORE_ANALISIS).get('datosGuardados');
+                req.onsuccess = () => r(req.result);
+                req.onerror = () => r(null);
+            });
+        }
+
+        async function borrarDatosLocales() {
+            const db = await initDB();
+            return new Promise(r => {
+                const tx = db.transaction([STORE_ANALISIS, STORE_HISTORIAL], 'readwrite');
+                tx.objectStore(STORE_ANALISIS).delete('datosGuardados');
+                tx.objectStore(STORE_HISTORIAL).clear();
+                tx.oncomplete = r;
+            });
+        }
+
+        function ejecutarBusqueda() {
+            const fBusqueda = document.getElementById('busquedaTexto').value.toLowerCase().trim();
+            const tipoBusqueda = document.getElementById('tipoBusqueda').value;
+            const fStock = document.getElementById('filtroStock').value;
+            const fProy = document.getElementById('filtroProyeccion').value;
+            const fGrupo = document.getElementById('filtroGrupo').value;
+            const fMaquina = document.getElementById('filtroMaquina').value;
+            const fEstado = document.getElementById('filtroEstado').value;
+            const fUltimaSalida = document.getElementById('filtroUltimaSalida').value;
+            const fDesde = document.getElementById('filtroSalidaDesde').value;
+            const fHasta = document.getElementById('filtroSalidaHasta').value;
+
+            const contRango = document.getElementById('contenedorRangoSalidas');
+            if (fUltimaSalida === 'rango') { contRango.classList.remove('hidden'); contRango.classList.add('flex'); } 
+            else { contRango.classList.add('hidden'); contRango.classList.remove('flex'); }
+
+            const now = new Date(); const currentYear = now.getFullYear(); const currentMonth = now.getMonth();
+
+            DATOS_FILTRADOS = TODOS_LOS_DATOS.filter(fila => {
+                let mostrar = true;
+
+                if (fBusqueda !== "") {
+                    const terminos = fBusqueda.split(/\s+/).filter(t => t.length > 0);
+                    const textoFila = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte}`.toLowerCase();
+                    if (tipoBusqueda === 'and') { if (!terminos.every(term => textoFila.includes(term))) mostrar = false; } 
+                    else { if (!terminos.some(term => textoFila.includes(term))) mostrar = false; }
                 }
 
-                // Parsear fecha
-                const fechaStr = row[fechaCol];
-                if (fechaStr) {
-                    const dateParts = fechaStr.split('/');
-                    if (dateParts.length === 3) {
-                        const [month, day, year] = dateParts;
-                        const date = new Date(year, month - 1, day);
-                        groupedRecords.get(key).dates.push(date);
+                if (mostrar && fGrupo !== 'todos' && fila.inv.grupo !== fGrupo) mostrar = false;
+                if (mostrar && fMaquina !== 'todas' && !fila.maquinasUnicas.toLowerCase().includes(fMaquina.toLowerCase())) mostrar = false;
+                if (mostrar && fEstado !== 'todos' && fila.estado !== fEstado) mostrar = false;
+
+                if (mostrar) {
+                    if (fStock === 'cero' && fila.inv.cantidad !== 0) mostrar = false;
+                    else if (fStock === 'uno' && fila.inv.cantidad !== 1) mostrar = false;
+                    else if (fStock === 'resto' && fila.inv.cantidad <= 1) mostrar = false;
+                }
+                
+                if (mostrar && fUltimaSalida !== 'todas') {
+                    if (!fila.ultimaSalida) mostrar = false;
+                    else {
+                        const dSalida = new Date(parseFloat(fila.ultimaSalida));
+                        const localSalida = new Date(dSalida.getTime() + dSalida.getTimezoneOffset() * 60000);
+                        const sYear = localSalida.getFullYear(); const sMonth = localSalida.getMonth();
+
+                        if (fUltimaSalida === 'este_mes' && (sYear !== currentYear || sMonth !== currentMonth)) mostrar = false;
+                        else if (fUltimaSalida === 'mes_anterior') {
+                            let lMonth = currentMonth - 1; let lYear = currentYear;
+                            if (lMonth < 0) { lMonth = 11; lYear--; }
+                            if (sYear !== lYear || sMonth !== lMonth) mostrar = false;
+                        } 
+                        else if (fUltimaSalida === 'este_anio' && sYear !== currentYear) mostrar = false;
+                        else if (fUltimaSalida === 'anio_anterior' && sYear !== currentYear - 1) mostrar = false;
+                        else if (fUltimaSalida === 'rango') {
+                            if (fDesde && localSalida.getTime() < new Date(fDesde + "T00:00:00").getTime()) mostrar = false;
+                            if (fHasta && localSalida.getTime() > new Date(fHasta + "T23:59:59").getTime()) mostrar = false;
+                        }
                     }
                 }
+
+                if (mostrar && fProy !== 'todas') {
+                    if (!fila.proyeccionMs) mostrar = false; 
+                    else {
+                        const dProy = new Date(parseFloat(fila.proyeccionMs));
+                        if (fProy === 'este_mes' && (dProy.getFullYear() !== currentYear || dProy.getMonth() !== currentMonth)) mostrar = false;
+                        else if (fProy === 'mes_anterior') {
+                            let lMonth = currentMonth - 1; let lYear = currentYear;
+                            if (lMonth < 0) { lMonth = 11; lYear--; }
+                            if (dProy.getFullYear() !== lYear || dProy.getMonth() !== lMonth) mostrar = false;
+                        } 
+                        else if (fProy === 'este_anio' && dProy.getFullYear() !== currentYear) mostrar = false;
+                    }
+                }
+
+                return mostrar;
             });
 
-            // Analizar frecuencia y proyectar
-            let tasksCreated = 0;
-            let analysisHTML = '<div style="margin-top:15px; padding:15px; background:#1a1a1a; border-radius:8px; border:1px solid #333;"><h4 style="margin-top:0; color:var(--accent);">ðŸ“ˆ AnÃ¡lisis de Frecuencia</h4>';
+            document.getElementById('tableBody').innerHTML = "";
+            PUNTERO_PAGINA = 0;
+            renderizarBloqueTabla();
+        }
 
-            const codes = state.tasks.map(t => parseInt((t.taskCode || 'T-0').replace('T-', '')) || 0);
-            let nextTaskNum = (codes.length > 0 ? Math.max(...codes) : 0) + 1;
-            const today = new Date();
+        document.getElementById('busquedaTexto').addEventListener('keypress', (e) => { if (e.key === 'Enter') ejecutarBusqueda(); });
+        document.getElementById('btnEjecutarBusqueda').addEventListener('click', ejecutarBusqueda);
+        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda', 'filtroUltimaSalida', 'filtroSalidaDesde', 'filtroSalidaHasta'].forEach(id => {
+            document.getElementById(id).addEventListener('change', ejecutarBusqueda);
+        });
 
-            groupedRecords.forEach((record, key) => {
-                if (record.dates.length === 0) return;
+        document.getElementById('btnCargarMas').addEventListener('click', renderizarBloqueTabla);
+        document.getElementById('btnMostrarImportar').addEventListener('click', () => document.getElementById('zonaImportacion').classList.remove('hidden'));
+        document.getElementById('btnBorrarDatos').addEventListener('click', async () => {
+            if(confirm("¿Seguro que quieres borrar la base de datos y el historial guardado?")) { await borrarDatosLocales(); location.reload(); }
+        });
+        document.getElementById('btnImprimirPdf').addEventListener('click', () => window.print());
 
-                // Ordenar fechas
-                record.dates.sort((a, b) => a - b);
-                const lastDate = record.dates[record.dates.length - 1];
+        let sortAscendente = true; 
+        document.getElementById('thSortProyeccion').addEventListener('click', () => {
+            DATOS_FILTRADOS.sort((a, b) => {
+                const valA = a.proyeccionMs; const valB = b.proyeccionMs;
+                if (!valA && !valB) return 0;
+                if (!valA) return 1; if (!valB) return -1;
+                return sortAscendente ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
+            });
+            sortAscendente = !sortAscendente;
+            document.getElementById('sortIcon').innerText = sortAscendente ? '🔼' : '🔽';
+            document.getElementById('tableBody').innerHTML = "";
+            PUNTERO_PAGINA = 0;
+            renderizarBloqueTabla();
+        });
 
-                // Calcular frecuencia promedio (intervalos entre mantenimientos)
-                let intervals = [];
-                for (let i = 1; i < record.dates.length; i++) {
-                    const diffDays = Math.round((record.dates[i] - record.dates[i - 1]) / (1000 * 60 * 60 * 24));
-                    if (diffDays > 0) intervals.push(diffDays);
+        document.getElementById('btnExportarExcel').addEventListener('click', () => {
+            const datosLimpios = [['Código', 'No. Parte', 'Descripción', 'Cant.', 'Fecha Solicitud', 'Origen', 'Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Destinos', 'Última Compra', 'Estado', 'Hz', 'Demanda Anual (Mín, Máx)', 'Primera Salida', 'Última Salida', 'Q0 Días', 'Q1 Días', 'Q2 Días', 'Q3 Días', 'Q4 Días', 'Proyección Sig. Compra']];
+            DATOS_FILTRADOS.forEach(f => {
+                datosLimpios.push([
+                    f.inv.codigo, f.inv.noParte || "-", f.inv.descripcion, f.inv.cantidad, formatFechaCorto(f.solFecha), f.solOrigen,
+                    formatQ(f.qConsumo[0]), formatQ(f.qConsumo[1]), formatQ(f.qConsumo[2]), formatQ(f.qConsumo[3]), formatQ(f.qConsumo[4]),
+                    f.maquinasUnicas, formatFechaCorto(f.inv.ultimaCompra), f.estado, f.vecesUsado, f.demandaAnual !== null ? f.demandaAnual : "-",
+                    formatFechaCorto(f.primeraSalida), formatFechaCorto(f.ultimaSalida),
+                    formatQ(f.qDiasSalidas[0]), formatQ(f.qDiasSalidas[1]), formatQ(f.qDiasSalidas[2]), formatQ(f.qDiasSalidas[3]), formatQ(f.qDiasSalidas[4]),
+                    f.proyeccionTexto
+                ]);
+            });
+            const hoja = XLSX.utils.aoa_to_sheet(datosLimpios);
+            const libro = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(libro, hoja, "Bodega_Analisis");
+            XLSX.writeFile(libro, `Analisis_Bodega_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        });
+
+        function inicializarInterfaz(datos) {
+            TODOS_LOS_DATOS = datos.resultadosTabla;
+            TODOS_LOS_DATOS.sort((a, b) => {
+                if (!a.proyeccionMs && !b.proyeccionMs) return (b.ultimaSalida || 0) - (a.ultimaSalida || 0); 
+                if (!a.proyeccionMs) return 1; if (!b.proyeccionMs) return -1;
+                return a.proyeccionMs - b.proyeccionMs; 
+            });
+
+            const selGrupo = document.getElementById('filtroGrupo');
+            const selMaquina = document.getElementById('filtroMaquina');
+            selGrupo.innerHTML = '<option value="todos">Todos</option>';
+            datos.gruposUnicos.sort().forEach(g => selGrupo.innerHTML += `<option value="${g}">${g}</option>`);
+            selMaquina.innerHTML = '<option value="todas">Todas</option>';
+            datos.maquinasUnicas.sort().forEach(m => selMaquina.innerHTML += `<option value="${m}">${m}</option>`);
+
+            document.getElementById('resultTable').classList.remove('hidden');
+            document.getElementById('contenedorFiltros').classList.remove('hidden');
+            document.getElementById('zonaImportacion').classList.add('hidden');
+            document.getElementById('controlesSesion').classList.remove('hidden');
+            document.getElementById('pantallaCarga').classList.add('hidden');
+            ejecutarBusqueda();
+        }
+
+        // LECTURA DE ARCHIVOS Y PROCESAMIENTO
+        function calcularCuartil(arr, q) {
+            const ordenado = [...arr].sort((a, b) => a - b);
+            const pos = (ordenado.length - 1) * q;
+            const base = Math.floor(pos);
+            const rest = pos - base;
+            return (ordenado[base + 1] !== undefined) ? ordenado[base] + rest * (ordenado[base + 1] - ordenado[base]) : ordenado[base];
+        }
+
+        function obtenerCincoCuartiles(arr) {
+            if (!arr || arr.length === 0) return [null, null, null, null, null];
+            if (arr.length === 1) return [arr[0], arr[0], arr[0], arr[0], arr[0]];
+            if (arr.length === 2) {
+                const min = Math.min(arr[0], arr[1]);
+                const max = Math.max(arr[0], arr[1]);
+                const media = (min + max) / 2;
+                return [min, min, media, max, max];
+            }
+            return [calcularCuartil(arr, 0), calcularCuartil(arr, 0.25), calcularCuartil(arr, 0.50), calcularCuartil(arr, 0.75), calcularCuartil(arr, 1)];
+        }
+
+        function parseFechaRobusta(fechaRaw) {
+            if (!fechaRaw) return null;
+            if (fechaRaw instanceof Date) return fechaRaw.getTime();
+            if (typeof fechaRaw === 'number') return new Date(Math.round((fechaRaw - 25569) * 86400 * 1000)).getTime();
+            if (typeof fechaRaw === 'string') {
+                let text = fechaRaw.trim();
+                let parts = text.split('/');
+                if (parts.length === 3) {
+                    let year = parts[2].length === 2 ? "20" + parts[2] : parts[2];
+                    return new Date(`${year}-${parts[1]}-${parts[0]}T12:00:00`).getTime();
                 }
-
-                let avgFrequency = 30; // Default: 30 dÃ­as
-                if (intervals.length > 0) {
-                    avgFrequency = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
+                let partsDash = text.split('-');
+                if (partsDash.length === 3 && partsDash[0].length <= 2) {
+                    let year = partsDash[2].length === 2 ? "20" + partsDash[2] : partsDash[2];
+                    return new Date(`${year}-${partsDash[1]}-${partsDash[0]}T12:00:00`).getTime();
                 }
+                return new Date(text).getTime();
+            }
+            return null;
+        }
 
-                // Calcular fecha proyectada
-                const projectedDate = new Date(lastDate);
-                projectedDate.setDate(projectedDate.getDate() + avgFrequency);
+        function leerExcel(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                        resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+                    } catch (err1) {
+                        const readerFallback = new FileReader();
+                        readerFallback.onload = (e2) => {
+                            try {
+                                const text = e2.target.result;
+                                if (text.toLowerCase().includes('<table')) {
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(text, 'text/html');
+                                    const table = doc.querySelector('table');
+                                    if (table) {
+                                        const wbHTML = XLSX.utils.table_to_book(table, {cellDates: true});
+                                        return resolve(XLSX.utils.sheet_to_json(wbHTML.Sheets[wbHTML.SheetNames[0]]));
+                                    }
+                                }
+                                const wbFallback = XLSX.read(text, { type: 'binary', cellDates: true });
+                                resolve(XLSX.utils.sheet_to_json(wbFallback.Sheets[wbFallback.SheetNames[0]]));
+                            } catch (errFallback) { reject(new Error("Formato irreconocible.")); }
+                        };
+                        readerFallback.readAsBinaryString(file);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
 
-                // Si la fecha proyectada ya pasÃ³, programar para maÃ±ana
-                const taskDate = projectedDate > today ? projectedDate : new Date(today.getTime() + 24 * 60 * 60 * 1000);
-                const dateStr = formatDate(taskDate);
+        function leerCSV(file) {
+            return new Promise((resolve, reject) => {
+                Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => resolve(res.data), error: reject });
+            });
+        }
 
-                // Crear tarea
-                const groupId = 'GRP_CSV_C_' + Date.now() + '_' + tasksCreated;
-                const taskCode = `T-${nextTaskNum.toString().padStart(3, '0')}`;
-                nextTaskNum++;
+        document.getElementById('btnProcesar').addEventListener('click', async () => {
+            const fileExcel = document.getElementById('fileExcel').files[0];
+            const fileCsv = document.getElementById('fileCsv').files[0];
+            const filesSolicitudes = document.getElementById('fileSolicitudes').files; 
 
-                state.tasks.push({
-                    id: Date.now() + Math.random(),
-                    groupId: groupId,
-                    date: dateStr,
-                    hour: 0, // 00:00 por defecto
-                    category: record.category,
-                    subcategory: record.subcategory,
-                    process: record.process,
-                    detail: `${record.detail} (Proyectada cada ${avgFrequency} dÃ­as)`,
-                    maintenanceType: 'preventivo',
-                    priority: 'medium',
-                    title: `${record.category} ${record.subcategory}`,
-                    taskCode: taskCode,
-                    assignees: record.leader ? [record.leader] : [],
-                    cost: 0,
-                    originalTotal: 0,
-                    breakdown: [],
-                    selectedDays: [taskDate.getDay()],
-                    recurrence: null,
-                    baseStartDate: dateStr,
-                    baseEndDate: dateStr,
-                    status: 'planned', // ðŸ“… Tarea futura
-                    seconds: 0
+            if (!fileExcel || !fileCsv) { alert("Selecciona Inventario y Salidas."); return; }
+            document.getElementById('btnProcesar').innerText = "Procesando...";
+
+            try {
+                const setGrupos = new Set();
+                const setMaquinas = new Set();
+                const todasLasSalidasGlobales = []; 
+
+                const datosInventario = await leerExcel(fileExcel);
+                let inventarioFiltrado = {};
+
+                datosInventario.forEach(row => {
+                    try {
+                        if (!row || typeof row !== 'object') return; 
+                        let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                        if (!codigo) return; codigo = codigo.trim();
+
+                        let partes = codigo.split('-');
+                        let grupoCodigo = partes[0] + '-' + partes[1];
+                        setGrupos.add(grupoCodigo);
+
+                        let descKey = Object.keys(row).find(k => k.toLowerCase().includes('desc') || k.toLowerCase().includes('nomb') || k.toLowerCase().includes('detalle'));
+                        let desc = descKey ? row[descKey] : "Sin descripción";
+
+                        let noParteKey = Object.keys(row).find(k => k.toLowerCase().includes('parte') || k.toLowerCase() === 'pn' || k.toLowerCase().includes('catalogo'));
+                        let noParte = noParteKey ? row[noParteKey] : "-";
+
+                        let cantKey = Object.keys(row).find(k => k.toLowerCase().includes('cant') || k.toLowerCase().includes('exist') || k.toLowerCase().includes('stock') || k.toLowerCase().includes('disp'));
+                        let cant = parseFloat(String(cantKey ? row[cantKey] : 0).replace(/,/g, '').trim());
+                        if (isNaN(cant)) cant = 0;
+                        
+                        let fechaKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha') || k.toLowerCase().includes('date') || k.toLowerCase().includes('últ'));
+                        let fechaCompra = parseFechaRobusta(fechaKey ? row[fechaKey] : null);
+
+                        if (!inventarioFiltrado[codigo]) {
+                            inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra };
+                        } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
+                            inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
+                            inventarioFiltrado[codigo].cantidad = cant;
+                            inventarioFiltrado[codigo].noParte = String(noParte);
+                        }
+                    } catch (e) {}
                 });
 
-                // Agregar al anÃ¡lisis
-                const displayFreq = avgFrequency === 30 && intervals.length === 0 ? 'Por defecto: 30 dÃ­as' : `Cada ${avgFrequency} dÃ­as`;
-                analysisHTML += `
-                            <div style="background:#222; padding:12px; border-radius:6px; margin-bottom:10px; border-left:4px solid ${stringToColor(record.category)};">
-                                <div style="font-weight:bold; color:${stringToColor(record.category)}; margin-bottom:5px;">${record.category} - ${record.subcategory}</div>
-                                <div style="font-size:0.85em; color:#aaa; margin-bottom:8px;">${record.detail}</div>
-                                <div style="display:grid; grid-template-columns: auto 1fr; gap:8px; font-size:0.85em;">
-                                    <span style="color:#888;">Ãšltima vez:</span>
-                                    <span style="color:#fff;">${lastDate.toLocaleDateString('es')}</span>
-                                    
-                                    <span style="color:#888;">Frecuencia:</span>
-                                    <span style="color:#88d8b0;">${displayFreq}</span>
-                                    
-                                    <span style="color:#888;">ðŸ“… Se PROYECTA para:</span>
-                                    <span style="color:#00bcd4; font-weight:bold;">${taskDate.toLocaleDateString('es')}</span>
-                                </div>
-                            </div>
-                        `;
+                const datosCsv = await leerCSV(fileCsv);
+                const salidasPorCodigo = {};
+                const maquinasPorCodigo = {};
 
-                tasksCreated++;
-            });
+                datosCsv.forEach(row => {
+                    let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                    if (!codigo) return; codigo = codigo.trim();
 
-            analysisHTML += '</div>';
+                    let fechaKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha') || k.toLowerCase().includes('date') || k.toLowerCase().includes('dia'));
+                    let fechaSalida = fechaKey ? parseFechaRobusta(row[fechaKey]) : null;
+                    if (!fechaSalida) return;
 
-            resultsHTML += `<p style="color:#4caf50;">âœ… <b>${tasksCreated}</b> tareas proyectadas creadas desde HOY en adelante.</p>`;
-            resultsHTML += `<p style="font-size:0.85em; color:#aaa;">Basadas en ${data.length} registros histÃ³ricos. El usuario puede ajustar fechas despuÃ©s.</p>`;
-            resultsHTML += analysisHTML;
-        }
-    }
+                    let destinosEnFila = new Set();
+                    Object.keys(row).forEach(k => {
+                        let kl = k.toLowerCase().trim();
+                        if (kl.includes('maquina') || kl.includes('seccion') || kl.includes('departamento') || kl.includes('destino') || kl === 'área' || kl === 'equipo') {
+                            let val = String(row[k]).trim();
+                            if (val && val !== '-' && val !== '0' && val.toLowerCase() !== 'null') destinosEnFila.add(val);
+                        }
+                    });
 
-    document.getElementById('csvResultsContent').innerHTML = resultsHTML;
-    document.getElementById('csvResults').style.display = 'block';
+                    let cantKey = Object.keys(row).find(k => k.toLowerCase().includes('cant') || k.toLowerCase().includes('qty') || k.toLowerCase() === 'salida' || k.toLowerCase() === 'consumo');
+                    let cantidad = cantKey ? parseFloat(String(row[cantKey]).replace(/,/g, '').trim()) : 1;
+                    if (isNaN(cantidad) || cantidad === 0) cantidad = 1;
 
-    saveLocal();
-    renderConfigLists();
-    updateDatalists();
-}
+                    if (!salidasPorCodigo[codigo]) salidasPorCodigo[codigo] = { fechas: [], cantidades: [] };
+                    salidasPorCodigo[codigo].fechas.push(fechaSalida);
+                    salidasPorCodigo[codigo].cantidades.push(cantidad);
+                    todasLasSalidasGlobales.push(fechaSalida); 
+                    
+                    if (!maquinasPorCodigo[codigo]) maquinasPorCodigo[codigo] = new Set();
+                    destinosEnFila.forEach(dest => { setMaquinas.add(dest); maquinasPorCodigo[codigo].add(dest); });
+                });
 
-// --- FUNCIONES DE IMPORTACIÃ“N DE TEXTO ---
-function openTextImporter() {
-    document.getElementById('modalText').style.display = 'flex';
-    document.getElementById('textImportArea').value = '';
-    document.getElementById('textPreview').innerHTML = '';
-}
+                const solicitudesFiltradas = {};
+                if (filesSolicitudes && filesSolicitudes.length > 0) {
+                    for (let fileSol of filesSolicitudes) {
+                        let datosSolicitudes = fileSol.name.toLowerCase().endsWith('.csv') ? await leerCSV(fileSol) : await leerExcel(fileSol);
+                        datosSolicitudes.forEach(row => {
+                            const rowStr = JSON.stringify(row).toLowerCase();
+                            if (!rowStr.includes('orozco') && !rowStr.includes('darvin')) return;
 
-function closeTextModal() {
-    document.getElementById('modalText').style.display = 'none';
-}
+                            let codigo = Object.values(row).find(v => typeof v === 'string' && codeRegex.test(v.trim()));
+                            if (!codigo) return; codigo = codigo.trim();
 
-function previewTextImport() {
-    const text = document.getElementById('textImportArea').value;
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const unique = [...new Set(lines)];
+                            let fechaKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha') && (k.toLowerCase().includes('doc') || k.toLowerCase().includes('solic')));
+                            if (!fechaKey) fechaKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha'));
+                            let fechaSol = parseFechaRobusta(fechaKey ? row[fechaKey] : null);
+                            if (!fechaSol || isNaN(fechaSol)) return;
 
-    const preview = document.getElementById('textPreview');
-    if (lines.length === 0) {
-        preview.innerHTML = '';
-        return;
-    }
+                            let origen = "-";
+                            let tienePanama = Object.keys(row).some(k => (k.toLowerCase().includes('panam') || k.toLowerCase().includes('extranjero')) && String(row[k]).trim() !== "" && String(row[k]).trim() !== "-");
+                            let tieneCotiz = Object.keys(row).some(k => (k.toLowerCase().includes('cotizac') || k.toLowerCase().includes('cot')) && String(row[k]).trim() !== "" && String(row[k]).trim() !== "-");
 
-    preview.innerHTML = `
-                ðŸ“Š <b>${lines.length}</b> lÃ­neas detectadas<br>
-                âœ“ <b>${unique.length}</b> elementos Ãºnicos<br>
-                ${lines.length !== unique.length ? `<span style="color:#ffb74d;">âš ï¸ ${lines.length - unique.length} duplicados eliminados</span>` : ''}
-            `;
-}
+                            if (tienePanama) origen = "Extranjero";
+                            else if (tieneCotiz) origen = "Local";
+                            else origen = "Nacional";
 
-function executeTextImport() {
-    const type = document.getElementById('textImportType').value;
-    const text = document.getElementById('textImportArea').value;
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const unique = [...new Set(lines)];
+                            if (!solicitudesFiltradas[codigo] || fechaSol > solicitudesFiltradas[codigo].fecha) {
+                                solicitudesFiltradas[codigo] = { fecha: fechaSol, origen: origen };
+                            }
+                        });
+                    }
+                }
 
-    if (unique.length === 0) {
-        return alert('No hay datos para importar.');
-    }
+                const qGlobales = obtenerCincoCuartiles(todasLasSalidasGlobales);
+                const limiteInactivo = qGlobales[1]; const limiteActivo = qGlobales[3];   
 
-    let targetArray, added = 0;
-    if (type === 'categories') targetArray = state.defaultCategories;
-    else if (type === 'subcategories') targetArray = state.defaultSubcategories;
-    else if (type === 'processes') targetArray = state.defaultProcesses;
-    else if (type === 'leaders') targetArray = state.defaultLeaders;
+                let resultadosTabla = [];
+                Object.keys(inventarioFiltrado).forEach(codigo => {
+                    const inv = inventarioFiltrado[codigo];
+                    
+                    let historialSalidas = [];
+                    let fCrudas = salidasPorCodigo[codigo]?.fechas || [];
+                    let cCrudas = salidasPorCodigo[codigo]?.cantidades || [];
+                    for(let i=0; i < fCrudas.length; i++) {
+                        if (cCrudas[i] > 0 && !isNaN(cCrudas[i])) historialSalidas.push({ fecha: fCrudas[i], cantidad: cCrudas[i] });
+                    }
+                    historialSalidas.sort((a, b) => a.fecha - b.fecha);
 
-    unique.forEach(item => {
-        if (!targetArray.includes(item)) {
-            targetArray.push(item);
-            added++;
-        }
-    });
+                    const salidas = historialSalidas.map(h => h.fecha);
+                    const cantidadesSalidas = historialSalidas.map(h => h.cantidad);
+                    const qConsumo = obtenerCincoCuartiles(cantidadesSalidas);
+                    const maquinasUnicas = maquinasPorCodigo[codigo] ? Array.from(maquinasPorCodigo[codigo]).join(", ") : "-";
+                    const sol = solicitudesFiltradas[codigo] || { fecha: null, origen: "-" };
 
-    saveLocal();
-    renderConfigLists();
-    updateDatalists();
-    closeTextModal();
+                    let vecesUsado = salidas.length;
+                    let primeraSalida = vecesUsado > 0 ? salidas[0] : null;
+                    let ultimaSalida = vecesUsado > 0 ? salidas[salidas.length - 1] : null;
 
-    alert(`âœ… ImportaciÃ³n exitosa!\n\n${added} elementos nuevos agregados a ${type === 'categories' ? 'CategorÃ­as' : type === 'subcategories' ? 'SubcategorÃ­as' : type === 'processes' ? 'Procesos' : 'LÃ­deres'}.`);
-}
+                    let estado = "Sin movimiento"; let estadoClase = "bg-gray-200 text-gray-700"; 
+                    if (ultimaSalida) {
+                        if (ultimaSalida >= limiteActivo) { estado = "Activo"; estadoClase = "bg-green-100 text-green-800"; } 
+                        else if (ultimaSalida >= limiteInactivo) { estado = "Moderado"; estadoClase = "bg-yellow-100 text-yellow-800"; } 
+                        else { estado = "Inactivo"; estadoClase = "bg-red-100 text-red-800"; }
+                    }
+                    
+                    let diasEntreSalidas = [];
+                    for (let i = 1; i < salidas.length; i++) diasEntreSalidas.push((salidas[i] - salidas[i-1]) / 86400000);
+                    const qDiasSalidas = obtenerCincoCuartiles(diasEntreSalidas);
+                    
+                    let proyeccionMs = ""; let proyeccionTexto = "N/A";
+                    if (inv.cantidad <= 1 && ultimaSalida && qDiasSalidas[2] !== null) { 
+                        proyeccionMs = ultimaSalida + (qDiasSalidas[2] * 86400000);
+                        proyeccionTexto = formatFechaCorto(proyeccionMs);
+                    }
 
-// Actualizar datalist de procesos
-function updateDatalists() {
-    const dynCats = state.tasks.map(t => t.category || t.title.split(' ')[0]);
-    const cats = [...new Set([...dynCats, ...state.defaultCategories])].filter(Boolean);
-    const optsCats = cats.map(c => `<option value="${c}">`).join('');
-    document.getElementById('catList').innerHTML = optsCats;
-    document.getElementById('catListRef').innerHTML = optsCats;
+                    let demandaAnual = null;
+                    if (historialSalidas.length > 0) {
+                        let consumoPorAnio = {};
+                        historialSalidas.forEach(h => {
+                            let localYear = new Date(h.fecha).getFullYear();
+                            if (!consumoPorAnio[localYear]) consumoPorAnio[localYear] = 0;
+                            consumoPorAnio[localYear] += h.cantidad;
+                        });
+                        let valoresAnuales = Object.values(consumoPorAnio);
+                        demandaAnual = `${Math.min(...valoresAnuales)}, ${Math.max(...valoresAnuales)}`;
+                    }
 
-    const dynSubs = state.tasks.map(t => t.subcategory);
-    const subs = [...new Set([...dynSubs, ...state.defaultSubcategories])].filter(Boolean);
-    const optsSubs = subs.map(c => `<option value="${c}">`).join('');
-    if (document.getElementById('subListRef')) document.getElementById('subListRef').innerHTML = optsSubs;
+                    resultadosTabla.push({ inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo, solFecha: sol.fecha, solOrigen: sol.origen, demandaAnual: demandaAnual });
+                });
 
-    const dynProcs = state.tasks.map(t => t.process);
-    const procs = [...new Set([...dynProcs, ...state.defaultProcesses])].filter(Boolean);
-    const optsProcs = procs.map(p => `<option value="${p}">`).join('');
-    if (document.getElementById('processListRef')) document.getElementById('processListRef').innerHTML = optsProcs;
+                const datosParaGuardar = { resultadosTabla, gruposUnicos: Array.from(setGrupos), maquinasUnicas: Array.from(setMaquinas) };
+                await guardarDatos(datosParaGuardar);
+                inicializarInterfaz(datosParaGuardar);
+                document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
 
-    // Extraer lÃ­deres de los arrays assignees
-    const dynLeaders = [];
-    state.tasks.forEach(t => { if (t.assignees) dynLeaders.push(...t.assignees); });
-    const leaders = [...new Set([...dynLeaders, ...state.defaultLeaders])].filter(Boolean);
-    const optsLeaders = leaders.map(l => `<option value="${l}">`).join('');
-    if (document.getElementById('leadersList')) document.getElementById('leadersList').innerHTML = optsLeaders;
-}
+            } catch (error) {
+                console.error(error);
+                alert("Error al procesar: " + error.message);
+                document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
+            }
+        });
 
-function exportCSV() { /* Export logic */ }
-function handleAuth() { alert("Configurar API Google"); }
-function gapiLoaded() { } function gisLoaded() { }
-
+        // --- ARRANQUE ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const datosGuardados = await cargarDatos();
+                if (datosGuardados && datosGuardados.resultadosTabla && datosGuardados.resultadosTabla.length > 0) {
+                    inicializarInterfaz(datosGuardados);
+                } else {
+                    document.getElementById('zonaImportacion').classList.remove('hidden');
+                    document.getElementById('pantallaCarga').classList.add('hidden');
+                }
+            } catch (error) {
+                document.getElementById('zonaImportacion').classList.remove('hidden');
+                document.getElementById('pantallaCarga').classList.add('hidden');
+            }
+        });
+    

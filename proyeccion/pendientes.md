@@ -1,0 +1,1 @@
+trabajemos ahora en el proyecto /proyeccion/index.html quiero agregar una vista sencilla que sea la principal se vea de manera completa la descripcion de caca uno de los siguientes campos: codi
