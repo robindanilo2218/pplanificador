@@ -61,6 +61,8 @@
             <h1 class="text-2xl font-bold text-blue-800">Análisis de Rotación e Inventario</h1>
             
             <div id="controlesSesion" class="hidden flex flex-wrap gap-2 items-center">
+                <button id="btnToggleBodeguero" onclick="toggleBodeguero()" class="bg-gray-200 text-gray-700 hover:bg-gray-300 font-bold py-1 px-4 rounded text-sm transition shadow-sm border border-gray-300 flex items-center gap-1">🔒 Lector</button>
+                <div class="w-px bg-gray-300 mx-1 h-6"></div>
                 <button onclick="abrirCarrito()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm relative flex items-center gap-1">
                     🛒 Carrito
                     <span id="cartBadge" class="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] rounded-full h-5 w-5 flex items-center justify-center font-bold hidden">0</span>
@@ -104,6 +106,77 @@
             </button>
         </div>
 
+        <div id="tabsVistas" class="hidden mb-4 flex gap-2">
+            <button id="btnTabSencilla" class="bg-blue-600 text-white px-4 py-2 rounded font-bold shadow-sm" onclick="setVista('sencilla')">Vista Sencilla (Catálogo)</button>
+            <button id="btnTabDetallada" class="bg-gray-200 text-gray-800 px-4 py-2 rounded font-bold shadow-sm" onclick="setVista('detallada')">Vista Detallada</button>
+        </div>
+
+        <div id="vistaSencilla" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div class="col-span-2 flex flex-col gap-4">
+                <div class="bg-white border rounded p-4 shadow-sm">
+                    <label class="block font-bold text-sm mb-2 text-blue-800">Buscador Rápido</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="busqSencilla" placeholder="Busca por código, descripción, ubicación o nombre útil..." class="w-full border rounded p-2 text-sm outline-none focus:border-blue-500">
+                        <button onclick="buscarSencilla()" class="bg-blue-600 text-white px-6 font-bold rounded">Buscar</button>
+                        <button id="btnVerTodoSencillo" onclick="limpiarBusquedaSencilla()" class="hidden bg-gray-600 text-white px-4 font-bold rounded" title="Volver al catálogo">Volver</button>
+                    </div>
+                </div>
+                <div class="overflow-auto bg-white border rounded shadow-sm flex-grow" style="height: 60vh;">
+                    <table class="min-w-full text-left text-xs bg-white">
+                        <thead class="bg-blue-50 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th class="p-2 border-b">Añadir</th>
+                                <th class="p-2 border-b">Código / Parte</th>
+                                <th class="p-2 border-b">Descripción</th>
+                                <th class="p-2 border-b">Nombre Útil</th>
+                                <th class="p-2 border-b">Ubicación</th>
+                                <th class="p-2 border-b text-center">Inv.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodySencilla"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="col-span-1 flex flex-col gap-4 max-h-[75vh]">
+                <div class="bg-orange-50 border border-orange-200 p-3 rounded shadow-sm flex flex-col flex-1 overflow-hidden" id="cardCarrito">
+                    <h3 class="font-bold text-orange-800 text-sm mb-2 border-b border-orange-200 pb-1 flex justify-between">
+                        <span>🛒 Solicitud Actual (<span id="sencCount">0</span>)</span>
+                        <button onclick="vaciarCarrito()" class="text-xs text-red-600 hover:text-red-800">Vaciar</button>
+                    </h3>
+                    
+                    <div class="mb-2 space-y-1 text-xs">
+                        <input type="text" id="gMaquina" placeholder="Máquina / Destino *" class="w-full border p-1.5 rounded focus:border-orange-400 outline-none">
+                        <input type="text" id="gSeccion" placeholder="Sección *" class="w-full border p-1.5 rounded focus:border-orange-400 outline-none">
+                        <input type="text" id="gTecnico" placeholder="Técnico (Opcional)" class="w-full border p-1.5 rounded focus:border-orange-400 outline-none">
+                    </div>
+
+                    <div id="sencillaCarritoItems" class="flex-grow overflow-y-auto mb-2 bg-white rounded border border-orange-100 p-1 space-y-1 text-xs shadow-inner">
+                        <div class="text-gray-400 text-center mt-4">Carrito vacío</div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="procesarSolicitudEmail()" class="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 rounded text-xs transition">Enviar a Compras</button>
+                        <button onclick="generarPdfCarrito()" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white font-bold py-2 rounded text-xs transition">PDF</button>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="guardarBorrador()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-[10px] font-bold py-1 rounded transition">📥 G. Borrador</button>
+                        <button onclick="verBorradores()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-[10px] font-bold py-1 rounded transition">📂 Cargar</button>
+                    </div>
+                </div>
+
+                <div class="bg-indigo-50 border border-indigo-200 p-3 rounded shadow-sm flex flex-col flex-1 overflow-hidden">
+                    <h3 class="font-bold text-indigo-800 text-sm mb-2 border-b border-indigo-200 pb-1 flex justify-between items-center">
+                        📜 Últimas Solicitudes
+                        <button onclick="renderHistorialSencillo()" title="Actualizar" class="text-indigo-600">🔄</button>
+                    </h3>
+                    <div id="sencillaHistorialItems" class="flex-grow overflow-y-auto bg-white rounded border border-indigo-100 p-1 space-y-1 text-xs shadow-inner">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="vistaDetallada" class="hidden w-full">
         <div class="w-full border p-4 rounded bg-gray-50 hidden mb-6 shadow-sm" id="contenedorFiltros">
             <div class="w-full mb-4">
                 <label for="busquedaTexto" class="font-semibold text-sm mb-1 block text-gray-700">Buscador General (Presiona Enter para buscar):</label>
@@ -166,6 +239,8 @@
                         <th>Código</th>
                         <th>No. Parte</th>
                         <th>Descripción</th>
+                        <th>Nombre Útil</th>
+                        <th>Ubicación</th>
                         <th>Cant.</th>
                         <th class="sol-col" title="Fecha solicitud de compra">Fecha Solicitud</th>
                         <th class="sol-col" title="Local, Nacional o Extranjero">Origen</th>
@@ -394,16 +469,172 @@
             });
         }
 
+        
+        function setVista(v) {
+            const btnS = document.getElementById('btnTabSencilla');
+            const btnD = document.getElementById('btnTabDetallada');
+            const secS = document.getElementById('vistaSencilla');
+            const secD = document.getElementById('vistaDetallada');
+
+            if(v === 'sencilla') {
+                secS.classList.remove('hidden');
+                secD.classList.add('hidden');
+                secD.classList.remove('w-full'); // Remove detailed layout wrapper class? No, it's hidden anyway
+                btnS.classList.replace('bg-gray-200','bg-blue-600'); btnS.classList.replace('text-gray-800','text-white');
+                btnD.classList.replace('bg-blue-600','bg-gray-200'); btnD.classList.replace('text-white','text-gray-800');
+                renderSencilla(TODOS_LOS_DATOS);
+                renderHistorialSencillo();
+                actualizarMiniCarrito();
+            } else {
+                secS.classList.add('hidden');
+                secD.classList.remove('hidden');
+                btnD.classList.replace('bg-gray-200','bg-blue-600'); btnD.classList.replace('text-gray-800','text-white');
+                btnS.classList.replace('bg-blue-600','bg-gray-200'); btnS.classList.replace('text-white','text-gray-800');
+                ejecutarBusqueda();
+            }
+        }
+
+        function buscarSencilla() {
+            const term = document.getElementById('busqSencilla').value.toLowerCase().trim();
+            if(!term) { renderSencilla(TODOS_LOS_DATOS); document.getElementById('btnVerTodoSencillo').classList.add('hidden'); return; }
+            
+            const terms = term.split(/\s+/);
+            const filtrados = TODOS_LOS_DATOS.filter(fila => {
+                const text = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte} ${fila.inv.nombreUtil||''} ${fila.inv.ubicacion||''}`.toLowerCase();
+                return terms.every(t => text.includes(t));
+            });
+            renderSencilla(filtrados);
+            document.getElementById('btnVerTodoSencillo').classList.remove('hidden');
+        }
+
+        function limpiarBusquedaSencilla() {
+            document.getElementById('busqSencilla').value = "";
+            buscarSencilla();
+            document.getElementById('btnVerTodoSencillo').classList.add('hidden');
+        }
+
+        function renderSencilla(datos) {
+            const tbody = document.getElementById('tbodySencilla');
+            if(!datos || datos.length === 0) { tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4'>Sin resultados.</td></tr>"; return; }
+            
+            const htmlArr = datos.slice(0, 150).map(fila => `
+                <tr class="border-b hover:bg-blue-50 transition cursor-pointer" onclick="abrirModalDetalleSencillo('${fila.inv.codigo}')">
+                    <td class="p-1">
+                        <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px]" onclick="event.stopPropagation(); simpleAddToCart('${fila.inv.codigo}', 1)">+1</button>
+                    </td>
+                    <td class="p-2 max-w-[100px] break-words"><b>${fila.inv.codigo}</b><br><span class="text-[10px] text-gray-500">${fila.inv.noParte||'-'}</span></td>
+                    <td class="p-2 max-w-[150px] break-words leading-tight" title="${fila.inv.descripcion}">${fila.inv.descripcion}</td>
+                    <td class="p-2"><input type="text" data-codigo="${fila.inv.codigo}" class="in-util w-24 border rounded p-1 text-[10px] ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${fila.inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    <td class="p-2"><input type="text" data-codigo="${fila.inv.codigo}" class="in-ubic w-24 border rounded p-1 text-[10px] ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${fila.inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    <td class="p-2 text-center font-bold text-blue-800">${fila.inv.cantidad}</td>
+                </tr>
+            `);
+            tbody.innerHTML = htmlArr.join('');
+        }
+
+        function abrirModalDetalleSencillo(codigo) {
+            const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
+            if(fila) abrirModalDetalle(fila);
+        }
+
+        function simpleAddToCart(codigo, cant) {
+            const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
+            if(!fila) return;
+            
+            carrito.push({
+                codigo: fila.inv.codigo,
+                noParte: fila.inv.noParte || "-",
+                descripcion: fila.inv.descripcion,
+                cant: parseFloat(cant)
+            });
+            actualizarMiniCarrito();
+            actualizarBadgeCarrito();
+        }
+
+        function actualizarMiniCarrito() {
+            const contSenc = document.getElementById('sencillaCarritoItems');
+            if(!contSenc) return;
+            document.getElementById('sencCount').innerText = carrito.length;
+
+            if(carrito.length === 0) {
+                contSenc.innerHTML = '<div class="text-gray-400 text-center mt-4">Carrito vacío</div>';
+                return;
+            }
+
+            contSenc.innerHTML = carrito.map((it, idx) => `
+                <div class="flex justify-between items-center border-b pb-1">
+                    <div class="leading-tight flex-1 pr-2">
+                        <span class="font-bold text-[10px] text-blue-800">${it.codigo}</span><br>
+                        <span class="text-[10px] truncate block max-w-[150px]" title="${it.descripcion}">${it.descripcion}</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="font-black text-orange-600 px-1">${it.cant}</span>
+                        <button onclick="eliminarDelCarrito(${idx})" class="text-red-500 hover:text-red-700 bg-red-50 rounded px-1 text-[10px]">❌</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function renderHistorialSencillo() {
+            const cont = document.getElementById('sencillaHistorialItems');
+            if(!cont) return;
+            const data = await obtenerHistorial();
+            if(data.length === 0) {
+                cont.innerHTML = '<div class="text-gray-400 text-center mt-4">Sin historial</div>';
+                return;
+            }
+
+            data.sort((a,b) => b.fecha_log - a.fecha_log);
+            const recientes = data.slice(0, 20);
+
+            cont.innerHTML = recientes.map(h => {
+                const d = new Date(h.fecha_log);
+                const itemsCount = h.items ? h.items.length : 0;
+                return `
+                <div class="border rounded p-2 hover:bg-indigo-50 cursor-pointer transition mb-1 bg-white shadow-sm" onclick="cargarItemsHistorial(this, '${h.id_solicitud}')" data-sol-data='${JSON.stringify(h.items).replace(/'/g, "&#39;")}'>
+                    <div class="flex justify-between items-center border-b border-indigo-100 pb-1 mb-1">
+                        <span class="font-mono font-bold text-indigo-700 text-[10px]">${h.id_solicitud}</span>
+                        <span class="text-[9px] text-gray-500">${d.toLocaleDateString()}</span>
+                    </div>
+                    <div class="text-[10px] flex justify-between items-center">
+                        <span class="font-bold text-gray-700">${h.form?.maquina || '-'}</span>
+                        <span class="bg-indigo-100 text-indigo-800 font-bold px-1 rounded">${itemsCount} ítem(s)</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function cargarItemsHistorial(el, idSol) {
+            // Restore visual active state
+            document.querySelectorAll('#sencillaHistorialItems > div').forEach(d => {
+                d.classList.remove('bg-indigo-100', 'border-indigo-400');
+                d.classList.add('bg-white');
+            });
+            el.classList.add('bg-indigo-100', 'border-indigo-400');
+            el.classList.remove('bg-white');
+
+            const jsondata = el.getAttribute('data-sol-data');
+            const items = JSON.parse(jsondata);
+            
+            // Highlight these items in the left list. We map their codes.
+            const codes = items.map(i => i.codigo);
+            const filtrados = TODOS_LOS_DATOS.filter(fila => codes.includes(fila.inv.codigo));
+
+            document.getElementById('btnVerTodoSencillo').classList.remove('hidden');
+            renderSencilla(filtrados);
+        }
+
+
         // --- SISTEMA DE CARRITO, HISTORIAL Y PDF ---
         let carrito = [];
         let itemActualSeleccionado = null; 
 
-        async function guardarCompraEnHistorial(solicitudId, items) {
+        async function guardarCompraEnHistorial(solicitudId, items, formInfo) {
             try {
                 const db = await initDB();
                 const tx = db.transaction(STORE_HISTORIAL, 'readwrite');
                 const store = tx.objectStore(STORE_HISTORIAL);
-                store.put({ id_solicitud: solicitudId, fecha_log: new Date().getTime(), items: items });
+                store.put({ id_solicitud: solicitudId, fecha_log: new Date().getTime(), items: items, form: formInfo || {} });
             } catch (error) { console.error("Error guardando historial", error); }
         }
 
@@ -479,14 +710,15 @@
                 codigo: itemActualSeleccionado.inv.codigo,
                 noParte: itemActualSeleccionado.inv.noParte || "-",
                 descripcion: itemActualSeleccionado.inv.descripcion,
-                cant: cant,
-                maquina: maq,
-                serie: document.getElementById('inpSerie').value.trim() || "-",
-                modelo: document.getElementById('inpModelo').value.trim() || "-",
-                seccion: sec,
-                tecnico: document.getElementById('inpTecnico').value.trim() || "-",
-                fechaSugerida: document.getElementById('inpFechaSug').value
+                cant: cant
             });
+            // Update global form if explicitly filled here
+            if(maq) document.getElementById('gMaquina').value = maq;
+            if(sec !== "-") document.getElementById('gSeccion').value = sec;
+            const tec = document.getElementById('inpTecnico').value.trim();
+            if(tec) document.getElementById('gTecnico').value = tec;
+
+            actualizarMiniCarrito();
 
             actualizarBadgeCarrito();
             cerrarModalDetalle();
@@ -505,7 +737,6 @@
                                     <th class="px-4 py-2 border-b">Código</th>
                                     <th class="px-4 py-2 border-b">Descripción</th>
                                     <th class="px-4 py-2 border-b text-center">Cant.</th>
-                                    <th class="px-4 py-2 border-b">Destino (Sección)</th>
                                     <th class="px-4 py-2 border-b text-center">Acción</th>
                                 </tr>
                             </thead>
@@ -515,7 +746,6 @@
                                         <td class="px-4 py-2 font-mono text-xs font-bold text-blue-700">${item.codigo}</td>
                                         <td class="px-4 py-2 text-xs font-semibold">${item.descripcion}</td>
                                         <td class="px-4 py-2 text-center font-black text-lg text-orange-600">${item.cant}</td>
-                                        <td class="px-4 py-2 text-xs"><b>${item.maquina}</b><br><span class="text-gray-500">${item.seccion}</span></td>
                                         <td class="px-4 py-2 text-center">
                                             <button onclick="eliminarDelCarrito(${index})" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1 px-2 rounded transition" title="Eliminar">❌</button>
                                         </td>
@@ -530,8 +760,9 @@
         }
 
         function cerrarCarrito() { document.getElementById('modalCarrito').classList.add('hidden'); }
-        function eliminarDelCarrito(index) { carrito.splice(index, 1); actualizarBadgeCarrito(); abrirCarrito(); }
-        function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrito?")) { carrito = []; actualizarBadgeCarrito(); abrirCarrito(); } }
+        function eliminarDelCarrito(index) { carrito.splice(index, 1); actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if(!m.classList.contains('hidden')) abrirCarrito(); }
+function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrito?")) { carrito = []; actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if(!m.classList.contains('hidden')) abrirCarrito(); } }
+        
 
         // --- GENERADOR DE PDF (NUEVA FUNCIÓN) ---
         function generarPdfCarrito() {
@@ -541,6 +772,10 @@
             const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
                           d.getDate().toString().padStart(2, '0') + d.getHours().toString().padStart(2, '0') + 
                           d.getMinutes().toString().padStart(2, '0') + d.getSeconds().toString().padStart(2, '0');
+
+            const gMaq = document.getElementById('gMaquina') ? document.getElementById('gMaquina').value.trim() : 'No esp.';
+            const gSec = document.getElementById('gSeccion') ? document.getElementById('gSeccion').value.trim() : 'No esp.';
+            const gTec = document.getElementById('gTecnico') ? document.getElementById('gTecnico').value.trim() : '';
 
             // Crear el div oculto para el formato del PDF
             let printDiv = document.createElement('div');
@@ -562,21 +797,18 @@
                                 <th style="border: 1px solid #ccc; padding: 8px;">Código / Parte</th>
                                 <th style="border: 1px solid #ccc; padding: 8px;">Descripción</th>
                                 <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">Cant.</th>
-                                <th style="border: 1px solid #ccc; padding: 8px;">Máquina / Sección</th>
-                                <th style="border: 1px solid #ccc; padding: 8px;">Serie / Modelo</th>
                                 <th style="border: 1px solid #ccc; padding: 8px;">Técnico</th>
                             </tr>
                         </thead>
                         <tbody>
+                            <tr><td colspan="5" style="border: 1px solid #ccc; padding: 8px; background-color:#e0f2fe; text-align:center;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}</td></tr>
                             ${carrito.map((it, idx) => `
                                 <tr>
                                     <td style="border: 1px solid #ccc; padding: 8px; text-align:center;">${idx+1}</td>
                                     <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.codigo}</b><br><span style="font-size:10px;">PN: ${it.noParte}</span></td>
                                     <td style="border: 1px solid #ccc; padding: 8px;">${it.descripcion}</td>
                                     <td style="border: 1px solid #ccc; padding: 8px; text-align:center; font-weight:bold;">${it.cant}</td>
-                                    <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.maquina}</b><br>${it.seccion}</td>
-                                    <td style="border: 1px solid #ccc; padding: 8px; font-size:10px;">S: ${it.serie}<br>M: ${it.modelo}</td>
-                                    <td style="border: 1px solid #ccc; padding: 8px;">${it.tecnico}</td>
+                                    <td style="border: 1px solid #ccc; padding: 8px;">${gTec}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -600,6 +832,12 @@
 
         async function procesarSolicitudEmail() {
             if(carrito.length === 0) return alert("No hay items en el carrito.");
+            
+            const gMaq = document.getElementById('gMaquina').value.trim() || '-';
+            const gSec = document.getElementById('gSeccion').value.trim() || '-';
+            const gTec = document.getElementById('gTecnico').value.trim() || '';
+
+            const formData = { maquina: gMaq, seccion: gSec, tecnico: gTec };
 
             const d = new Date();
             const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
@@ -617,20 +855,18 @@
                         <thead style="background-color: #f3f4f6; color: #1f2937;">
                             <tr>
                                 <th>#</th><th>Código / Parte</th><th>Descripción</th><th style="text-align: center;">Cant.</th>
-                                <th>Máquina / Sección</th><th>Serie / Modelo</th><th>F. Sugerida</th><th>Técnico</th>
+                                <th>Técnico</th>
                             </tr>
                         </thead>
                         <tbody>
+                            <tr><td colspan="5" style="background-color:#e0f2fe; text-align:center; padding:5px;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}</td></tr>
                             ${carrito.map((item, idx) => `
                                 <tr>
                                     <td>${idx+1}</td>
                                     <td style="font-family: monospace;"><b>${item.codigo}</b><br><span style="font-size:10px; color:#555;">PN: ${item.noParte}</span></td>
                                     <td>${item.descripcion}</td>
                                     <td style="text-align: center; font-weight: bold; color: #d97706; font-size:15px;">${item.cant}</td>
-                                    <td><b>${item.maquina}</b><br>${item.seccion}</td>
-                                    <td style="font-size:10px;">S: ${item.serie}<br>M: ${item.modelo}</td>
-                                    <td>${item.fechaSugerida}</td>
-                                    <td>${item.tecnico}</td>
+                                    <td>${gTec}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -639,7 +875,7 @@
             `;
 
             try {
-                await guardarCompraEnHistorial(idSol, carrito);
+                await guardarCompraEnHistorial(idSol, carrito, formData);
 
                 const htmlBlob = new Blob([tablaHtml], { type: 'text/html' });
                 const textBlob = new Blob(["Pega aquí con CTRL+V la tabla."], { type: 'text/plain' });
@@ -652,8 +888,148 @@
                 let cuerpoBase = encodeURIComponent(`David,\n\nAdjunto solicitud de compra #${idSol} para mantenimiento:\n\n[PRESIONA CTRL + V AQUÍ PARA PEGAR LA TABLA O ADJUNTA EL PDF]\n\nSaludos.`);
                 window.location.href = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
 
-                carrito = []; actualizarBadgeCarrito(); cerrarCarrito();
+                carrito = []; actualizarBadgeCarrito(); actualizarMiniCarrito(); cerrarCarrito(); renderHistorialSencillo();
             }
+        }
+
+        
+        // --- MODO BODEGUERO ---
+        let isBodeguero = sessionStorage.getItem('isBodeguero') === 'true';
+
+        function toggleBodeguero() {
+            if(isBodeguero) {
+                if(confirm("¿Cerrar sesión de Bodeguero? (Los campos volverán a ser de solo lectura para los técnicos)")) {
+                    isBodeguero = false;
+                    sessionStorage.setItem('isBodeguero', 'false');
+                    aplicarEstadoBodeguero();
+                }
+            } else {
+                const pin = prompt("Ingrese el PIN de Bodega para editar ubicaciones y nombres útiles:");
+                if(pin === "1234" || pin === "bodega") {
+                    isBodeguero = true;
+                    sessionStorage.setItem('isBodeguero', 'true');
+                    aplicarEstadoBodeguero();
+                } else {
+                    if(pin !== null) alert("PIN incorrecto.");
+                }
+            }
+        }
+
+        function aplicarEstadoBodeguero() {
+            const btn = document.getElementById('btnToggleBodeguero');
+            if(btn) {
+                if(isBodeguero) {
+                    btn.innerHTML = '🔓 Bodeguero';
+                    btn.className = 'bg-yellow-200 text-yellow-800 hover:bg-yellow-300 font-bold py-1 px-4 rounded text-sm transition shadow-sm border border-yellow-400 flex items-center gap-1';
+                } else {
+                    btn.innerHTML = '🔒 Lector';
+                    btn.className = 'bg-gray-200 text-gray-700 hover:bg-gray-300 font-bold py-1 px-4 rounded text-sm transition shadow-sm border border-gray-300 flex items-center gap-1';
+                }
+            }
+            
+            document.querySelectorAll('.in-ubic, .in-util').forEach(inp => {
+                inp.readOnly = !isBodeguero;
+                if(!isBodeguero) {
+                    inp.classList.add('bg-gray-50', 'text-gray-500', 'cursor-not-allowed', 'border-transparent');
+                    inp.classList.remove('border-gray-300');
+                } else {
+                    inp.classList.remove('bg-gray-50', 'text-gray-500', 'cursor-not-allowed', 'border-transparent');
+                    inp.classList.add('border-gray-300');
+                }
+            });
+            
+            // Re-render required to ensure DOM states match variable
+            if(typeof PUNTERO_PAGINA !== 'undefined') {
+                if(!document.getElementById('vistaSencilla').classList.contains('hidden')) {
+                    buscarSencilla();
+                } else {
+                    document.getElementById('tableBody').innerHTML = "";
+                    PUNTERO_PAGINA = 0;
+                    renderizarBloqueTabla();
+                }
+            }
+        }
+
+        // --- CARRITOS BORRADORES ---
+        window.addEventListener('load', aplicarEstadoBodeguero);
+
+        function guardarBorrador() {
+            if(carrito.length === 0) return alert("El carrito está vacío");
+            const maqReq = document.getElementById('gMaquina').value || 'Sin_Maquina';
+            const name = prompt("Nombre corto para este borrador:", maqReq);
+            if(!name) return;
+            const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+            borradores.push({
+                id: Date.now(), 
+                nombre: name, 
+                items: carrito, 
+                form: { 
+                    maq: document.getElementById('gMaquina').value, 
+                    sec: document.getElementById('gSeccion').value, 
+                    tec: document.getElementById('gTecnico').value 
+                } 
+            });
+            localStorage.setItem('cartBorradores', JSON.stringify(borradores));
+            carrito = [];
+            actualizarMiniCarrito();
+            actualizarBadgeCarrito();
+        }
+
+        function verBorradores() {
+            const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+            if(borradores.length === 0) return alert("No hay borradores guardados.");
+            
+            const cont = document.getElementById('sencillaHistorialItems');
+            if(!cont) return;
+            
+            cont.innerHTML = `<div class="font-bold text-gray-600 mb-2 border-b pb-1">Borradores Guardados</div>` + 
+            borradores.map((b, idx) => `
+                <div class="border rounded p-2 hover:bg-yellow-50 cursor-pointer transition mb-1 bg-yellow-100 shadow-sm" onclick="cargarBorrador(${idx})">
+                    <div class="flex justify-between items-center border-b border-yellow-200 pb-1 mb-1">
+                        <span class="font-bold text-yellow-800 text-[10px]">${b.nombre}</span>
+                        <button onclick="event.stopPropagation(); borrarBorrador(${idx})" class="text-red-500 hover:text-red-700 text-xs text-[10px] bg-red-50 px-1 rounded">X</button>
+                    </div>
+                    <div class="text-[10px] flex justify-between items-center">
+                        <span class="text-gray-500">${new Date(b.id).toLocaleDateString()}</span>
+                        <span class="bg-yellow-200 text-yellow-800 font-bold px-1 rounded border border-yellow-300 shadow-sm">${b.items.length} ítems</span>
+                    </div>
+                </div>
+            `).join('') + `<button onclick="renderHistorialSencillo()" class="mt-3 w-full text-[10px] bg-indigo-50 border border-indigo-200 p-1 text-indigo-700 font-bold rounded">Volver al Historial</button>`;
+        }
+
+        function cargarBorrador(idx) {
+            const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+            const b = borradores[idx];
+            if(!b) return;
+            if(carrito.length > 0 && !confirm("Tienes items activos en el carrito. Cargarlo lo sobrescribirá. ¿Continuar?")) return;
+            
+            carrito = b.items;
+            document.getElementById('gMaquina').value = b.form.maq || '';
+            document.getElementById('gSeccion').value = b.form.sec || '';
+            document.getElementById('gTecnico').value = b.form.tec || '';
+            
+            borradores.splice(idx, 1);
+            localStorage.setItem('cartBorradores', JSON.stringify(borradores));
+            
+            actualizarMiniCarrito();
+            actualizarBadgeCarrito();
+            renderHistorialSencillo();
+        }
+
+        function borrarBorrador(idx) {
+            const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+            borradores.splice(idx, 1);
+            localStorage.setItem('cartBorradores', JSON.stringify(borradores));
+            verBorradores();
+        }
+
+        // --- FILTRO DE LIMPIEZA DE NOMBRES ---
+        function generarNombreUtil(desc) {
+            if(!desc) return "";
+            let n = desc.toUpperCase();
+            const ruido = [/DE BOLAS /g, /NSK/g, /SKF/g, /MARCA /g, /TIPO /g, /RODILLOS /g, /DE AGUJAS /g, /NTN/g, /FAG/g, /TIMKEN/g, /DE CONTACTO ANGULAR/g];
+            ruido.forEach(r => n = n.replace(r, ""));
+            return n.replace(/\s+/g, ' ').trim();
         }
 
         // --- RENDERIZADO DEL HISTORIAL ---
@@ -733,6 +1109,45 @@
             `;
         }
 
+        
+        document.getElementById('tableBody').addEventListener('change', (e) => {
+            if(e.target.classList.contains('in-util') || e.target.classList.contains('in-ubic')) {
+                const cod = e.target.getAttribute('data-codigo');
+                const val = e.target.value.trim();
+                const obj = TODOS_LOS_DATOS.find(x => x.inv.codigo === cod);
+                if(obj) {
+                    if(e.target.classList.contains('in-util')) obj.inv.nombreUtil = val;
+                    if(e.target.classList.contains('in-ubic')) obj.inv.ubicacion = val;
+                    guardarDatosEnFondo();
+                }
+            }
+        });
+
+        document.getElementById('tbodySencilla').addEventListener('change', (e) => {
+            if(e.target.classList.contains('in-util') || e.target.classList.contains('in-ubic')) {
+                const cod = e.target.getAttribute('data-codigo');
+                const val = e.target.value.trim();
+                const obj = TODOS_LOS_DATOS.find(x => x.inv.codigo === cod);
+                if(obj) {
+                    if(e.target.classList.contains('in-util')) obj.inv.nombreUtil = val;
+                    if(e.target.classList.contains('in-ubic')) obj.inv.ubicacion = val;
+                    guardarDatosEnFondo();
+                    // Sync detailed table inputs if they exist in DOM
+                    const dupInput = document.querySelector(`#tableBody input[data-codigo="${cod}"].${e.target.classList[0]}`);
+                    if(dupInput) dupInput.value = val;
+                }
+            }
+        });
+
+        async function guardarDatosEnFondo() {
+            try {
+                const setGrupos = new Set(TODOS_LOS_DATOS.map(d=>d.inv.grupo));
+                const setMaquinas = new Set(); TODOS_LOS_DATOS.forEach(d => { if(d.maquinasUnicas) d.maquinasUnicas.split(',').forEach(m=>setMaquinas.add(m.trim()))});
+                await guardarDatos({ resultadosTabla: TODOS_LOS_DATOS, gruposUnicos: Array.from(setGrupos), maquinasUnicas: Array.from(setMaquinas) });
+            } catch(e) { console.error("Error guardando fondo", e); }
+        }
+        
+
         // --- SISTEMA ORIGINAL INTACTO DE LECTURA Y RENDERIZADO ---
         let TODOS_LOS_DATOS = []; 
         let DATOS_FILTRADOS = [];
@@ -755,6 +1170,8 @@
                     <td><div class="cell-scroll mw-120 font-bold text-xs" title="${inv.codigo}">${inv.codigo}</div></td>
                     <td><div class="cell-scroll mw-120 text-xs text-gray-600" title="${inv.noParte || '-'}">${inv.noParte || "-"}</div></td>
                     <td><div class="cell-scroll mw-200 text-xs" title="${inv.descripcion}">${inv.descripcion}</div></td>
+                    <td><input type="text" data-codigo="${inv.codigo}" class="in-util w-24 border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    <td><input type="text" data-codigo="${inv.codigo}" class="in-ubic w-24 border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
                     <td class="text-center font-bold text-blue-900 bg-blue-50">${inv.cantidad}</td>
                     
                     <td class="sol-col text-xs text-center">${formatFechaCorto(solFecha)}</td>
@@ -961,7 +1378,7 @@
             datos.maquinasUnicas.sort().forEach(m => selMaquina.innerHTML += `<option value="${m}">${m}</option>`);
 
             document.getElementById('resultTable').classList.remove('hidden');
-            document.getElementById('contenedorFiltros').classList.remove('hidden');
+            document.getElementById('tabsVistas').classList.remove('hidden'); setVista('sencilla');
             document.getElementById('zonaImportacion').classList.add('hidden');
             document.getElementById('controlesSesion').classList.remove('hidden');
             document.getElementById('pantallaCarga').classList.add('hidden');
@@ -1065,6 +1482,14 @@
                 const datosInventario = await leerExcel(fileExcel);
                 let inventarioFiltrado = {};
 
+                const oldData = await cargarDatos();
+                const metaDatos = {};
+                if(oldData && oldData.resultadosTabla) {
+                    oldData.resultadosTabla.forEach(f => {
+                        metaDatos[f.inv.codigo] = { ubicacion: f.inv.ubicacion || '', nombreUtil: f.inv.nombreUtil || '' };
+                    });
+                }
+
                 datosInventario.forEach(row => {
                     try {
                         if (!row || typeof row !== 'object') return; 
@@ -1089,7 +1514,7 @@
                         let fechaCompra = parseFechaRobusta(fechaKey ? row[fechaKey] : null);
 
                         if (!inventarioFiltrado[codigo]) {
-                            inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra };
+                            inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra, ubicacion: metaDatos[codigo] ? metaDatos[codigo].ubicacion : '', nombreUtil: metaDatos[codigo] && metaDatos[codigo].nombreUtil ? metaDatos[codigo].nombreUtil : generarNombreUtil(desc) };
                         } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
                             inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
                             inventarioFiltrado[codigo].cantidad = cant;
