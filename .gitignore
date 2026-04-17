@@ -1,0 +1,19 @@
+# Archivos temporales y basura
+*.backup
+*.txt
+hosts
+proyeccion/all.txt
+proyeccion/hosts
+proyeccion/hosts.txt
+proyeccion/log_chat_*.md
+proyeccion/scratch/
+old_version.md
+nueva_version.md
+test.js
+
+# Estándares
+node_modules/
+.DS_Store
+.env
+dist/
+build/

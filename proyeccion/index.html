@@ -1875,7 +1875,7 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                         <span class="font-bold text-blue-700 bg-blue-50 px-1 rounded inline-block my-0.5">${formatQ(qConsumo[2])}</span><br>
                         ${formatQ(qConsumo[3])}<span class="text-gray-300 mx-0.5">|</span>${formatQ(qConsumo[4])}
                     </td>
-                    <td class="p-2 max-w-[150px] whitespace-normal"><div class="line-clamp-2 leading-tight text-[10px]" title="${maquinasUnicas}">${maquinasUnicas}</div></td>
+                    <td class="p-2 whitespace-normal"><div class="line-clamp-4 leading-tight text-[10px]" title="${maquinasUnicas}">${maquinasUnicas}</div></td>
                     <td class="text-center p-1 text-xs"><span class="font-bold text-gray-800">${vecesUsado}</span><br><span class="text-[10px] font-bold text-purple-700 bg-purple-50 px-1 rounded">${fila.demandaAnual !== null ? fila.demandaAnual : '-'}</span></td>
                     <td class="text-center p-1 text-xs"><span class="text-gray-500 text-[10px]">P: ${formatFechaCorto(primeraSalida)}</span><br><span class="font-bold border-t mt-1 pt-1 block">U: ${formatFechaCorto(ultimaSalida)}</span></td>
                     <td class="q-col text-center text-[10px] whitespace-normal max-w-[60px] leading-tight text-gray-600 font-mono tracking-tighter">
@@ -2708,9 +2708,48 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
     </script>
 
     <footer class="text-center text-gray-400 text-xs py-6 mt-8 border-t border-gray-200 no-print w-full bg-gray-50 absolute bottom-0 left-0 right-0">
-        <p class="mb-1">Este software se distribuye bajo la <b>Licencia MIT</b>.</p>
+        <p class="mb-1">Este software se distribuye bajo la <button onclick="document.getElementById('modalLicencia').classList.remove('hidden')" class="font-bold text-blue-500 hover:text-blue-700 hover:underline transition cursor-pointer">Licencia MIT</button>.</p>
         <p>Desarrollado y mantenido por <a href="https://crgm.app" target="_blank" rel="noopener noreferrer" class="text-blue-500 font-bold hover:text-blue-700 hover:underline transition">crgm.app</a></p>
     </footer>
+
+    <!-- MODAL LICENCIA MIT -->
+    <div id="modalLicencia" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm no-print">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+            <div class="bg-gray-900 text-white p-4 flex justify-between items-center rounded-t-xl">
+                <h2 class="font-bold text-sm flex items-center gap-2">⚖️ Licencia MIT &mdash; pplanificador</h2>
+                <button onclick="document.getElementById('modalLicencia').classList.add('hidden')" class="text-white hover:text-gray-300 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 font-mono text-xs text-gray-700 leading-relaxed bg-gray-50 whitespace-pre-wrap">MIT License
+
+Copyright (c) 2024&ndash;2026 crgm.app
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the &ldquo;Software&rdquo;), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &ldquo;AS IS&rdquo;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</div>
+            <div class="bg-gray-100 border-t p-4 flex justify-between items-center gap-3 rounded-b-xl">
+                <a href="https://github.com/robindanilo2218/pplanificador" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 bg-gray-900 hover:bg-gray-700 text-white font-bold px-4 py-2 rounded text-xs transition">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                    Ver Repositorio en GitHub
+                </a>
+                <a href="https://crgm.app" target="_blank" rel="noopener noreferrer" class="text-blue-600 font-bold text-xs hover:underline">crgm.app</a>
+                <button onclick="document.getElementById('modalLicencia').classList.add('hidden')" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-4 py-2 rounded text-xs transition">Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Pad content to not be hidden behind absolute footer -->
     <div class="h-16 no-print"></div>
