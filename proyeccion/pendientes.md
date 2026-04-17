@@ -1,13 +1,17 @@
 # Tareas del Proyecto Proyección
 
 ## Completadas
-- [x] Vista sencilla principal (código, cantidad, parte, descripción, ubicación, nombre útil).
-- [x] Vista detallada (mantener actual).
-- [x] Layout Vista Sencilla (lista a izquierda, carrito dinámico arriba derecha, historial abajo derecha con sincronización al seleccionar).
-- [x] Carretilla por solicitud global (máquina y sección globales en panel derecho).
-- [x] Campo Ubicación y Nombre Útil persistentes localmente en ambas vistas.
+- [x] Vista sencilla y detallada operativas con layout dividido.
+- [x] Carretilla por solicitud global (máquina, modelo, serie y sección unificadas).
+- [x] Campo Ubicación y Nombre Útil persistentes localmente, expandidos a todo el ancho y listos para dos líneas.
+- [x] Botones explícitos de `+1` y `➕` agregados en ambas vistas, desactivando el click intrusivo de toda la fila.
+- [x] Compactadas al máximo las columnas de la Vista Detallada:
+  - Código/No.Parte | Solicitud/Origen | Hz/Demanda | Fechas de Salidas
+  - Extrema compactación de las 10 columnas Q (Cuartiles de Stock y Días de Salidas) en solo 2 paneles en línea.
+  - Estado agrupado con Última Compra.
 
-## Propuestas Aprobadas (Activas)
-1. [ ] **Filtro / Estandarización de Nombres:** Limpieza automática o pre-llenado de nombres útiles basándose en la descripción para simplificar ítems (Ej: "RODAMIENTO DE BOLAS NSK 6205" -> "RODAMIENTO 6205").
-2. [ ] **Carritos Temporales (Borradores):** Botón para guardar carrito como borrador y empezar otra solicitud sin perder la anterior.
-3. [ ] **Modo Bodeguero (Protección):** Sistema de bloqueo por pin o contraseña simple para evitar que técnicos de turno sobrescriban las Ubicaciones y Nombres Útiles ingresados por los bodegueros.
+## Pendientes del Usuario (Vacío)
+- (Todo al día por el momento - Listo para confirmación final)
+
+## Propuestas para iterar
+- (Por el momento no hay más propuestas pendientes. Se recomienda cerrar el ciclo de guardado/commit en git.)

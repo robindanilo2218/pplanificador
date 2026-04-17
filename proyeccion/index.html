@@ -147,8 +147,15 @@
                     
                     <div class="mb-2 space-y-1 text-xs">
                         <input type="text" id="gMaquina" placeholder="Máquina / Destino *" class="w-full border p-1.5 rounded focus:border-orange-400 outline-none">
+                        <div class="flex gap-1">
+                            <input type="text" id="gSerie" placeholder="Serie (Opc.)" class="w-1/2 border p-1.5 rounded focus:border-orange-400 outline-none">
+                            <input type="text" id="gModelo" placeholder="Modelo (Opc.)" class="w-1/2 border p-1.5 rounded focus:border-orange-400 outline-none">
+                        </div>
                         <input type="text" id="gSeccion" placeholder="Sección *" class="w-full border p-1.5 rounded focus:border-orange-400 outline-none">
-                        <input type="text" id="gTecnico" placeholder="Técnico (Opcional)" class="w-full border p-1.5 rounded focus:border-orange-400 outline-none">
+                        <div class="flex gap-1">
+                            <input type="text" id="gTecnico" placeholder="Técnico (Opc.)" class="w-1/2 border p-1.5 rounded focus:border-orange-400 outline-none">
+                            <input type="date" id="gFechaSug" title="Fecha Sugerida" class="w-1/2 border p-1.5 rounded focus:border-orange-400 outline-none text-gray-500">
+                        </div>
                     </div>
 
                     <div id="sencillaCarritoItems" class="flex-grow min-h-[120px] overflow-y-auto mb-2 bg-white rounded border border-orange-100 p-1 space-y-1 text-xs shadow-inner">
@@ -236,31 +243,19 @@
             <table id="resultTable" class="min-w-full hidden bg-white">
                 <thead>
                     <tr>
-                        <th>Código</th>
-                        <th>No. Parte</th>
-                        <th>Descripción</th>
+                        <th class="text-center p-2">Añadir</th>
+                        <th>Código<br><span class="text-[10px] text-gray-500 font-normal">No. Parte</span></th>
+                        <th class="w-[200px]">Descripción</th>
                         <th>Nombre Útil</th>
                         <th>Ubicación</th>
                         <th>Cant.</th>
-                        <th class="sol-col" title="Fecha solicitud de compra">Fecha Solicitud</th>
-                        <th class="sol-col" title="Local, Nacional o Extranjero">Origen</th>
-                        <th class="q-col" title="Stock Mínimo (Q0)">Q0</th>
-                        <th class="q-col" title="Stock Límite Inferior (Q1)">Q1</th>
-                        <th class="q-col" title="Stock Mediano (Q2)">Q2</th>
-                        <th class="q-col" title="Stock Límite Superior (Q3)">Q3</th>
-                        <th class="q-col" title="Stock Máximo (Q4)">Q4</th>
+                        <th class="sol-col" title="Fecha solicitud - Origen">Solicitud<br><span class="text-[10px] text-gray-500 font-normal">Origen</span></th>
+                        <th class="q-col text-center" title="Cuartiles de Consumo [Q0 - Q1 - Q2 - Q3 - Q4]">Curva de Consumo<br><span class="text-[10px] text-gray-500 font-normal">Mín - P25 - Med - P75 - Máx</span></th>
                         <th>Destinos / Máquinas</th>
-                        <th>Última Compra</th>
-                        <th class="text-center">Estado (Rotación)</th>
-                        <th>Hz</th>
-                        <th title="Demanda anual histórica (Mínimo, Máximo en un año)">Demanda Anual (Mín, Máx)</th>
-                        <th>Primera Salida</th>
-                        <th>Última Salida</th>
-                        <th class="q-col" title="Cuartiles días (Mínimo)">Q0</th>
-                        <th class="q-col" title="Cuartiles días (Q1)">Q1</th>
-                        <th class="q-col" title="Cuartiles días (Mediana)">Q2</th>
-                        <th class="q-col" title="Cuartiles días (Q3)">Q3</th>
-                        <th class="q-col" title="Cuartiles días (Máximo)">Q4</th>
+                        <th class="text-center w-24">Estado<br><span class="text-[10px] text-gray-500 font-normal">Última Compra</span></th>
+                        <th title="Hz / Demanda anual histórica">Hz<br><span class="text-[10px] text-gray-500 font-normal">Demanda (Mín,Máx)</span></th>
+                        <th>Salidas<br><span class="text-[10px] text-gray-500 font-normal">Primera / Última</span></th>
+                        <th class="q-col text-center" title="Cuartiles de Días entre salidas [Q0 - Q1 - Q2 - Q3 - Q4]">Días entre Salidas<br><span class="text-[10px] text-gray-500 font-normal">Mín - P25 - Med - P75 - Máx</span></th>
                         <th class="proj-col sortable-header no-print" id="thSortProyeccion">Proyección Sig. Compra <span id="sortIcon">↕️</span></th>
                         <th class="proj-col hidden print:table-cell">Proyección Sig. Compra</th>
                     </tr>
@@ -518,9 +513,12 @@
             if(!datos || datos.length === 0) { tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4'>Sin resultados.</td></tr>"; return; }
             
             const htmlArr = datos.slice(0, 150).map(fila => `
-                <tr class="border-b hover:bg-blue-50 transition cursor-pointer" onclick="abrirModalDetalleSencillo('${fila.inv.codigo}')">
+                <tr class="border-b hover:bg-blue-50 transition">
                     <td class="p-1">
-                        <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px]" onclick="event.stopPropagation(); simpleAddToCart('${fila.inv.codigo}', 1)">+1</button>
+                        <div class="flex gap-1 justify-center items-center">
+                            <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Añadir 1 rápido" onclick="simpleAddToCart('${fila.inv.codigo}', 1)">+1</button>
+                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Personalizar (Máquina, etc)" onclick="abrirModalDetalleSencillo('${fila.inv.codigo}')">➕</button>
+                        </div>
                     </td>
                     <td class="p-2 max-w-[100px] break-words"><b>${fila.inv.codigo}</b><br><span class="text-[10px] text-gray-500">${fila.inv.noParte||'-'}</span></td>
                     <td class="p-2 max-w-[200px] whitespace-normal" title="${fila.inv.descripcion}"><div class="line-clamp-2 leading-tight">${fila.inv.descripcion}</div></td>
@@ -715,8 +713,14 @@
             // Update global form if explicitly filled here
             if(maq) document.getElementById('gMaquina').value = maq;
             if(sec !== "-") document.getElementById('gSeccion').value = sec;
+            const ser = document.getElementById('inpSerie').value.trim();
+            if(ser) document.getElementById('gSerie').value = ser;
+            const mod = document.getElementById('inpModelo').value.trim();
+            if(mod) document.getElementById('gModelo').value = mod;
             const tec = document.getElementById('inpTecnico').value.trim();
             if(tec) document.getElementById('gTecnico').value = tec;
+            const fec = document.getElementById('inpFechaSug').value;
+            if(fec) document.getElementById('gFechaSug').value = fec;
 
             actualizarMiniCarrito();
 
@@ -801,7 +805,7 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                             </tr>
                         </thead>
                         <tbody>
-                            <tr><td colspan="5" style="border: 1px solid #ccc; padding: 8px; background-color:#e0f2fe; text-align:center;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}</td></tr>
+                            <tr><td colspan="5" style="border: 1px solid #ccc; padding: 8px; background-color:#e0f2fe; text-align:center;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}${extInfo}</td></tr>
                             ${carrito.map((it, idx) => `
                                 <tr>
                                     <td style="border: 1px solid #ccc; padding: 8px; text-align:center;">${idx+1}</td>
@@ -836,6 +840,9 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
             const gMaq = document.getElementById('gMaquina').value.trim() || '-';
             const gSec = document.getElementById('gSeccion').value.trim() || '-';
             const gTec = document.getElementById('gTecnico').value.trim() || '';
+            const gSer = document.getElementById('gSerie') ? document.getElementById('gSerie').value.trim() : '';
+            const gMod = document.getElementById('gModelo') ? document.getElementById('gModelo').value.trim() : '';
+            const extInfo = (gSer ? ` | Serie: ${gSer}` : '') + (gMod ? ` | Mod: ${gMod}` : '');
 
             const formData = { maquina: gMaq, seccion: gSec, tecnico: gTec };
 
@@ -859,7 +866,7 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                             </tr>
                         </thead>
                         <tbody>
-                            <tr><td colspan="5" style="background-color:#e0f2fe; text-align:center; padding:5px;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}</td></tr>
+                            <tr><td colspan="5" style="background-color:#e0f2fe; text-align:center; padding:5px;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}${extInfo}</td></tr>
                             ${carrito.map((item, idx) => `
                                 <tr>
                                     <td>${idx+1}</td>
@@ -966,7 +973,7 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                 form: { 
                     maq: document.getElementById('gMaquina').value, 
                     sec: document.getElementById('gSeccion').value, 
-                    tec: document.getElementById('gTecnico').value 
+                    tec: document.getElementById('gTecnico').value, ser: document.getElementById('gSerie').value, mod: document.getElementById('gModelo').value, fec: document.getElementById('gFechaSug') ? document.getElementById('gFechaSug').value : '' 
                 } 
             });
             localStorage.setItem('cartBorradores', JSON.stringify(borradores));
@@ -1007,6 +1014,9 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
             document.getElementById('gMaquina').value = b.form.maq || '';
             document.getElementById('gSeccion').value = b.form.sec || '';
             document.getElementById('gTecnico').value = b.form.tec || '';
+            document.getElementById('gSerie').value = b.form.ser || '';
+            document.getElementById('gModelo').value = b.form.mod || '';
+            if(document.getElementById('gFechaSug')) document.getElementById('gFechaSug').value = b.form.fec || '';
             
             borradores.splice(idx, 1);
             localStorage.setItem('cartBorradores', JSON.stringify(borradores));
@@ -1162,40 +1172,36 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                 const { inv, maquinasUnicas, estado, estadoClase, vecesUsado, primeraSalida, ultimaSalida, qDiasSalidas, proyeccionTexto, proyeccionMs, qConsumo, solFecha, solOrigen } = fila;
                 const tr = document.createElement('tr');
                 
-                // ASIGNAR EVENTO CLICK A LA FILA
-                tr.className = "hover:bg-blue-50 transition duration-150 cursor-pointer";
-                tr.onclick = () => abrirModalDetalle(fila);
+                // QUITAR EVENTO CLICK A LA FILA ENTERA
+                tr.className = "hover:bg-blue-50 transition duration-150";
                 
                 tr.innerHTML = `
-                    <td><div class="cell-scroll mw-120 font-bold text-xs" title="${inv.codigo}">${inv.codigo}</div></td>
-                    <td><div class="cell-scroll mw-120 text-xs text-gray-600" title="${inv.noParte || '-'}">${inv.noParte || "-"}</div></td>
-                    <td><div class="cell-scroll mw-200 text-xs" title="${inv.descripcion}">${inv.descripcion}</div></td>
-                    <td><input type="text" data-codigo="${inv.codigo}" class="in-util w-24 border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
-                    <td><input type="text" data-codigo="${inv.codigo}" class="in-ubic w-24 border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    <td class="p-1">
+                        <div class="flex gap-1 justify-center items-center">
+                            <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Añadir 1 rápido" onclick="simpleAddToCart('${inv.codigo}', 1)">+1</button>
+                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Personalizar (Máquina, etc)" onclick='abrirModalDetalle(TODOS_LOS_DATOS.find(x => x.inv.codigo === "${inv.codigo}"))'>➕</button>
+                        </div>
+                    </td>
+                    <td class="p-2 max-w-[120px] break-words"><b>${inv.codigo}</b><br><span class="text-[10px] text-gray-500">${inv.noParte||'-'}</span></td>
+                    <td class="p-2 max-w-[200px] whitespace-normal"><div class="line-clamp-2 leading-tight text-[11px]" title="${inv.descripcion}">${inv.descripcion}</div></td>
+                    <td><input type="text" data-codigo="${inv.codigo}" class="in-util w-full min-w-[100px] border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    <td><input type="text" data-codigo="${inv.codigo}" class="in-ubic w-full min-w-[100px] border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
                     <td class="text-center font-bold text-blue-900 bg-blue-50">${inv.cantidad}</td>
                     
-                    <td class="sol-col text-xs text-center">${formatFechaCorto(solFecha)}</td>
-                    <td class="sol-col text-xs text-center font-semibold text-gray-700">${solOrigen}</td>
+                    <td class="sol-col p-2 text-center text-xs"><b>${formatFechaCorto(solFecha)}</b><br><span class="text-[10px] text-gray-500 font-semibold">${solOrigen}</span></td>
                     
-                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[0])}</td>
-                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[1])}</td>
-                    <td class="q-col text-right font-bold text-blue-700">${formatQ(qConsumo[2])}</td>
-                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[3])}</td>
-                    <td class="q-col text-right text-gray-600">${formatQ(qConsumo[4])}</td>
-                    <td><div class="cell-scroll mw-150 text-xs" title="${maquinasUnicas}">${maquinasUnicas}</div></td>
-                    <td class="text-xs font-semibold text-gray-700">${formatFechaCorto(inv.ultimaCompra)}</td>
-                    <td class="text-center"><span class="badge ${estadoClase}">${estado}</span></td>
-                    <td class="text-center font-bold">${vecesUsado}</td>
-                    <td class="text-center font-bold text-purple-700 bg-purple-50">${fila.demandaAnual !== null ? fila.demandaAnual : '-'}</td>
-                    <td class="text-xs">${formatFechaCorto(primeraSalida)}</td>
-                    <td class="text-xs">${formatFechaCorto(ultimaSalida)}</td>
-                    <td class="q-col text-right">${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}</td>
-                    <td class="q-col text-right">${qDiasSalidas[1] !== null ? Math.round(qDiasSalidas[1]) : '-'}</td>
-                    <td class="q-col text-right font-bold text-red-600">${qDiasSalidas[2] !== null ? Math.round(qDiasSalidas[2]) : '-'}</td>
-                    <td class="q-col text-right">${qDiasSalidas[3] !== null ? Math.round(qDiasSalidas[3]) : '-'}</td>
-                    <td class="q-col text-right">${qDiasSalidas[4] !== null ? Math.round(qDiasSalidas[4]) : '-'}</td>
-                    <td class="proj-col text-sm no-print" data-val="${proyeccionMs||0}">${proyeccionTexto}</td>
-                    <td class="proj-col text-sm hidden print:table-cell">${proyeccionTexto}</td>
+                    <td class="q-col text-center text-[10px] whitespace-normal max-w-[80px] leading-tight text-gray-600 font-mono tracking-tighter">
+                        ${formatQ(qConsumo[0])}<span class="text-gray-300 mx-1">|</span>${formatQ(qConsumo[1])}<span class="text-gray-300 mx-1">|</span><span class="font-bold text-blue-700">${formatQ(qConsumo[2])}</span><span class="text-gray-300 mx-1">|</span>${formatQ(qConsumo[3])}<span class="text-gray-300 mx-1">|</span>${formatQ(qConsumo[4])}
+                    </td>
+                    <td class="p-2 max-w-[150px] whitespace-normal"><div class="line-clamp-2 leading-tight text-[10px]" title="${maquinasUnicas}">${maquinasUnicas}</div></td>
+                    <td class="text-center p-1 w-24"><span class="badge ${estadoClase} w-full block">${estado}</span><br><span class="text-[10px] text-gray-500 font-semibold mt-1 block">${formatFechaCorto(inv.ultimaCompra)}</span></td>
+                    <td class="text-center p-1 text-xs"><span class="font-bold text-gray-800">${vecesUsado}</span><br><span class="text-[10px] font-bold text-purple-700 bg-purple-50 px-1 rounded">${fila.demandaAnual !== null ? fila.demandaAnual : '-'}</span></td>
+                    <td class="text-center p-1 text-xs"><span class="text-gray-500 text-[10px]">P: ${formatFechaCorto(primeraSalida)}</span><br><span class="font-bold border-t mt-1 pt-1 block">U: ${formatFechaCorto(ultimaSalida)}</span></td>
+                    <td class="q-col text-center text-[10px] whitespace-normal max-w-[80px] leading-tight text-gray-600 font-mono tracking-tighter">
+                        ${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}<span class="text-gray-300 mx-1">|</span>${qDiasSalidas[1] !== null ? Math.round(qDiasSalidas[1]) : '-'}<span class="text-gray-300 mx-1">|</span><span class="font-bold text-red-600">${qDiasSalidas[2] !== null ? Math.round(qDiasSalidas[2]) : '-'}</span><span class="text-gray-300 mx-1">|</span>${qDiasSalidas[3] !== null ? Math.round(qDiasSalidas[3]) : '-'}<span class="text-gray-300 mx-1">|</span>${qDiasSalidas[4] !== null ? Math.round(qDiasSalidas[4]) : '-'}
+                    </td>
+                    <td class="proj-col text-[10px] whitespace-normal max-w-[100px] leading-tight no-print" data-val="${proyeccionMs||0}">${proyeccionTexto}</td>
+                    <td class="proj-col text-[10px] whitespace-normal max-w-[100px] leading-tight hidden print:table-cell">${proyeccionTexto}</td>
                 `;
                 tbody.appendChild(tr);
             });
