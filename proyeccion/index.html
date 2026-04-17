@@ -61,14 +61,17 @@
             <h1 class="text-2xl font-bold text-blue-800">Análisis de Rotación e Inventario</h1>
             
             <div id="controlesSesion" class="hidden flex flex-wrap gap-2 items-center">
-                <button id="btnToggleBodeguero" onclick="toggleBodeguero()" class="bg-gray-200 text-gray-700 hover:bg-gray-300 font-bold py-1 px-4 rounded text-sm transition shadow-sm border border-gray-300 flex items-center gap-1">🔒 Lector</button>
+                <button id="btnToggleBodeguero" onclick="toggleBodeguero()" class="bg-gray-200 text-gray-700 hover:bg-gray-300 font-bold py-1 px-4 rounded text-sm transition shadow-sm border border-gray-300 flex items-center gap-1" title="Requiere PIN de seguridad (1234) para evitar borrados y editar">🔒 Lector</button>
                 <div class="w-px bg-gray-300 mx-1 h-6"></div>
                 <button onclick="abrirCarrito()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm relative flex items-center gap-1">
                     🛒 Carrito
                     <span id="cartBadge" class="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] rounded-full h-5 w-5 flex items-center justify-center font-bold hidden">0</span>
                 </button>
                 <button onclick="abrirHistorial()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm">
-                    📜 Historial
+                    📜 Hist. Pedidos
+                </button>
+                <button onclick="abrirHistorialBypassGlobal()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm">
+                    📤 S. Rápidas (Bypass)
                 </button>
                 <div class="w-px bg-gray-300 mx-1 h-6"></div>
 
@@ -76,6 +79,12 @@
                 <button id="btnExportarExcel" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded text-sm transition shadow-sm">📊 Exportar</button>
                 <div class="w-px bg-gray-300 mx-1 h-6"></div>
                 <button id="btnMostrarImportar" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-4 rounded text-sm transition">🔄 Actualizar Datos</button>
+                <div class="w-px bg-gray-300 mx-1 h-6"></div>
+                <button onclick="exportarBackup()" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-1 px-3 rounded text-sm transition shadow-sm" title="Descargar backup completo (inventario + historial)">💾 Backup</button>
+                <label class="bg-teal-100 hover:bg-teal-200 text-teal-800 font-semibold py-1 px-3 rounded text-sm transition shadow-sm cursor-pointer border border-teal-300" title="Restaurar desde un archivo backup .json">
+                    📂 Restaurar
+                    <input type="file" id="fileRestaurar" accept=".json" class="hidden" onchange="restaurarBackup(this)">
+                </label>
                 <button id="btnBorrarDatos" class="bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-4 rounded text-sm transition border border-red-300">🗑️ Borrar Todo</button>
             </div>
         </div>
@@ -134,15 +143,19 @@
                             </tr>
                         </thead>
                         <tbody id="tbodySencilla"></tbody>
+                        <tbody id="tbodySencillaMas"><tr id="trMostrarMasSencilla" class="hidden"><td colspan="6" class="text-center py-2"><button onclick="mostrarMasSencilla()" class="text-blue-600 font-bold text-xs hover:underline">+ Mostrar más resultados</button></td></tr></tbody>
                     </table>
                 </div>
             </div>
 
             <div class="col-span-1 flex flex-col gap-4 max-h-[75vh]">
-                <div class="bg-orange-50 border border-orange-200 p-3 rounded shadow-sm flex flex-col flex-1 overflow-hidden" id="cardCarrito">
-                    <h3 class="font-bold text-orange-800 text-sm mb-2 border-b border-orange-200 pb-1 flex justify-between">
-                        <span>🛒 Solicitud Actual (<span id="sencCount">0</span>)</span>
-                        <button onclick="vaciarCarrito()" class="text-xs text-red-600 hover:text-red-800">Vaciar</button>
+                <div class="bg-orange-50 border border-orange-200 p-3 rounded shadow-sm flex flex-col flex-1 overflow-hidden min-h-0" id="cardCarrito">
+                    <h3 class="font-bold text-orange-800 text-sm mb-2 border-b border-orange-200 pb-1 flex justify-between items-center">
+                        <span>🛒 Solicitud (<span id="sencCount">0</span>)</span>
+                        <div class="flex items-center gap-1">
+                            <button onclick="agregarArticuloNuevoCarro()" class="text-[10px] bg-orange-200 text-orange-800 px-1 py-0.5 rounded font-bold hover:bg-orange-300 transition shadow-sm">+ Nuevo</button>
+                            <button onclick="vaciarCarrito()" class="text-[10px] text-red-600 hover:text-red-800 px-1 hover:bg-red-50 rounded">Vaciar</button>
+                        </div>
                     </h3>
                     
                     <div class="mb-2 space-y-1 text-xs">
@@ -154,19 +167,22 @@
                         <input type="text" id="gSeccion" placeholder="Sección *" class="w-full border p-1.5 rounded focus:border-orange-400 outline-none">
                         <div class="flex gap-1">
                             <input type="text" id="gTecnico" placeholder="Técnico (Opc.)" class="w-1/2 border p-1.5 rounded focus:border-orange-400 outline-none">
-                            <input type="date" id="gFechaSug" title="Fecha Sugerida" class="w-1/2 border p-1.5 rounded focus:border-orange-400 outline-none text-gray-500">
+                            <div class="w-1/2 flex items-center border rounded focus-within:border-orange-400 bg-white" title="Fecha Sugerida">
+                                <span class="text-[10px] text-gray-500 font-bold pl-1.5 pr-0.5">Sug:</span>
+                                <input type="date" id="gFechaSug" class="w-full text-[11px] p-1.5 outline-none bg-transparent appearance-none">
+                            </div>
                         </div>
                     </div>
 
-                    <div id="sencillaCarritoItems" class="flex-grow min-h-[120px] overflow-y-auto mb-2 bg-white rounded border border-orange-100 p-1 space-y-1 text-xs shadow-inner">
+                    <div id="sencillaCarritoItems" class="flex-1 min-h-[80px] overflow-y-auto mb-2 bg-white rounded border border-orange-100 p-1 space-y-1 text-xs shadow-inner">
                         <div class="text-gray-400 text-center mt-4">Carrito vacío</div>
                     </div>
 
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 shrink-0">
                         <button onclick="procesarSolicitudEmail()" class="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 rounded text-xs transition">Enviar a Compras</button>
                         <button onclick="generarPdfCarrito()" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white font-bold py-2 rounded text-xs transition">PDF</button>
                     </div>
-                    <div class="flex gap-2 mt-2">
+                    <div class="flex gap-2 mt-2 shrink-0">
                         <button onclick="guardarBorrador()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-[10px] font-bold py-1 rounded transition">📥 G. Borrador</button>
                         <button onclick="verBorradores()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-[10px] font-bold py-1 rounded transition">📂 Cargar</button>
                     </div>
@@ -209,7 +225,7 @@
                 <div>
                     <label class="font-semibold mr-1 text-xs text-gray-600">Stock:</label>
                     <select id="filtroStock" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-28">
-                        <option value="todos">Todos</option><option value="cero">Solo = 0</option><option value="uno">Solo = 1</option><option value="resto">Resto (>1)</option>
+                        <option value="todos">Todos</option><option value="cero">Solo = 0</option><option value="uno">Solo = 1</option><option value="resto">Mayores (>0)</option>
                     </select>
                 </div>
                 <div>
@@ -221,13 +237,30 @@
                 <div>
                     <label class="font-semibold mr-1 text-xs text-gray-600">Proyección:</label>
                     <select id="filtroProyeccion" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
-                        <option value="todas">Todas</option><option value="este_mes">Este mes</option><option value="mes_anterior">Mes anterior</option><option value="este_anio">Este año</option>
+                        <option value="todas">Todas</option><option value="vencidas">Vencidas</option><option value="este_mes">Este mes</option><option value="mes_anterior">Mes anterior</option><option value="este_anio">Este año</option>
                     </select>
                 </div>
                 <div>
                     <label class="font-semibold mr-1 text-xs text-gray-600">Últ. Salida:</label>
                     <select id="filtroUltimaSalida" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
                         <option value="todas">Todas</option><option value="este_mes">Este mes</option><option value="mes_anterior">Mes anterior</option><option value="este_anio">Este año</option><option value="anio_anterior">Año anterior</option><option value="rango">Rango fechas...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Últ. Ingreso:</label>
+                    <select id="filtroUltimoIngreso" class="border-gray-300 border rounded p-1 text-xs bg-white cursor-pointer w-32">
+                        <option value="todas">Todas</option><option value="este_mes">Este mes</option><option value="mes_anterior">Mes anterior</option><option value="este_anio">Este año</option><option value="anio_anterior">Año anterior</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold mr-1 text-xs text-gray-600">Ing. Manual:</label>
+                    <select id="filtroIngresoManual" class="border-green-400 border rounded p-1 text-xs bg-green-50 cursor-pointer w-32">
+                        <option value="todos">Todos</option>
+                        <option value="con_ingreso">Con ingreso</option>
+                        <option value="este_mes">Este mes</option>
+                        <option value="mes_anterior">Mes anterior</option>
+                        <option value="este_anio">Este año</option>
+                        <option value="anio_anterior">Año anterior</option>
                     </select>
                 </div>
                 <div id="contenedorRangoSalidas" class="hidden items-center gap-1 border-l pl-3 border-gray-300">
@@ -242,22 +275,23 @@
         <div class="overflow-auto w-full border border-gray-200 rounded-md" style="max-height: 70vh; -webkit-overflow-scrolling: touch;">
             <table id="resultTable" class="min-w-full hidden bg-white">
                 <thead>
-                    <tr>
+                    <tr class="whitespace-normal leading-tight align-bottom text-xs">
                         <th class="text-center p-2">Añadir</th>
-                        <th>Código<br><span class="text-[10px] text-gray-500 font-normal">No. Parte</span></th>
-                        <th class="w-[200px]">Descripción</th>
-                        <th>Nombre Útil</th>
-                        <th>Ubicación</th>
-                        <th>Cant.</th>
-                        <th class="sol-col" title="Fecha solicitud - Origen">Solicitud<br><span class="text-[10px] text-gray-500 font-normal">Origen</span></th>
-                        <th class="q-col text-center" title="Cuartiles de Consumo [Q0 - Q1 - Q2 - Q3 - Q4]">Curva de Consumo<br><span class="text-[10px] text-gray-500 font-normal">Mín - P25 - Med - P75 - Máx</span></th>
-                        <th>Destinos / Máquinas</th>
-                        <th class="text-center w-24">Estado<br><span class="text-[10px] text-gray-500 font-normal">Última Compra</span></th>
-                        <th title="Hz / Demanda anual histórica">Hz<br><span class="text-[10px] text-gray-500 font-normal">Demanda (Mín,Máx)</span></th>
-                        <th>Salidas<br><span class="text-[10px] text-gray-500 font-normal">Primera / Última</span></th>
-                        <th class="q-col text-center" title="Cuartiles de Días entre salidas [Q0 - Q1 - Q2 - Q3 - Q4]">Días entre Salidas<br><span class="text-[10px] text-gray-500 font-normal">Mín - P25 - Med - P75 - Máx</span></th>
-                        <th class="proj-col sortable-header no-print" id="thSortProyeccion">Proyección Sig. Compra <span id="sortIcon">↕️</span></th>
-                        <th class="proj-col hidden print:table-cell">Proyección Sig. Compra</th>
+                        <th class="p-2">Código<br><span class="text-[10px] text-gray-500 font-normal">No. Parte</span></th>
+                        <th class="w-[200px] p-2">Descripción</th>
+                        <th class="p-2">Nombre<br>Útil</th>
+                        <th class="p-2">Ubicación</th>
+                        <th class="p-2 text-center" title="Ingreso manual (Cantidad / Fecha)">Ing.<br>Manual</th>
+                        <th class="p-2 text-center">Cant.</th>
+                        <th class="sol-col p-2" title="Estado · Fecha solicitud · Origen">Est. / Solicitud<br><span class="text-[10px] text-gray-500 font-normal">Origen</span></th>
+                        <th class="q-col text-center leading-tight min-w-[50px] p-2" title="Cuartiles de Consumo">Curva<br>Consumo<br><span class="text-[9px] text-gray-500 font-normal block mt-1">Mín · P25<br><b>Med</b><br>P75 · Máx</span></th>
+                        <th class="p-2">Destinos /<br>Máquinas</th>
+                        <th class="p2 text-center" title="Hz / Demanda anual histórica">Frec.<br><span class="text-[10px] text-gray-500 font-normal">Dem. Anual</span></th>
+                        <th class="p-2">Salidas<br><span class="text-[10px] text-gray-500 font-normal">Primera / Última</span></th>
+                        <th class="q-col text-center leading-tight min-w-[50px] p-2" title="Cuartiles de Días entre salidas">Días entre<br>Salidas<br><span class="text-[9px] text-gray-500 font-normal block mt-1">Mín · P25<br><b>Med</b><br>P75 · Máx</span></th>
+                        <th class="proj-col sortable-header no-print text-center leading-tight min-w-[80px] p-2" id="thSortProyeccion">Proyección<br><span class="text-[10px] text-gray-500 font-normal">Sig. Compra</span> <span id="sortIcon">↕️</span></th>
+                        <th class="proj-col hidden print:table-cell text-center leading-tight p-2">Proyección<br><span class="text-[10px] text-gray-500 font-normal">Sig. Compra</span></th>
+                        <th class="text-center bg-red-50 text-red-800 p-2" title="Salidas Rápidas (Bypass)">🏃<br>Salidas</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -267,6 +301,44 @@
         <div id="controlesPaginacion" class="w-full py-4 flex flex-col items-center hidden">
             <p class="text-sm text-gray-500 mb-2">Mostrando <span id="countVisibles" class="font-bold">0</span> de <span id="countTotalFiltrados" class="font-bold">0</span> resultados</p>
             <button id="btnCargarMas" class="bg-white hover:bg-gray-100 text-blue-600 font-bold py-2 px-8 rounded border border-blue-300 shadow-sm transition">⬇️ Cargar más registros</button>
+        </div>
+    </div>
+
+    <!-- MODAL INGRESO MANUAL -->
+    <div id="modalIngresoManual" class="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 hidden no-print">
+        <div class="bg-white rounded-lg p-5 w-96 shadow-2xl border border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 mb-4" id="tituloModalIngreso">Ingreso Manual</h3>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Cantidad a ingresar</label>
+            <input type="number" id="inputIngresoCant" class="w-full border border-gray-300 rounded p-2 mb-3 bg-gray-50 focus:bg-white" min="1" placeholder="0">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Fecha del Ingreso</label>
+            <input type="date" id="inputIngresoFecha" class="w-full border border-gray-300 rounded p-2 mb-4 bg-gray-50 focus:bg-white">
+            
+            <div class="flex justify-end gap-2 border-t pt-3 mt-2">
+                <button class="px-4 py-2 bg-gray-100 rounded text-gray-800 font-bold hover:bg-gray-200" onclick="cerrarModalIngreso()">Cancelar</button>
+                <button class="px-4 py-2 bg-green-600 rounded text-white font-bold hover:bg-green-700 shadow-sm" onclick="guardarIngresoManual()">Guardar Ingreso</button>
+            </div>
+            <div class="mt-2 text-center">
+                <button class="text-red-500 text-xs hover:text-red-700 font-semibold" onclick="borrarIngresoManual()">Eliminar ingreso de la celda</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL SALIDA RÁPIDA -->
+    <div id="modalSalidaRapida" class="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 hidden no-print">
+        <div class="bg-white rounded-lg p-5 w-96 shadow-2xl border border-red-200">
+            <h3 class="text-lg font-bold text-red-600 mb-4 flex items-center gap-2"><span>🏃</span> <span id="tituloModalSalida">Registrar Salida Rápida (-1)</span></h3>
+            <div class="bg-red-50 text-red-800 text-xs p-2 rounded mb-3">Esta salida es temporal hasta que se actualice el CSV del inventario consolidado.</div>
+            
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Máquina / Destino</label>
+            <input type="text" id="inputSalidaMaquina" class="w-full border border-gray-300 rounded p-2 mb-3 uppercase bg-gray-50 focus:bg-white" placeholder="Ej. LÍNEA 1">
+            
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Sección / Área</label>
+            <input type="text" id="inputSalidaSeccion" class="w-full border border-gray-300 rounded p-2 mb-4 uppercase bg-gray-50 focus:bg-white" placeholder="Ej. EMPAQUE">
+            
+            <div class="flex justify-end gap-2 border-t pt-3 mt-2">
+                <button class="px-4 py-2 bg-gray-100 rounded text-gray-800 font-bold hover:bg-gray-200" onclick="cerrarModalSalida()">Cancelar</button>
+                <button class="px-4 py-2 bg-red-600 rounded text-white font-bold hover:bg-red-700 shadow-sm" onclick="guardarSalidaRapida()">Confirmar Salida</button>
+            </div>
         </div>
     </div>
 
@@ -430,8 +502,69 @@
                     <button onclick="renderizarHistorial()" class="w-full md:w-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded text-sm hover:bg-indigo-700 transition">Filtrar</button>
                 </div>
             </div>
+            
+            <div class="p-4 overflow-y-auto flex-grow bg-gray-100" id="contenedorHistorial"></div>
+        </div>
+    </div>
 
-            <div class="p-4 overflow-y-auto flex-grow" id="contenedorHistorial"></div>
+    <!-- MODAL NUEVO: GLOBAL DE BYPASS (SALIDAS RAPIDAS) -->
+    <div id="modalHistorialBypassGlobal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm no-print">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-red-800 text-white p-4 flex justify-between items-center shrink-0">
+                <h2 class="text-lg font-bold flex items-center gap-2">📤 Historial Total de Salidas Rápidas (Bypass)</h2>
+                <button onclick="cerrarHistorialBypassGlobal()" class="text-white hover:text-red-200 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="p-4 bg-red-50 border-b flex justify-between items-center shrink-0">
+                <p class="text-xs text-gray-700">Este es un registro consolidado y cronológico de todas las deducciones locales (botón rojo "-1" o Salida Manual) asociadas a todos los ítems.</p>
+            </div>
+            <div class="p-4 overflow-y-auto flex-grow" id="historialBypassContenedor"></div>
+        </div>
+    </div>
+
+    <!-- MODAL EDITOR DE SOLICITUD HISTÓRICA -->
+    <div id="modalEditorSolicitud" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm no-print">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+            <div class="bg-indigo-700 text-white p-4 flex justify-between items-center">
+                <h2 class="text-base font-bold flex items-center gap-2">✏️ Editar Solicitud <span id="editorSolId" class="font-mono text-indigo-200 text-sm"></span></h2>
+                <button onclick="document.getElementById('modalEditorSolicitud').classList.add('hidden')" class="text-white hover:text-indigo-200 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-3 text-sm">
+                <p class="text-xs text-gray-500">Modifica los datos y guarda. El ID de solicitud original se conserva.</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Máquina / Destino</label>
+                        <input type="text" id="edMaquina" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Sección</label>
+                        <input type="text" id="edSeccion" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Técnico</label>
+                        <input type="text" id="edTecnico" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Modelo</label>
+                        <input type="text" id="edModelo" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                    </div>
+                    </div>
+                    <div class="col-span-2 grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Serie</label>
+                            <input type="text" id="edSerie" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Fecha Sugerida de Cierre</label>
+                            <input type="date" id="edFechaSug" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                        </div>
+                    </div>
+                </div>
+                <div id="edItemsPreview" class="bg-gray-50 rounded border text-xs p-2 max-h-40 overflow-y-auto"></div>
+            </div>
+            <div class="bg-gray-50 border-t p-4 flex justify-between items-center gap-2">
+                <button onclick="guardarEdicionSolicitud(false)" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded transition">💾 Guardar Cambios</button>
+                <button onclick="guardarEdicionSolicitud(true)" class="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 rounded transition">💾 Guardar y Re‑enviar</button>
+            </div>
         </div>
     </div>
 
@@ -477,7 +610,7 @@
                 secD.classList.remove('w-full'); // Remove detailed layout wrapper class? No, it's hidden anyway
                 btnS.classList.replace('bg-gray-200','bg-blue-600'); btnS.classList.replace('text-gray-800','text-white');
                 btnD.classList.replace('bg-blue-600','bg-gray-200'); btnD.classList.replace('text-white','text-gray-800');
-                renderSencilla(TODOS_LOS_DATOS);
+                renderSencilla(calcularDatosSencilla());
                 renderHistorialSencillo();
                 actualizarMiniCarrito();
             } else {
@@ -489,13 +622,66 @@
             }
         }
 
+        let _datosSencillaCurrent = [];
+        let _punteroSencilla = 0;
+        const _paginaSencilla = 50;
+        let _tabSencilla = 'destacados';
+
+        function setSencillaTab(tab) {
+            _tabSencilla = tab;
+            document.getElementById('busqSencilla').value = '';
+            document.getElementById('btnVerTodoSencillo').classList.add('hidden');
+            renderSencilla(calcularDatosSencilla());
+        }
+
+        function calcularDatosSencilla() {
+            const ahora = Date.now();
+            const mesMs = 30 * 24 * 3600 * 1000;
+
+            if(_tabSencilla === 'proximos') {
+                // Items con proyeccion no nula y futura pero ó ya vencida, ordenados por fecha mas proxima
+                return [...TODOS_LOS_DATOS]
+                    .filter(f => f.proyeccionMs)
+                    .sort((a,b) => (a.proyeccionMs||Infinity) - (b.proyeccionMs||Infinity));
+            }
+
+            if(_tabSencilla === 'todos') {
+                return [...TODOS_LOS_DATOS].sort((a,b) => (a.inv.descripcion||'').localeCompare(b.inv.descripcion||''));
+            }
+
+            // 'destacados': score mixto
+            return [...TODOS_LOS_DATOS]
+                .map(f => {
+                    let score = 0;
+                    // Demanda anual alta +
+                    if(f.demandaAnual) score += Math.min(f.demandaAnual * 2, 40);
+                    // Ingreso reciente (ultimo mes) +
+                    if(f.inv.ultimaCompra && (ahora - f.inv.ultimaCompra) < mesMs * 2) score += 20;
+                    // Prox compra urgente (+) - vencida o muy proxima
+                    if(f.proyeccionMs) {
+                        const diasRestantes = (f.proyeccionMs - ahora) / (24*3600*1000);
+                        if(diasRestantes < 0) score += 35;
+                        else if(diasRestantes < 30) score += 25;
+                        else if(diasRestantes < 90) score += 10;
+                    }
+                    // Tiene stock +
+                    if(f.inv.cantidad > 0) score += 5;
+                    return { fila: f, score };
+                })
+                .sort((a,b) => b.score - a.score)
+                .map(x => x.fila);
+        }
+
         function buscarSencilla() {
             const term = document.getElementById('busqSencilla').value.toLowerCase().trim();
-            if(!term) { renderSencilla(TODOS_LOS_DATOS); document.getElementById('btnVerTodoSencillo').classList.add('hidden'); return; }
-            
+            if(!term) {
+                document.getElementById('btnVerTodoSencillo').classList.add('hidden');
+                renderSencilla(calcularDatosSencilla());
+                return;
+            }
             const terms = term.split(/\s+/);
             const filtrados = TODOS_LOS_DATOS.filter(fila => {
-                const text = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte} ${fila.inv.nombreUtil||''} ${fila.inv.ubicacion||''}`.toLowerCase();
+                const text = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte||''} ${fila.inv.nombreUtil||''} ${fila.inv.ubicacion||''}`.toLowerCase();
                 return terms.every(t => text.includes(t));
             });
             renderSencilla(filtrados);
@@ -503,21 +689,20 @@
         }
 
         function limpiarBusquedaSencilla() {
-            document.getElementById('busqSencilla').value = "";
-            buscarSencilla();
+            document.getElementById('busqSencilla').value = '';
             document.getElementById('btnVerTodoSencillo').classList.add('hidden');
+            renderSencilla(calcularDatosSencilla());
         }
 
-        function renderSencilla(datos) {
-            const tbody = document.getElementById('tbodySencilla');
-            if(!datos || datos.length === 0) { tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4'>Sin resultados.</td></tr>"; return; }
-            
-            const htmlArr = datos.slice(0, 150).map(fila => `
+        function _filasSencillaHtml(datos) {
+            return datos.map(fila => {
+                return `
                 <tr class="border-b hover:bg-blue-50 transition">
                     <td class="p-1">
-                        <div class="flex gap-1 justify-center items-center">
+                        <div class="flex gap-0.5 justify-center items-center">
                             <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Añadir 1 rápido" onclick="simpleAddToCart('${fila.inv.codigo}', 1)">+1</button>
-                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Personalizar (Máquina, etc)" onclick="abrirModalDetalleSencillo('${fila.inv.codigo}')">➕</button>
+                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Personalizar" onclick="abrirModalDetalleSencillo('${fila.inv.codigo}')">+</button>
+                            <button class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-1 py-1 rounded text-[10px]" title="Ver historial de solicitudes de este repuesto" onclick="verHistorialRepuesto('${fila.inv.codigo}')">📄</button>
                         </div>
                     </td>
                     <td class="p-2 max-w-[100px] break-words"><b>${fila.inv.codigo}</b><br><span class="text-[10px] text-gray-500">${fila.inv.noParte||'-'}</span></td>
@@ -525,9 +710,84 @@
                     <td class="p-2"><input type="text" data-codigo="${fila.inv.codigo}" class="in-util w-full border rounded p-1 text-[10px] ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${fila.inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
                     <td class="p-2"><input type="text" data-codigo="${fila.inv.codigo}" class="in-ubic w-full border rounded p-1 text-[10px] ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${fila.inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
                     <td class="p-2 text-center font-bold text-blue-800">${fila.inv.cantidad}</td>
-                </tr>
-            `);
-            tbody.innerHTML = htmlArr.join('');
+                </tr>`;
+            }).join('');
+        }
+
+        function renderSencilla(datos) {
+            _datosSencillaCurrent = datos || [];
+            _punteroSencilla = 0;
+            const tbody = document.getElementById('tbodySencilla');
+            if(!_datosSencillaCurrent.length) {
+                tbody.innerHTML = "<tr><td colspan='6' class='text-center p-4'>Sin resultados.</td></tr>";
+                document.getElementById('trMostrarMasSencilla').classList.add('hidden');
+                return;
+            }
+            const bloque = _datosSencillaCurrent.slice(0, _paginaSencilla);
+            tbody.innerHTML = _filasSencillaHtml(bloque);
+            _punteroSencilla = bloque.length;
+            const total = _datosSencillaCurrent.length;
+            document.getElementById('trMostrarMasSencilla').classList.toggle('hidden', _punteroSencilla >= total);
+        }
+
+        function mostrarMasSencilla() {
+            const tbody = document.getElementById('tbodySencilla');
+            const bloque = _datosSencillaCurrent.slice(_punteroSencilla, _punteroSencilla + _paginaSencilla);
+            tbody.innerHTML += _filasSencillaHtml(bloque);
+            _punteroSencilla += bloque.length;
+            const total = _datosSencillaCurrent.length;
+            document.getElementById('trMostrarMasSencilla').classList.toggle('hidden', _punteroSencilla >= total);
+        }
+
+        async function verHistorialRepuesto(codigo) {
+            const todosHist = await obtenerHistorial();
+            const relacionados = todosHist
+                .filter(h => h.items && h.items.some(it => it.codigo === codigo))
+                .sort((a,b) => b.fecha_log - a.fecha_log);
+
+            const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
+            const desc = fila ? (fila.inv.nombreUtil || fila.inv.descripcion) : codigo;
+
+            let html;
+            if(!relacionados.length) {
+                html = `<p class="text-gray-400 text-center py-6">No hay solicitudes de compra que inclu&shy;yan este repuesto.</p>`;
+            } else {
+                html = relacionados.map(h => {
+                    const it = h.items.find(x => x.codigo === codigo);
+                    const d = new Date(h.fecha_log);
+                    return `<div class="border rounded p-2 mb-1 bg-white text-xs">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-mono font-bold text-indigo-700">${h.id_solicitud}</span>
+                            <span class="text-gray-500">${d.toLocaleDateString('es-GT')}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>⚙️ ${h.form?.maquina||'-'} | 📍 ${h.form?.seccion||'-'}</span>
+                            <span class="font-bold text-orange-600">x${it?.cant||'?'}</span>
+                        </div>
+                        ${h.form?.tecnico ? `<div class="text-gray-500 mt-0.5">👤 ${h.form.tecnico}</div>` : ''}
+                    </div>`;
+                }).join('');
+            }
+
+            // Reuse or create a lightweight modal
+            let modal = document.getElementById('modalHistRepuesto');
+            if(!modal) {
+                modal = document.createElement('div');
+                modal.id = 'modalHistRepuesto';
+                modal.className = 'fixed inset-0 bg-gray-900 bg-opacity-70 z-50 flex items-center justify-center p-4 backdrop-blur-sm no-print';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]">
+                        <div class="bg-indigo-700 text-white p-3 flex justify-between items-center rounded-t-xl">
+                            <h3 class="font-bold text-sm" id="modalHistRepTitle"></h3>
+                            <button onclick="document.getElementById('modalHistRepuesto').classList.add('hidden')" class="text-white text-xl font-bold leading-none hover:text-indigo-200">&times;</button>
+                        </div>
+                        <div id="modalHistRepBody" class="overflow-y-auto p-3 flex-1 bg-indigo-50"></div>
+                    </div>`;
+                document.body.appendChild(modal);
+            }
+            document.getElementById('modalHistRepTitle').innerText = `📄 Historial: ${codigo} — ${desc}`;
+            document.getElementById('modalHistRepBody').innerHTML = html;
+            modal.classList.remove('hidden');
         }
 
         function abrirModalDetalleSencillo(codigo) {
@@ -547,6 +807,64 @@
             });
             actualizarMiniCarrito();
             actualizarBadgeCarrito();
+        }
+
+        function abrirHistorialBypassGlobal() {
+            let todasLasSalidas = [];
+            TODOS_LOS_DATOS.forEach(fila => {
+                if (fila.inv.salidasLocales && fila.inv.salidasLocales.length > 0) {
+                    fila.inv.salidasLocales.forEach(salida => {
+                        let ms = salida.timestamp || salida.fecha; 
+                        let d = new Date(ms);
+                        let dateStr = isNaN(d) ? '-' : d.toLocaleString('es-GT');
+                        
+                        todasLasSalidas.push({
+                            codigo: fila.inv.codigo,
+                            noParte: fila.inv.noParte,
+                            descripcion: fila.inv.descripcion,
+                            cantidad: salida.cantidad,
+                            timestamp: ms,
+                            fechaStr: dateStr,
+                            maquina: salida.maquina || 'N/A',
+                            seccion: salida.seccion || 'N/A'
+                        });
+                    });
+                }
+            });
+
+            todasLasSalidas.sort((a,b) => b.timestamp - a.timestamp);
+
+            const contenedor = document.getElementById('historialBypassContenedor');
+            if(todasLasSalidas.length === 0) {
+                contenedor.innerHTML = '<p class="text-center text-gray-500 py-10">No hay salidas rápidas locales registradas.</p>';
+            } else {
+                contenedor.innerHTML = `<table class="min-w-full text-xs text-left mb-4">
+                    <thead class="bg-gray-100 shadow-sm sticky top-0"><tr>
+                        <th class="p-2 border">Fecha</th>
+                        <th class="p-2 border">Código</th>
+                        <th class="p-2 border">Descripción</th>
+                        <th class="p-2 border text-center">Cant</th>
+                        <th class="p-2 border">Destino</th>
+                    </tr></thead>
+                    <tbody>
+                        ${todasLasSalidas.map(s => `
+                            <tr class="hover:bg-red-50 transition border-b">
+                                <td class="p-2 text-[10px] whitespace-nowrap text-gray-600">${s.fechaStr}</td>
+                                <td class="p-2 font-bold text-blue-700 max-w-[80px] truncate" title="${s.noParte}">${s.codigo}</td>
+                                <td class="p-2"><div class="line-clamp-2 leading-tight" title="${s.descripcion}">${s.descripcion}</div></td>
+                                <td class="p-2 text-center font-bold text-red-600 text-sm">-${s.cantidad}</td>
+                                <td class="p-2 text-[10px] leading-tight"><b>Máq:</b> ${s.maquina}<br><b>Sec:</b> ${s.seccion}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>`;
+            }
+
+            document.getElementById('modalHistorialBypassGlobal').classList.remove('hidden');
+        }
+
+        function cerrarHistorialBypassGlobal() {
+            document.getElementById('modalHistorialBypassGlobal').classList.add('hidden');
         }
 
         function actualizarMiniCarrito() {
@@ -589,17 +907,161 @@
                 const d = new Date(h.fecha_log);
                 const itemsCount = h.items ? h.items.length : 0;
                 return `
-                <div class="border rounded p-2 hover:bg-indigo-50 cursor-pointer transition mb-1 bg-white shadow-sm" onclick="cargarItemsHistorial(this, '${h.id_solicitud}')" data-sol-data='${JSON.stringify(h.items).replace(/'/g, "&#39;")}'>
-                    <div class="flex justify-between items-center border-b border-indigo-100 pb-1 mb-1">
+                <div class="border rounded p-2 hover:bg-indigo-50 transition mb-1 bg-white shadow-sm" data-sol-data='${JSON.stringify(h.items).replace(/'/g, "&#39;")}' data-sol-form='${JSON.stringify(h.form || {}).replace(/'/g, "&#39;")}' data-sol-id="${h.id_solicitud}">
+                    <div class="flex justify-between items-center border-b border-indigo-100 pb-1 mb-1 cursor-pointer" onclick="cargarItemsHistorial(this.closest('[data-sol-id]'), '${h.id_solicitud}')">
                         <span class="font-mono font-bold text-indigo-700 text-[10px]">${h.id_solicitud}</span>
                         <span class="text-[9px] text-gray-500">${d.toLocaleDateString()}</span>
                     </div>
-                    <div class="text-[10px] flex justify-between items-center">
-                        <span class="font-bold text-gray-700">${h.form?.maquina || '-'}</span>
-                        <span class="bg-indigo-100 text-indigo-800 font-bold px-1 rounded">${itemsCount} ítem(s)</span>
+                    <div class="text-[10px] flex justify-between items-center mt-1 pt-1 border-t border-indigo-50">
+                        <div class="flex flex-col w-1/2 cursor-pointer" onclick="cargarItemsHistorial(this.closest('[data-sol-id]'), '${h.id_solicitud}')">
+                            <span class="font-bold text-gray-700 truncate" title="${h.form?.maquina || '-'}">⚙️ ${h.form?.maquina || '-'}</span>
+                            <span class="text-gray-500 truncate mt-0.5" title="${h.form?.tecnico || 'Sin técnico'}">👤 ${h.form?.tecnico || 'Sin técnico'}</span>
+                            ${h.form?.fechaSug ? `<span class="text-blue-500 truncate mt-0.5">📅 ${h.form.fechaSug}</span>` : ''}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="bg-indigo-100 text-indigo-800 font-bold px-1 rounded">${itemsCount} ítem(s)</span>
+                            <button onclick="reenviarSolicitudHistorial(event, this)" class="bg-blue-500 hover:bg-blue-700 text-white font-bold px-1 py-0.5 rounded text-[9px] transition" title="Reenviar esta solicitud por correo">↩@</button>
+                            <button onclick="abrirEditorSolicitud(event, this)" class="text-indigo-500 hover:text-indigo-800 px-1 transition" title="Editar datos">✏️</button>
+                            <button onclick="generarPdfHistorial(event, this)" class="text-gray-500 hover:text-blue-700 transition px-1" title="Imprimir PDF">🖨️</button>
+                            <button onclick="repetirOrden(event, this)" class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-2 py-0.5 rounded shadow-sm text-[9px] active:scale-95 transition-transform">Repetir</button>
+                        </div>
                     </div>
                 </div>`;
             }).join('');
+        }
+
+        function repetirOrden(event, btnElement) {
+            event.stopPropagation();
+            const card = btnElement.closest('[data-sol-data]');
+            if(!card) return;
+            
+            const jsondata = card.getAttribute('data-sol-data');
+            const items = JSON.parse(jsondata);
+            let countAgregados = 0;
+            
+            items.forEach(i => {
+                const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === i.codigo);
+                if(fila) {
+                    carrito.push({
+                        codigo: fila.inv.codigo,
+                        noParte: fila.inv.noParte || "-",
+                        descripcion: fila.inv.descripcion,
+                        cant: parseFloat(i.cant || 1)
+                    });
+                    countAgregados++;
+                }
+            });
+            
+            const jsonform = card.getAttribute('data-sol-form');
+            if(jsonform) {
+                try {
+                    const formObj = JSON.parse(jsonform);
+                    if(document.getElementById('globalMaquina')) document.getElementById('globalMaquina').value = formObj.maquina || '';
+                    if(document.getElementById('globalModelo')) document.getElementById('globalModelo').value = formObj.modelo || '';
+                    if(document.getElementById('globalSerie')) document.getElementById('globalSerie').value = formObj.serie || '';
+                    if(document.getElementById('globalSeccion')) document.getElementById('globalSeccion').value = formObj.seccion || '';
+                } catch(e) {}
+            }
+            
+            actualizarMiniCarrito();
+            actualizarBadgeCarrito();
+            
+            const originalText = btnElement.innerText;
+            btnElement.innerText = "¡Copiado!";
+            btnElement.classList.replace('bg-orange-500', 'bg-green-500');
+            btnElement.classList.replace('hover:bg-orange-600', 'hover:bg-green-600');
+            setTimeout(() => {
+                btnElement.innerText = originalText;
+                btnElement.classList.replace('bg-green-500', 'bg-orange-500');
+                btnElement.classList.replace('hover:bg-green-600', 'hover:bg-orange-600');
+            }, 2000);
+        }
+
+        function construirFilasParaPdf(items, conMetricas) {
+            let html = "";
+            items.forEach((it, idx) => {
+                html += `<tr>
+                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center;">${idx+1}</td>
+                    <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.codigo}</b><br><span style="font-size:10px;">PN: ${it.noParte || '-'}</span></td>
+                    <td style="border: 1px solid #ccc; padding: 8px;">${it.descripcion}</td>
+                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center; font-weight:bold;">${it.cant || 1}</td>
+                </tr>`;
+                
+                if (conMetricas) {
+                    const filaDatos = TODOS_LOS_DATOS.find(f => f.inv.codigo === it.codigo);
+                    if(filaDatos) {
+                        const deAn = filaDatos.demandaAnual !== null ? filaDatos.demandaAnual : '-';
+                        const cVal = filaDatos.qConsumo ? filaDatos.qConsumo[2] : '-'; 
+                        const fVal = filaDatos.qDiasSalidas && filaDatos.qDiasSalidas[2] !== null ? Math.round(filaDatos.qDiasSalidas[2]) : '-';
+                        const proxD = filaDatos.proyeccionTexto || '-';
+                        
+                        html += `<tr><td colspan="4" style="border: 1px solid #ccc; border-top: none; padding: 4px 8px; background-color: #fdfdfd; font-size: 10px; color: #444;">
+                            <i>📊 Análisis: Demanda Anual: <b>${deAn}</b> | Consumo Típico (Mediana): <b>${cVal}</b> | Días entre Salidas (Mediana): <b>${fVal} días</b> | Proy. de Agotamiento: <b>${proxD}</b></i>
+                        </td></tr>`;
+                    }
+                }
+            });
+            return html;
+        }
+
+        function generarPdfHistorial(event, btnElement) {
+            event.stopPropagation();
+            const card = btnElement.closest('div[data-sol-data]');
+            if(!card) return;
+            
+            const items = JSON.parse(card.getAttribute('data-sol-data') || "[]");
+            const form = JSON.parse(card.getAttribute('data-sol-form') || "{}");
+            const idSolSpan = card.querySelector('.font-mono.text-indigo-700').innerText;
+            const dateSpan = card.querySelector('span.text-gray-500').innerText;
+            
+            const conMetricas = confirm("¿Desea incluir información de análisis (Demanda anual y frecuencia de uso histórico) en el PDF?");
+
+            let printDiv = document.createElement('div');
+            printDiv.id = 'cartPrintArea';
+            printDiv.innerHTML = `
+                <div style="font-family: Arial, sans-serif; color: #000; padding: 20px;">
+                    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px;">
+                        <h1 style="color: #1e3a8a; font-size: 24px; margin:0;">EMPRESAS GALINDO</h1>
+                        <h2 style="font-size: 16px; margin: 5px 0 0 0; color:#555;">COPIA SOLICITUD TÉCNICA - ${idSolSpan}</h2>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px; font-size:12px; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background-color: #fdfcf9;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                            <div style="flex: 1 1 45%;"><strong>No. Solicitud (Ref):</strong> ${idSolSpan}</div>
+                            <div style="flex: 1 1 45%;"><strong>Fecha Original:</strong> ${dateSpan}</div>
+                            <div style="flex: 1 1 45%;"><strong>Máquina / Destino:</strong> ${form.maquina || 'No especificada'}</div>
+                            <div style="flex: 1 1 45%;"><strong>Sección:</strong> ${form.seccion || 'No especificada'}</div>
+                            ${form.tecnico ? `<div style="flex: 1 1 45%;"><strong>Técnico Solicita:</strong> ${form.tecnico}</div>` : ''}
+                            ${form.modelo ? `<div style="flex: 1 1 45%;"><strong>Modelo:</strong> ${form.modelo}</div>` : ''}
+                            ${form.serie ? `<div style="flex: 1 1 45%;"><strong>Serie:</strong> ${form.serie}</div>` : ''}
+                        </div>
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background-color: #f3f4f6; text-align: left;">
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">#</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Código / Parte</th>
+                                <th style="border: 1px solid #ccc; padding: 8px;">Descripción</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">Cant.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${construirFilasParaPdf(items, conMetricas)}
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 60px; text-align: center;">
+                        <p>___________________________________</p>
+                        <p style="margin-top:5px; font-size:12px;">Copia Histórica de Respaldo</p>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(printDiv);
+            document.body.classList.add('printing-cart');
+            window.print(); 
+            document.body.classList.remove('printing-cart');
+            document.body.removeChild(printDiv);
         }
 
         function cargarItemsHistorial(el, idSol) {
@@ -622,6 +1084,100 @@
             renderSencilla(filtrados);
         }
 
+
+        // --- BACKUP & RESTORE ---
+        async function exportarBackup() {
+            try {
+                const db = await initDB();
+                
+                // Read main data
+                const datosInv = await new Promise(r => {
+                    const req = db.transaction(STORE_ANALISIS, 'readonly').objectStore(STORE_ANALISIS).get('datosGuardados');
+                    req.onsuccess = () => r(req.result);
+                    req.onerror = () => r(null);
+                });
+                
+                // Read all order history
+                const historial = await new Promise(r => {
+                    const req = db.transaction(STORE_HISTORIAL, 'readonly').objectStore(STORE_HISTORIAL).getAll();
+                    req.onsuccess = () => r(req.result || []);
+                    req.onerror = () => r([]);
+                });
+                
+                const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+                
+                const backup = {
+                    _version: 1,
+                    _fecha: new Date().toISOString(),
+                    _app: 'crgm.app - Inventario',
+                    inventario: datosInv,
+                    historial: historial,
+                    borradores: borradores
+                };
+                
+                const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+                a.href = url;
+                a.download = `backup_inventario_${ts}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch(e) {
+                alert('Error al generar backup: ' + e.message);
+            }
+        }
+        
+        async function restaurarBackup(input) {
+            const file = input.files[0];
+            if(!file) return;
+            input.value = ''; // reset
+            
+            const pass = prompt('Acción destructiva. Ingrese el PIN para restaurar (PIN: 1234):');
+            if(pass !== '1234') {
+                if(pass !== null) alert('PIN incorrecto. Operación cancelada.');
+                return;
+            }
+            if(!confirm(`¿Desea restaurar el backup "${file.name}"? Los datos actuales se REEMPLAZARÁN.`)) return;
+            
+            try {
+                const text = await file.text();
+                const backup = JSON.parse(text);
+                
+                if(!backup._version || !backup.inventario) {
+                    alert('Archivo inválido o no es un backup de este sistema.');
+                    return;
+                }
+                
+                const db = await initDB();
+                
+                // Restore inventory
+                await new Promise(r => {
+                    const tx = db.transaction(STORE_ANALISIS, 'readwrite');
+                    tx.objectStore(STORE_ANALISIS).put(backup.inventario, 'datosGuardados');
+                    tx.oncomplete = r;
+                });
+                
+                // Restore history
+                await new Promise(r => {
+                    const tx = db.transaction(STORE_HISTORIAL, 'readwrite');
+                    const store = tx.objectStore(STORE_HISTORIAL);
+                    store.clear();
+                    (backup.historial || []).forEach(item => store.put(item));
+                    tx.oncomplete = r;
+                });
+                
+                // Restore drafts
+                if(backup.borradores) {
+                    localStorage.setItem('cartBorradores', JSON.stringify(backup.borradores));
+                }
+                
+                alert(`¡Backup restaurado exitosamente!\nFecha del backup: ${new Date(backup._fecha).toLocaleString('es-GT')}\nLa página se recargará ahora.`);
+                location.reload();
+            } catch(e) {
+                alert('Error al restaurar backup: ' + e.message);
+            }
+        }
 
         // --- SISTEMA DE CARRITO, HISTORIAL Y PDF ---
         let carrito = [];
@@ -728,6 +1284,99 @@
             cerrarModalDetalle();
         }
 
+        function agregarArticuloNuevoCarro() {
+            const desc = prompt("Ingrese el nombre/descripción del repuesto que NO existe actualmente en el catálogo:");
+            if(!desc) return;
+            const cant = parseFloat(prompt("¿Qué cantidad exacta se solicitará?", "1"));
+            if(isNaN(cant) || cant <= 0) return alert("Cantidad inválida cancelada.");
+            
+            carrito.push({
+                codigo: "CREAR CODIGO NUEVO",
+                noParte: "-",
+                descripcion: desc.toUpperCase().trim(),
+                cant: cant
+            });
+            actualizarMiniCarrito();
+            actualizarBadgeCarrito();
+        }
+        let _editorSolCache = null;
+
+        function abrirEditorSolicitud(event, btn) {
+            event.stopPropagation();
+            const card = btn.closest('[data-sol-data]');
+            if(!card) return;
+
+            const solId = card.getAttribute('data-sol-id');
+            const items = JSON.parse(card.getAttribute('data-sol-data') || '[]');
+            const form  = JSON.parse(card.getAttribute('data-sol-form') || '{}');
+
+            _editorSolCache = { solId, items };
+
+            document.getElementById('editorSolId').innerText = '#' + solId;
+            document.getElementById('edMaquina').value  = form.maquina  || '';
+            document.getElementById('edSeccion').value  = form.seccion  || '';
+            document.getElementById('edTecnico').value  = form.tecnico  || '';
+            document.getElementById('edModelo').value    = form.modelo   || '';
+            document.getElementById('edSerie').value     = form.serie    || '';
+            document.getElementById('edFechaSug').value  = form.fechaSug || '';
+
+            document.getElementById('edItemsPreview').innerHTML =
+                items.map((it, i) => `<div class="py-0.5 border-b last:border-0"><b>${i+1}. ${it.codigo}</b> &mdash; ${it.descripcion} &times;${it.cant}</div>`).join('');
+
+            document.getElementById('modalEditorSolicitud').classList.remove('hidden');
+        }
+
+        async function guardarEdicionSolicitud(reenviar) {
+            if(!_editorSolCache) return;
+            const { solId, items } = _editorSolCache;
+
+            const newForm = {
+                maquina  : document.getElementById('edMaquina').value.trim(),
+                seccion  : document.getElementById('edSeccion').value.trim(),
+                tecnico  : document.getElementById('edTecnico').value.trim(),
+                modelo   : document.getElementById('edModelo').value.trim(),
+                serie    : document.getElementById('edSerie').value.trim(),
+                fechaSug : document.getElementById('edFechaSug').value
+            };
+
+            // Overwrite the record keeping the same key
+            const db = await initDB();
+            await new Promise(r => {
+                const tx = db.transaction(STORE_HISTORIAL, 'readwrite');
+                tx.objectStore(STORE_HISTORIAL).put({ id_solicitud: solId, fecha_log: new Date().getTime(), items, form: newForm });
+                tx.oncomplete = r;
+            });
+
+            document.getElementById('modalEditorSolicitud').classList.add('hidden');
+            renderHistorialSencillo();
+
+            if(reenviar) {
+                const gMaq = newForm.maquina || '-';
+                const gSec = newForm.seccion || '-';
+                const gTec = newForm.tecnico || '';
+                const extInfo = (newForm.serie ? ` | Serie: ${newForm.serie}` : '') + (newForm.modelo ? ` | Mod: ${newForm.modelo}` : '');
+
+                let tablaHtml = `<div style="font-family:Arial,sans-serif;color:#333;font-size:12px;border:1px solid #ccc;padding:15px;">
+                    <h2 style="color:#1e3a8a;margin-top:0;">SOLICITUD DE REPUESTOS #${solId} (Corregida)</h2>
+                    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;text-align:left;">
+                        <thead style="background-color:#f3f4f6;color:#1f2937;"><tr><th>#</th><th>Código / Parte</th><th>Descripción</th><th>Cant.</th></tr></thead>
+                        <tbody>
+                            <tr><td colspan="4" style="background-color:#e0f2fe;text-align:center;padding:5px;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}${extInfo}</td></tr>
+                            ${items.map((it,idx) => `<tr><td>${idx+1}</td><td><b>${it.codigo}</b><br><span style="font-size:10px;">${it.noParte||''}</span></td><td>${it.descripcion}</td><td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td></tr>`).join('')}
+                        </tbody>
+                    </table></div>`;
+
+                try {
+                    await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([tablaHtml],{type:'text/html'}), 'text/plain': new Blob([''],{type:'text/plain'}) })]);
+                    alert(`✅ Solicitud #${solId} actualizada y copiada al portapapeles.\n\nAbre el correo, haz clic en el cuerpo y presiona CTRL+V.`);
+                } catch(e) {
+                    alert(`✅ Solicitud #${solId} actualizada.\n\nNo se pudo copiar al portapapeles; usa el botón PDF para imprimirla.`);
+                }
+            } else {
+                alert(`✅ Solicitud #${solId} actualizada correctamente.`);
+            }
+        }
+
         function abrirCarrito() {
             const contenedor = document.getElementById('contenedorItemsCarrito');
             if(carrito.length === 0) {
@@ -772,6 +1421,8 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
         function generarPdfCarrito() {
             if(carrito.length === 0) return alert("El carrito está vacío. Añade repuestos primero.");
             
+            const conMetricas = confirm("¿Desea incluir información de análisis (Demanda anual y frecuencia de uso histórico) en el PDF?");
+
             const d = new Date();
             const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
                           d.getDate().toString().padStart(2, '0') + d.getHours().toString().padStart(2, '0') + 
@@ -780,8 +1431,10 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
             const gMaq = document.getElementById('gMaquina') ? document.getElementById('gMaquina').value.trim() : 'No esp.';
             const gSec = document.getElementById('gSeccion') ? document.getElementById('gSeccion').value.trim() : 'No esp.';
             const gTec = document.getElementById('gTecnico') ? document.getElementById('gTecnico').value.trim() : '';
+            const gMod = document.getElementById('gModelo') ? document.getElementById('gModelo').value.trim() : "";
+            const gSer = document.getElementById('gSerie') ? document.getElementById('gSerie').value.trim() : "";
+            const gFeS = document.getElementById('gFechaSug') && document.getElementById('gFechaSug').value ? document.getElementById('gFechaSug').value : '';
 
-            // Crear el div oculto para el formato del PDF
             let printDiv = document.createElement('div');
             printDiv.id = 'cartPrintArea';
             printDiv.innerHTML = `
@@ -790,10 +1443,20 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                         <h1 style="color: #1e3a8a; font-size: 24px; margin:0;">EMPRESAS GALINDO</h1>
                         <h2 style="font-size: 16px; margin: 5px 0 0 0; color:#555;">SOLICITUD TÉCNICA - DEPTO. ELÉCTRICO</h2>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size:14px;">
-                        <div><strong>No. Solicitud:</strong> ${idSol}</div>
-                        <div><strong>Fecha:</strong> ${new Date().toLocaleString('es-GT')}</div>
+                    
+                    <div style="margin-bottom: 20px; font-size:12px; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background-color: #fdfcf9;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                            <div style="flex: 1 1 45%;"><strong>No. Solicitud:</strong> ${idSol}</div>
+                            <div style="flex: 1 1 45%;"><strong>Fecha Generación:</strong> ${new Date().toLocaleString('es-GT')}</div>
+                            <div style="flex: 1 1 45%;"><strong>Máquina / Destino:</strong> ${gMaq}</div>
+                            <div style="flex: 1 1 45%;"><strong>Sección:</strong> ${gSec}</div>
+                            ${gTec ? `<div style="flex: 1 1 45%;"><strong>Técnico Solicita:</strong> ${gTec}</div>` : ''}
+                            ${gMod ? `<div style="flex: 1 1 45%;"><strong>Modelo:</strong> ${gMod}</div>` : ''}
+                            ${gSer ? `<div style="flex: 1 1 45%;"><strong>Serie:</strong> ${gSer}</div>` : ''}
+                            ${gFeS ? `<div style="flex: 1 1 45%;"><strong>Fecha Sugerida de Cierre:</strong> ${gFeS}</div>` : ''}
+                        </div>
                     </div>
+
                     <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                         <thead>
                             <tr style="background-color: #f3f4f6; text-align: left;">
@@ -801,20 +1464,10 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                                 <th style="border: 1px solid #ccc; padding: 8px;">Código / Parte</th>
                                 <th style="border: 1px solid #ccc; padding: 8px;">Descripción</th>
                                 <th style="border: 1px solid #ccc; padding: 8px; text-align:center;">Cant.</th>
-                                <th style="border: 1px solid #ccc; padding: 8px;">Técnico</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr><td colspan="5" style="border: 1px solid #ccc; padding: 8px; background-color:#e0f2fe; text-align:center;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}${extInfo}</td></tr>
-                            ${carrito.map((it, idx) => `
-                                <tr>
-                                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center;">${idx+1}</td>
-                                    <td style="border: 1px solid #ccc; padding: 8px;"><b>${it.codigo}</b><br><span style="font-size:10px;">PN: ${it.noParte}</span></td>
-                                    <td style="border: 1px solid #ccc; padding: 8px;">${it.descripcion}</td>
-                                    <td style="border: 1px solid #ccc; padding: 8px; text-align:center; font-weight:bold;">${it.cant}</td>
-                                    <td style="border: 1px solid #ccc; padding: 8px;">${gTec}</td>
-                                </tr>
-                            `).join('')}
+                            ${construirFilasParaPdf(carrito, conMetricas)}
                         </tbody>
                     </table>
                     <div style="margin-top: 60px; text-align: center;">
@@ -827,76 +1480,94 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
             document.body.appendChild(printDiv);
             document.body.classList.add('printing-cart');
             
-            window.print(); // Abre el diálogo nativo de PDF/Impresora
+            window.print(); 
             
-            // Limpieza
             document.body.classList.remove('printing-cart');
             document.body.removeChild(printDiv);
         }
 
-        async function procesarSolicitudEmail() {
-            if(carrito.length === 0) return alert("No hay items en el carrito.");
-            
-            const gMaq = document.getElementById('gMaquina').value.trim() || '-';
-            const gSec = document.getElementById('gSeccion').value.trim() || '-';
-            const gTec = document.getElementById('gTecnico').value.trim() || '';
-            const gSer = document.getElementById('gSerie') ? document.getElementById('gSerie').value.trim() : '';
-            const gMod = document.getElementById('gModelo') ? document.getElementById('gModelo').value.trim() : '';
+        async function _enviarSolicitud(idSol, items, form, esReenvio) {
+            const gMaq = form.maquina || '-';
+            const gSec = form.seccion || '-';
+            const gTec = form.tecnico || '';
+            const gSer = form.serie || '';
+            const gMod = form.modelo || '';
             const extInfo = (gSer ? ` | Serie: ${gSer}` : '') + (gMod ? ` | Mod: ${gMod}` : '');
-
-            const formData = { maquina: gMaq, seccion: gSec, tecnico: gTec };
-
-            const d = new Date();
-            const idSol = d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, '0') + 
-                          d.getDate().toString().padStart(2, '0') + d.getHours().toString().padStart(2, '0') + 
-                          d.getMinutes().toString().padStart(2, '0') + d.getSeconds().toString().padStart(2, '0');
 
             const destinatario = "dorozco@empresasgalindo.com";
             const copia = "electrico.cogusa@empresasgalindo.com";
-            const asunto = encodeURIComponent(`SOLICITUD DE COMPRA REPUESTOS #${idSol} - DEPTO ELECTRICO`);
+            const sufijo = esReenvio ? ' (REENVIO)' : '';
+            const asunto = encodeURIComponent(`SOL. COMPRA #${idSol} | Máq: ${gMaq} - DEPTO ELECTRICO${sufijo}`);
 
-            let tablaHtml = `
-                <div style="font-family: Arial, sans-serif; color: #333; font-size: 12px; border: 1px solid #ccc; padding: 15px;">
-                    <h2 style="color:#1e3a8a; margin-top:0;">SOLICITUD DE REPUESTOS #${idSol}</h2>
-                    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; text-align: left;">
-                        <thead style="background-color: #f3f4f6; color: #1f2937;">
-                            <tr>
-                                <th>#</th><th>Código / Parte</th><th>Descripción</th><th style="text-align: center;">Cant.</th>
-                                <th>Técnico</th>
-                            </tr>
-                        </thead>
+            // Opción de formato
+            const usarTexto = confirm("¿En qué formato desea copiar la solicitud?\n\nAceptar = Texto con tabulaciones (para pegar en cuerpo de correo plano)\nCancelar = Tabla HTML formateada (CTRL+V en correo con formato)");
+
+            let contenidoCopia, textoPlano;
+
+            if(usarTexto) {
+                // Texto tabulado
+                let lines = [`SOLICITUD #${idSol}${sufijo}`, `Destino: ${gMaq} | Sección: ${gSec}${extInfo}`, `Técnico: ${gTec}`, ''];
+                lines.push(['#','Código','PN','Descripción','Cant.'].join('\t'));
+                items.forEach((it, idx) => lines.push([idx+1, it.codigo, it.noParte||'-', it.descripcion, it.cant].join('\t')));
+                textoPlano = lines.join('\n');
+                contenidoCopia = [new ClipboardItem({ 'text/plain': new Blob([textoPlano], {type:'text/plain'}) })];
+            } else {
+                // Tabla HTML
+                const html = `<div style="font-family:Arial,sans-serif;color:#333;font-size:12px;border:1px solid #ccc;padding:15px;">
+                    <h2 style="color:#1e3a8a;margin-top:0;">SOLICITUD DE REPUESTOS #${idSol}${sufijo}</h2>
+                    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;text-align:left;">
+                        <thead style="background-color:#f3f4f6;"><tr><th>#</th><th>Código / PN</th><th>Descripción</th><th>Cant.</th></tr></thead>
                         <tbody>
-                            <tr><td colspan="5" style="background-color:#e0f2fe; text-align:center; padding:5px;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}${extInfo}</td></tr>
-                            ${carrito.map((item, idx) => `
-                                <tr>
-                                    <td>${idx+1}</td>
-                                    <td style="font-family: monospace;"><b>${item.codigo}</b><br><span style="font-size:10px; color:#555;">PN: ${item.noParte}</span></td>
-                                    <td>${item.descripcion}</td>
-                                    <td style="text-align: center; font-weight: bold; color: #d97706; font-size:15px;">${item.cant}</td>
-                                    <td>${gTec}</td>
-                                </tr>
-                            `).join('')}
+                            <tr><td colspan="4" style="background:#e0f2fe;text-align:center;"><b>Destino:</b> Máq: ${gMaq} | Secc: ${gSec}${extInfo} | Téc: ${gTec}</td></tr>
+                            ${items.map((it,i) => `<tr><td>${i+1}</td><td><b>${it.codigo}</b><br><small>${it.noParte||''}</small></td><td>${it.descripcion}</td><td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td></tr>`).join('')}
                         </tbody>
-                    </table>
-                </div>
-            `;
+                    </table></div>`;
+                textoPlano = `Solicitud #${idSol}${sufijo} - Máq: ${gMaq}`;
+                contenidoCopia = [new ClipboardItem({ 'text/html': new Blob([html], {type:'text/html'}), 'text/plain': new Blob([textoPlano], {type:'text/plain'}) })];
+            }
 
             try {
-                await guardarCompraEnHistorial(idSol, carrito, formData);
-
-                const htmlBlob = new Blob([tablaHtml], { type: 'text/html' });
-                const textBlob = new Blob(["Pega aquí con CTRL+V la tabla."], { type: 'text/plain' });
-                await navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })]);
-
-                alert(`✅ Solicitud #${idSol} generada y copiada al portapapeles.\n\nAl abrirse el correo, haz clic en el cuerpo y presiona CTRL + V.\n\n(También puedes usar el botón de 'Descargar PDF' y adjuntarlo si lo prefieres)`);
-            } catch (err) {
-                alert("No se pudo copiar automáticamente al portapapeles, pero se guardó en el historial. Puedes usar la opción de PDF al abrir el correo.");
-            } finally {
-                let cuerpoBase = encodeURIComponent(`David,\n\nAdjunto solicitud de compra #${idSol} para mantenimiento:\n\n[PRESIONA CTRL + V AQUÍ PARA PEGAR LA TABLA O ADJUNTA EL PDF]\n\nSaludos.`);
-                window.location.href = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
-
-                carrito = []; actualizarBadgeCarrito(); actualizarMiniCarrito(); cerrarCarrito(); renderHistorialSencillo();
+                await navigator.clipboard.write(contenidoCopia);
+                alert(`✅ Solicitud #${idSol} copiada al portapapeles (${usarTexto ? 'texto tabulado' : 'tabla HTML'}).\nAbre el correo y presiona CTRL+V.`);
+            } catch(e) {
+                alert(`Solicitud #${idSol} lista. No se pudo copiar automáticamente; usa el PDF.`);
             }
+
+            const cuerpoBase = encodeURIComponent(`David,\n\nAdjunto solicitud de compra #${idSol} | Máq: ${gMaq}:\n\n[PRESIONA CTRL + V AQUI]\n\nSaludos.`);
+            window.location.href = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
+        }
+
+        async function procesarSolicitudEmail() {
+            if(carrito.length === 0) return alert("No hay items en el carrito.");
+
+            const gMaq = document.getElementById('gMaquina').value.trim() || '-';
+            const gSec = document.getElementById('gSeccion').value.trim() || '-';
+            const gTec = document.getElementById('gTecnico').value.trim() || '';
+            const gSer = document.getElementById('gSerie')?.value.trim() || '';
+            const gMod = document.getElementById('gModelo')?.value.trim() || '';
+            const gFeS = document.getElementById('gFechaSug')?.value || '';
+
+            const d = new Date();
+            const idSol = d.getFullYear().toString() + (d.getMonth()+1).toString().padStart(2,'0') +
+                          d.getDate().toString().padStart(2,'0') + d.getHours().toString().padStart(2,'0') +
+                          d.getMinutes().toString().padStart(2,'0') + d.getSeconds().toString().padStart(2,'0');
+
+            const formData = { maquina: gMaq, seccion: gSec, tecnico: gTec, serie: gSer, modelo: gMod, fechaSug: gFeS };
+            await guardarCompraEnHistorial(idSol, carrito, formData);
+
+            await _enviarSolicitud(idSol, carrito, formData, false);
+
+            carrito = []; actualizarBadgeCarrito(); actualizarMiniCarrito(); cerrarCarrito(); renderHistorialSencillo();
+        }
+
+        async function reenviarSolicitudHistorial(event, btn) {
+            event.stopPropagation();
+            const card = btn.closest('[data-sol-data]');
+            if(!card) return;
+            const solId = card.getAttribute('data-sol-id');
+            const items = JSON.parse(card.getAttribute('data-sol-data') || '[]');
+            const form  = JSON.parse(card.getAttribute('data-sol-form') || '{}');
+            await _enviarSolicitud(solId, items, form, true);
         }
 
         
@@ -1180,28 +1851,48 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                         <div class="flex gap-1 justify-center items-center">
                             <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Añadir 1 rápido" onclick="simpleAddToCart('${inv.codigo}', 1)">+1</button>
                             <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Personalizar (Máquina, etc)" onclick='abrirModalDetalle(TODOS_LOS_DATOS.find(x => x.inv.codigo === "${inv.codigo}"))'>➕</button>
+                            <button class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-1 py-1 rounded text-[10px] shadow-sm" title="Historial de solicitudes" onclick="verHistorialRepuesto('${inv.codigo}')">📄</button>
                         </div>
                     </td>
                     <td class="p-2 max-w-[120px] break-words"><b>${inv.codigo}</b><br><span class="text-[10px] text-gray-500">${inv.noParte||'-'}</span></td>
-                    <td class="p-2 max-w-[200px] whitespace-normal"><div class="line-clamp-2 leading-tight text-[11px]" title="${inv.descripcion}">${inv.descripcion}</div></td>
+                    <td class="p-2 max-w-[200px] whitespace-normal"><div class="line-clamp-3 leading-tight text-[11px]" title="${inv.descripcion}">${inv.descripcion}</div></td>
                     <td><input type="text" data-codigo="${inv.codigo}" class="in-util w-full min-w-[100px] border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
                     <td><input type="text" data-codigo="${inv.codigo}" class="in-ubic w-full min-w-[100px] border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    
+                    <td class="text-center p-1 cursor-pointer hover:bg-yellow-50 w-[44px]" data-ingreso-codigo="${inv.codigo}" onclick="abrirModalIngreso('${inv.codigo}')">
+                        ${inv.ingresoManual ? `<span class="font-bold text-green-700 text-xs">${inv.ingresoManual.cantidad}</span><br><span class="text-[9px] text-gray-500">${inv.ingresoManual.fecha}</span>` : `<span class="text-[10px] text-gray-300 italic">+</span>`}
+                    </td>
+
                     <td class="text-center font-bold text-blue-900 bg-blue-50">${inv.cantidad}</td>
                     
-                    <td class="sol-col p-2 text-center text-xs"><b>${formatFechaCorto(solFecha)}</b><br><span class="text-[10px] text-gray-500 font-semibold">${solOrigen}</span></td>
-                    
-                    <td class="q-col text-center text-[10px] whitespace-normal max-w-[80px] leading-tight text-gray-600 font-mono tracking-tighter">
-                        ${formatQ(qConsumo[0])}<span class="text-gray-300 mx-1">|</span>${formatQ(qConsumo[1])}<span class="text-gray-300 mx-1">|</span><span class="font-bold text-blue-700">${formatQ(qConsumo[2])}</span><span class="text-gray-300 mx-1">|</span>${formatQ(qConsumo[3])}<span class="text-gray-300 mx-1">|</span>${formatQ(qConsumo[4])}
+                    <td class="sol-col p-2 text-center text-xs">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full shadow-sm mb-1 ${estadoClase.includes('green') ? 'bg-green-400' : estadoClase.includes('yellow') ? 'bg-yellow-400' : estadoClase.includes('red') ? 'bg-red-400' : 'bg-gray-300'}" title="${estado}"></span>
+                        <b class="block">${formatFechaCorto(solFecha)}</b>
+                        <span class="text-[10px] text-gray-500 font-semibold">${solOrigen}</span>
+                    </td>
+                    <td class="q-col text-center text-[10px] whitespace-normal max-w-[60px] leading-tight text-gray-600 font-mono tracking-tighter">
+                        ${formatQ(qConsumo[0])}<span class="text-gray-300 mx-0.5">|</span>${formatQ(qConsumo[1])}<br>
+                        <span class="font-bold text-blue-700 bg-blue-50 px-1 rounded inline-block my-0.5">${formatQ(qConsumo[2])}</span><br>
+                        ${formatQ(qConsumo[3])}<span class="text-gray-300 mx-0.5">|</span>${formatQ(qConsumo[4])}
                     </td>
                     <td class="p-2 max-w-[150px] whitespace-normal"><div class="line-clamp-2 leading-tight text-[10px]" title="${maquinasUnicas}">${maquinasUnicas}</div></td>
-                    <td class="text-center p-1 w-24"><span class="badge ${estadoClase} w-full block">${estado}</span><br><span class="text-[10px] text-gray-500 font-semibold mt-1 block">${formatFechaCorto(inv.ultimaCompra)}</span></td>
                     <td class="text-center p-1 text-xs"><span class="font-bold text-gray-800">${vecesUsado}</span><br><span class="text-[10px] font-bold text-purple-700 bg-purple-50 px-1 rounded">${fila.demandaAnual !== null ? fila.demandaAnual : '-'}</span></td>
                     <td class="text-center p-1 text-xs"><span class="text-gray-500 text-[10px]">P: ${formatFechaCorto(primeraSalida)}</span><br><span class="font-bold border-t mt-1 pt-1 block">U: ${formatFechaCorto(ultimaSalida)}</span></td>
-                    <td class="q-col text-center text-[10px] whitespace-normal max-w-[80px] leading-tight text-gray-600 font-mono tracking-tighter">
-                        ${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}<span class="text-gray-300 mx-1">|</span>${qDiasSalidas[1] !== null ? Math.round(qDiasSalidas[1]) : '-'}<span class="text-gray-300 mx-1">|</span><span class="font-bold text-red-600">${qDiasSalidas[2] !== null ? Math.round(qDiasSalidas[2]) : '-'}</span><span class="text-gray-300 mx-1">|</span>${qDiasSalidas[3] !== null ? Math.round(qDiasSalidas[3]) : '-'}<span class="text-gray-300 mx-1">|</span>${qDiasSalidas[4] !== null ? Math.round(qDiasSalidas[4]) : '-'}
+                    <td class="q-col text-center text-[10px] whitespace-normal max-w-[60px] leading-tight text-gray-600 font-mono tracking-tighter">
+                        ${qDiasSalidas[0] !== null ? Math.round(qDiasSalidas[0]) : '-'}<span class="text-gray-300 mx-0.5">|</span>${qDiasSalidas[1] !== null ? Math.round(qDiasSalidas[1]) : '-'}<br>
+                        <span class="font-bold text-red-600 bg-red-50 px-1 rounded inline-block my-0.5">${qDiasSalidas[2] !== null ? Math.round(qDiasSalidas[2]) : '-'}</span><br>
+                        ${qDiasSalidas[3] !== null ? Math.round(qDiasSalidas[3]) : '-'}<span class="text-gray-300 mx-0.5">|</span>${qDiasSalidas[4] !== null ? Math.round(qDiasSalidas[4]) : '-'}
                     </td>
                     <td class="proj-col text-[10px] whitespace-normal max-w-[100px] leading-tight no-print" data-val="${proyeccionMs||0}">${proyeccionTexto}</td>
                     <td class="proj-col text-[10px] whitespace-normal max-w-[100px] leading-tight hidden print:table-cell">${proyeccionTexto}</td>
+                    
+                    <td class="text-center p-1 w-20 bg-red-50">
+                        <div class="flex items-center justify-between gap-1 w-full relative">
+                            <button class="bg-red-500 hover:bg-red-600 text-white rounded w-5 h-5 text-sm font-bold flex items-center justify-center -mt-0.5" onclick="abrirModalSalidaLocal('${inv.codigo}')" title="Registrar una salida">-</button>
+                            <span class="font-bold text-gray-800 text-xs cursor-pointer px-1 block w-full text-center hover:bg-red-200 rounded" onclick="verHistorialSalidasLocales('${inv.codigo}')" title="Ver devoluciones / historial">${inv.salidasLocales ? inv.salidasLocales.reduce((acc, s) => acc + s.cantidad, 0) : 0}</span>
+                            <button class="bg-gray-400 hover:bg-gray-500 text-white rounded w-5 h-5 text-xs font-bold flex items-center justify-center -mt-0.5" onclick="corregirSalidaLocal('${inv.codigo}')" title="Revertir (Eliminar última salida)">+</button>
+                        </div>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -1249,6 +1940,7 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
             const fMaquina = document.getElementById('filtroMaquina').value;
             const fEstado = document.getElementById('filtroEstado').value;
             const fUltimaSalida = document.getElementById('filtroUltimaSalida').value;
+            const fUltimoIngreso = document.getElementById('filtroUltimoIngreso').value;
             const fDesde = document.getElementById('filtroSalidaDesde').value;
             const fHasta = document.getElementById('filtroSalidaHasta').value;
 
@@ -1275,7 +1967,7 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                 if (mostrar) {
                     if (fStock === 'cero' && fila.inv.cantidad !== 0) mostrar = false;
                     else if (fStock === 'uno' && fila.inv.cantidad !== 1) mostrar = false;
-                    else if (fStock === 'resto' && fila.inv.cantidad <= 1) mostrar = false;
+                    else if (fStock === 'resto' && fila.inv.cantidad <= 0) mostrar = false;
                 }
                 
                 if (mostrar && fUltimaSalida !== 'todas') {
@@ -1311,6 +2003,49 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                             if (dProy.getFullYear() !== lYear || dProy.getMonth() !== lMonth) mostrar = false;
                         } 
                         else if (fProy === 'este_anio' && dProy.getFullYear() !== currentYear) mostrar = false;
+                        else if (fProy === 'vencidas') {
+                            const todayTS = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                            const proyTS = new Date(dProy.getFullYear(), dProy.getMonth(), dProy.getDate()).getTime();
+                            if (proyTS > todayTS) mostrar = false;
+                        }
+                    }
+                }
+
+                if (mostrar && fUltimoIngreso !== 'todas') {
+                    if (!fila.inv.ultimaCompra || fila.inv.ultimaCompra === null) mostrar = false;
+                    else {
+                        const dIngreso = new Date(parseFloat(fila.inv.ultimaCompra));
+                        const iYear = dIngreso.getFullYear(); const iMonth = dIngreso.getMonth();
+
+                        if (fUltimoIngreso === 'este_mes' && (iYear !== currentYear || iMonth !== currentMonth)) mostrar = false;
+                        else if (fUltimoIngreso === 'mes_anterior') {
+                            let lMonth = currentMonth - 1; let lYear = currentYear;
+                            if (lMonth < 0) { lMonth = 11; lYear--; }
+                            if (iYear !== lYear || iMonth !== lMonth) mostrar = false;
+                        } 
+                        else if (fUltimoIngreso === 'este_anio' && iYear !== currentYear) mostrar = false;
+                        else if (fUltimoIngreso === 'anio_anterior' && iYear !== currentYear - 1) mostrar = false;
+                    }
+                }
+
+                if (mostrar) {
+                    const fIngMan = document.getElementById('filtroIngresoManual').value;
+                    if(fIngMan !== 'todos') {
+                        const im = fila.inv.ingresoManual;
+                        if(!im || !im.fecha) { mostrar = false; }
+                        else if(fIngMan !== 'con_ingreso') {
+                            // fecha stored as dd/mm/yyyy
+                            const parts = im.fecha.split('/');
+                            const imYear = parseInt(parts[2]); const imMonth = parseInt(parts[1]) - 1;
+                            if(fIngMan === 'este_mes' && (imYear !== currentYear || imMonth !== currentMonth)) mostrar = false;
+                            else if(fIngMan === 'mes_anterior') {
+                                let lM = currentMonth - 1; let lY = currentYear;
+                                if(lM < 0) { lM = 11; lY--; }
+                                if(imYear !== lY || imMonth !== lM) mostrar = false;
+                            }
+                            else if(fIngMan === 'este_anio' && imYear !== currentYear) mostrar = false;
+                            else if(fIngMan === 'anio_anterior' && imYear !== currentYear - 1) mostrar = false;
+                        }
                     }
                 }
 
@@ -1324,16 +2059,155 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
 
         document.getElementById('busquedaTexto').addEventListener('keypress', (e) => { if (e.key === 'Enter') ejecutarBusqueda(); });
         document.getElementById('btnEjecutarBusqueda').addEventListener('click', ejecutarBusqueda);
-        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda', 'filtroUltimaSalida', 'filtroSalidaDesde', 'filtroSalidaHasta'].forEach(id => {
+        ['filtroStock', 'filtroProyeccion', 'filtroGrupo', 'filtroMaquina', 'filtroEstado', 'tipoBusqueda', 'filtroUltimaSalida', 'filtroUltimoIngreso', 'filtroSalidaDesde', 'filtroSalidaHasta', 'filtroIngresoManual'].forEach(id => {
             document.getElementById(id).addEventListener('change', ejecutarBusqueda);
         });
 
         document.getElementById('btnCargarMas').addEventListener('click', renderizarBloqueTabla);
         document.getElementById('btnMostrarImportar').addEventListener('click', () => document.getElementById('zonaImportacion').classList.remove('hidden'));
         document.getElementById('btnBorrarDatos').addEventListener('click', async () => {
-            if(confirm("¿Seguro que quieres borrar la base de datos y el historial guardado?")) { await borrarDatosLocales(); location.reload(); }
+            const pass = prompt("Acción destructiva. Ingrese contraseña para borrar todo (PIN: 1234):");
+            if(pass !== "1234") {
+                if(pass !== null) alert("Contraseña incorrecta. Operación cancelada.");
+                return;
+            }
+            if(confirm("¿Seguro que quieres borrar irreversiblemente TODOS los datos, inventario y el historial guardado?")) { 
+                await borrarDatosLocales(); 
+                location.reload(); 
+            }
         });
-        document.getElementById('btnImprimirPdf').addEventListener('click', () => window.print());
+        
+        function generarPdfVistaSencilla() {
+            const datos = TODOS_LOS_DATOS; // always all visible
+            if(datos.length === 0) return alert('No hay ítems en catálogo para imprimir.');
+
+            let printDiv = document.createElement('div');
+            printDiv.id = 'cartPrintArea';
+            printDiv.innerHTML = `
+                <div style="font-family: Arial, sans-serif; color: #000; padding: 10px;">
+                    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 16px; display:flex; justify-content:space-between; align-items:flex-end;">
+                        <div>
+                            <h1 style="color: #1e3a8a; font-size: 20px; margin:0;">EMPRESAS GALINDO</h1>
+                            <h2 style="font-size: 13px; margin: 4px 0 0 0; color:#555;">CATÁLOGO GENERAL DE REPUESTOS</h2>
+                        </div>
+                        <div style="font-size:10px; text-align:right; color:#777;">
+                            <b>Emisión:</b> ${new Date().toLocaleString('es-GT')}<br>
+                            <b>Total ítems:</b> ${datos.length}
+                        </div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 9px;">
+                        <thead>
+                            <tr style="background-color: #dbeafe; text-align: left;">
+                                <th style="border: 1px solid #ccc; padding: 5px;">#</th>
+                                <th style="border: 1px solid #ccc; padding: 5px;">Código / PN</th>
+                                <th style="border: 1px solid #ccc; padding: 5px;">Nombre Útil / Descripción</th>
+                                <th style="border: 1px solid #ccc; padding: 5px;">Ubicación</th>
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:right;">Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${datos.map((f, i) => `
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="border: 1px solid #ccc; padding: 4px; text-align:center; color:#888;">${i+1}</td>
+                                    <td style="border: 1px solid #ccc; padding: 4px; white-space:nowrap;"><b>${f.inv.codigo}</b><br><span style="color:#888;">${f.inv.noParte || '-'}</span></td>
+                                    <td style="border: 1px solid #ccc; padding: 4px;">${f.inv.nombreUtil || f.inv.descripcion}</td>
+                                    <td style="border: 1px solid #ccc; padding: 4px;">${f.inv.ubicacion || '-'}</td>
+                                    <td style="border: 1px solid #ccc; padding: 4px; text-align:right; font-weight:bold;">${f.inv.cantidad}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            document.body.appendChild(printDiv);
+            document.body.classList.add('printing-cart');
+            window.print();
+            document.body.classList.remove('printing-cart');
+            document.body.removeChild(printDiv);
+        }
+
+        function generarPdfVistaDetallada() {
+            if(DATOS_FILTRADOS.length === 0) return alert("No hay datos para imprimir.");
+            if(DATOS_FILTRADOS.length > 500) {
+                if(!confirm(`Se generará un PDF de ${DATOS_FILTRADOS.length} ítems. Esto puede demorar. ¿Continuar?`)) return;
+            }
+
+            const completo = confirm("¿Desea incluir columnas de análisis (Demanda, Consumo, Días entre salidas, Proyección)?\n\nAceptar = Reporte Completo  |  Cancelar = Reporte Básico");
+
+            let printDiv = document.createElement('div');
+            printDiv.id = 'cartPrintArea';
+            printDiv.innerHTML = `
+                <div style="font-family: Arial, sans-serif; color: #000; padding: 10px;">
+                    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 16px; display:flex; justify-content:space-between; align-items:flex-end;">
+                        <div>
+                            <h1 style="color: #1e3a8a; font-size: 20px; margin:0;">EMPRESAS GALINDO</h1>
+                            <h2 style="font-size: 13px; margin: 4px 0 0 0; color:#555;">REPORTE DE INVENTARIO ${completo ? '- ANÁLISIS COMPLETO' : '- RESUMEN'}</h2>
+                        </div>
+                        <div style="font-size:10px; text-align:right; color:#777;">
+                            <b>Emisión:</b> ${new Date().toLocaleString('es-GT')}<br>
+                            <b>Total ítems:</b> ${DATOS_FILTRADOS.length}
+                        </div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 9px;">
+                        <thead>
+                            <tr style="background-color: #f3f4f6; text-align: left;">
+                                <th style="border: 1px solid #ccc; padding: 5px;">Código / PN</th>
+                                <th style="border: 1px solid #ccc; padding: 5px;">Descripción / Nombre Útil</th>
+                                <th style="border: 1px solid #ccc; padding: 5px;">Máquinas</th>
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:right;">Stock</th>
+                                <th style="border: 1px solid #ccc; padding: 5px;">Ubicación</th>
+                                ${completo ? `
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:center;">Demanda<br>Anual</th>
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:center;">Consumo<br>(Mediana)</th>
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:center;">Días entre<br>Salidas</th>
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:center;">Estado</th>
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:center;">Proy. Agotamiento</th>
+                                ` : `
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:center;">Estado</th>
+                                <th style="border: 1px solid #ccc; padding: 5px; text-align:center;">Proy. Agotamiento</th>
+                                `}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${DATOS_FILTRADOS.map(f => `
+                                <tr style="border-bottom:1px solid #eee;">
+                                    <td style="border: 1px solid #ccc; padding: 5px; white-space:nowrap;"><b>${f.inv.codigo}</b><br><span style="font-size:8px;color:#777;">${f.inv.noParte || '-'}</span></td>
+                                    <td style="border: 1px solid #ccc; padding: 5px;">${f.inv.nombreUtil ? `<b>${f.inv.nombreUtil}</b><br><span style="color:#777;font-size:8px;">${f.inv.descripcion}</span>` : f.inv.descripcion}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; font-size:8px;">${f.maquinasUnicas}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:right; font-weight:bold;">${f.inv.cantidad}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; font-size:8px;">${f.inv.ubicacion || '-'}</td>
+                                    ${completo ? `
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:center;">${f.demandaAnual !== null ? f.demandaAnual : '-'}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:center;">${f.qConsumo ? formatQ(f.qConsumo[2]) : '-'}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:center;">${f.qDiasSalidas && f.qDiasSalidas[2] !== null ? Math.round(f.qDiasSalidas[2]) + 'd' : '-'}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:center;">${f.estado}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:center;">${f.proyeccionTexto}</td>
+                                    ` : `
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:center;">${f.estado}</td>
+                                    <td style="border: 1px solid #ccc; padding: 5px; text-align:center;">${f.proyeccionTexto}</td>
+                                    `}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            document.body.appendChild(printDiv);
+            document.body.classList.add('printing-cart');
+            window.print();
+            document.body.classList.remove('printing-cart');
+            document.body.removeChild(printDiv);
+        }
+
+        document.getElementById('btnImprimirPdf').addEventListener('click', () => {
+            const enSencilla = !document.getElementById('vistaSencilla').classList.contains('hidden');
+            if(enSencilla) {
+                generarPdfVistaSencilla();
+            } else {
+                generarPdfVistaDetallada();
+            }
+        });
+
 
         let sortAscendente = true; 
         document.getElementById('thSortProyeccion').addEventListener('click', () => {
@@ -1492,7 +2366,13 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                 const metaDatos = {};
                 if(oldData && oldData.resultadosTabla) {
                     oldData.resultadosTabla.forEach(f => {
-                        metaDatos[f.inv.codigo] = { ubicacion: f.inv.ubicacion || '', nombreUtil: f.inv.nombreUtil || '' };
+                        metaDatos[f.inv.codigo] = { 
+                            ubicacion: f.inv.ubicacion || '', 
+                            nombreUtil: f.inv.nombreUtil || '',
+                            ingresoManual: f.inv.ingresoManual || null,
+                            salidasLocales: f.inv.salidasLocales || [],
+                            oldCantidad: f.inv.cantidad
+                        };
                     });
                 }
 
@@ -1520,7 +2400,22 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                         let fechaCompra = parseFechaRobusta(fechaKey ? row[fechaKey] : null);
 
                         if (!inventarioFiltrado[codigo]) {
-                            inventarioFiltrado[codigo] = { codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, ultimaCompra: fechaCompra, ubicacion: metaDatos[codigo] ? metaDatos[codigo].ubicacion : '', nombreUtil: metaDatos[codigo] && metaDatos[codigo].nombreUtil ? metaDatos[codigo].nombreUtil : generarNombreUtil(desc) };
+                            let mIngreso = null;
+                            let mSalidas = [];
+                            if (metaDatos[codigo]) {
+                                mIngreso = metaDatos[codigo].ingresoManual;
+                                if (metaDatos[codigo].oldCantidad !== undefined && parseFloat(metaDatos[codigo].oldCantidad) === cant) {
+                                    mSalidas = metaDatos[codigo].salidasLocales;
+                                }
+                            }
+                            inventarioFiltrado[codigo] = { 
+                                codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant, 
+                                ultimaCompra: fechaCompra, 
+                                ubicacion: metaDatos[codigo] ? metaDatos[codigo].ubicacion : '', 
+                                nombreUtil: metaDatos[codigo] && metaDatos[codigo].nombreUtil ? metaDatos[codigo].nombreUtil : generarNombreUtil(desc),
+                                ingresoManual: mIngreso,
+                                salidasLocales: mSalidas
+                            };
                         } else if (fechaCompra && (!inventarioFiltrado[codigo].ultimaCompra || fechaCompra > inventarioFiltrado[codigo].ultimaCompra)) {
                             inventarioFiltrado[codigo].ultimaCompra = fechaCompra;
                             inventarioFiltrado[codigo].cantidad = cant;
@@ -1665,6 +2560,9 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
 
         // --- ARRANQUE ---
         document.addEventListener('DOMContentLoaded', async () => {
+            if(document.getElementById('gFechaSug')) {
+                document.getElementById('gFechaSug').value = new Date().toISOString().slice(0, 10);
+            }
             try {
                 const datosGuardados = await cargarDatos();
                 if (datosGuardados && datosGuardados.resultadosTabla && datosGuardados.resultadosTabla.length > 0) {
@@ -1677,7 +2575,144 @@ function vaciarCarrito() { if(confirm("¿Seguro que deseas vaciar todo el carrit
                 document.getElementById('zonaImportacion').classList.remove('hidden');
                 document.getElementById('pantallaCarga').classList.add('hidden');
             }
+
+
+
+        // --- COMPONENTES CONTROL DE INVENTARIO LOCAL ---
+        let currentItemForIngreso = null;
+        window.abrirModalIngreso = function(codigo) {
+            if(!isBodeguero) { alert("Solo modo bodeguero permite estas modificaciones."); return; }
+            currentItemForIngreso = codigo;
+            const row = TODOS_LOS_DATOS.find(d => d.inv.codigo === codigo);
+            document.getElementById('tituloModalIngreso').innerText = `Ingreso: ${codigo}`;
+            if (row && row.inv.ingresoManual) {
+                document.getElementById('inputIngresoCant').value = row.inv.ingresoManual.cantidad;
+                let parsedDate = new Date(row.inv.ingresoManual.fecha.split('/').reverse().join('-'));
+                document.getElementById('inputIngresoFecha').value = isNaN(parsedDate) ? new Date().toISOString().slice(0,10) : parsedDate.toISOString().slice(0, 10);
+            } else {
+                document.getElementById('inputIngresoCant').value = "";
+                document.getElementById('inputIngresoFecha').value = new Date().toISOString().slice(0, 10);
+            }
+            document.getElementById('modalIngresoManual').classList.remove('hidden');
+        };
+
+        window.cerrarModalIngreso = function() {
+            document.getElementById('modalIngresoManual').classList.add('hidden');
+            currentItemForIngreso = null;
+        };
+
+        window.guardarIngresoManual = function() {
+            const cant = document.getElementById('inputIngresoCant').value;
+            const f = document.getElementById('inputIngresoFecha').value;
+            if(!cant || !f) { alert("Rellene cantidad y fecha"); return; }
+            const row = TODOS_LOS_DATOS.find(d => d.inv.codigo === currentItemForIngreso);
+            if(row) {
+                row.inv.ingresoManual = { cantidad: parseFloat(cant), fecha: formatFechaCorto(new Date(f).getTime() + 86400000) };
+            }
+            procesarGuardadoLocalRapido();
+            _refrescarCeldaIngresoManual(currentItemForIngreso);
+            cerrarModalIngreso();
+        };
+
+        window.borrarIngresoManual = function() {
+            const row = TODOS_LOS_DATOS.find(d => d.inv.codigo === currentItemForIngreso);
+            if(row) { row.inv.ingresoManual = null; }
+            procesarGuardadoLocalRapido();
+            _refrescarCeldaIngresoManual(currentItemForIngreso);
+            cerrarModalIngreso();
+        };
+
+        function _refrescarCeldaIngresoManual(codigo) {
+            if(!codigo) return;
+            const row = TODOS_LOS_DATOS.find(d => d.inv.codigo === codigo);
+            if(!row) return;
+            const im = row.inv.ingresoManual;
+            const nuevoHtml = im
+                ? `<span class="font-bold text-green-700 text-xs">${im.cantidad}</span><br><span class="text-[9px] text-gray-500">${im.fecha}</span>`
+                : `<span class="text-[10px] text-gray-300 italic">+</span>`;
+
+            // Vista detallada: busca la celda por data-ingreso-codigo
+            const celdaD = document.querySelector(`td[data-ingreso-codigo="${codigo}"]`);
+            if(celdaD) celdaD.innerHTML = nuevoHtml;
+
+            // Vista sencilla: no muestra esta columna, nada que hacer
+        }
+
+        let currentItemForSalida = null;
+        window.abrirModalSalidaLocal = function(codigo) {
+            currentItemForSalida = codigo;
+            document.getElementById('tituloModalSalida').innerText = `Registrar 1 Salida: ${codigo}`;
+            document.getElementById('inputSalidaMaquina').value = document.getElementById('globalMaquina')?.value || "";
+            document.getElementById('inputSalidaSeccion').value = document.getElementById('globalSeccion')?.value || "";
+            document.getElementById('modalSalidaRapida').classList.remove('hidden');
+            setTimeout(() => document.getElementById('inputSalidaMaquina').focus(), 100);
+        };
+
+        window.cerrarModalSalida = function() {
+            document.getElementById('modalSalidaRapida').classList.add('hidden');
+            currentItemForSalida = null;
+        };
+
+        window.guardarSalidaRapida = function() {
+            const maq = document.getElementById('inputSalidaMaquina').value.trim().toUpperCase() || 'S/D';
+            const sec = document.getElementById('inputSalidaSeccion').value.trim().toUpperCase() || 'S/D';
+            
+            const row = TODOS_LOS_DATOS.find(d => d.inv.codigo === currentItemForSalida);
+            if(row) {
+                if(!row.inv.salidasLocales) row.inv.salidasLocales = [];
+                row.inv.salidasLocales.push({ cantidad: 1, maquina: maq, seccion: sec, timestamp: new Date().getTime() });
+            }
+            procesarGuardadoLocalRapido();
+            cerrarModalSalida();
+        };
+
+        window.corregirSalidaLocal = function(codigo) {
+            if(!confirm("¿Desea revertir (eliminar) la ÚLTIMA salida registrada en local de este ítem?")) return;
+            const row = TODOS_LOS_DATOS.find(d => d.inv.codigo === codigo);
+            if(row && row.inv.salidasLocales && row.inv.salidasLocales.length > 0) {
+                row.inv.salidasLocales.pop(); 
+                procesarGuardadoLocalRapido();
+            } else {
+                alert("No hay salidas locales para revertir.");
+            }
+        };
+
+        window.verHistorialSalidasLocales = function(codigo) {
+            const row = TODOS_LOS_DATOS.find(d => d.inv.codigo === codigo);
+            if(row && row.inv.salidasLocales && row.inv.salidasLocales.length > 0) {
+                let msg = `Historial de Salidas Bypass - [${codigo}]\n\n`;
+                row.inv.salidasLocales.forEach(s => {
+                    msg += `- 1 unidad -> Máq: ${s.maquina} | Sec: ${s.seccion} (${new Date(s.timestamp).toLocaleString()})\n`;
+                });
+                msg += `\n(Estas salidas se limpiarán automáticamente al subir el CSV actualizado que descuente el stock real)`;
+                alert(msg);
+            } else {
+                alert("No hay salidas registradas localmente.");
+            }
+        };
+
+        async function procesarGuardadoLocalRapido() {
+            const setGrupos = new Set();
+            const setMaquinas = new Set();
+            TODOS_LOS_DATOS.forEach(d => { setGrupos.add(d.inv.grupo); if(d.maquinasUnicas) d.maquinasUnicas.split(', ').forEach(m => setMaquinas.add(m)); });
+            
+            await guardarDatos({ resultadosTabla: TODOS_LOS_DATOS, gruposUnicos: Array.from(setGrupos), maquinasUnicas: Array.from(setMaquinas) });
+            
+            // Re-render
+            const currentT = document.getElementById('tableBody');
+            currentT.innerHTML = "";
+            renderizarBloqueTabla();
+        }
+
         });
     </script>
+
+    <footer class="text-center text-gray-400 text-xs py-6 mt-8 border-t border-gray-200 no-print w-full bg-gray-50 absolute bottom-0 left-0 right-0">
+        <p class="mb-1">Este software se distribuye bajo la <b>Licencia MIT</b>.</p>
+        <p>Desarrollado y mantenido por <a href="https://crgm.app" target="_blank" rel="noopener noreferrer" class="text-blue-500 font-bold hover:text-blue-700 hover:underline transition">crgm.app</a></p>
+    </footer>
+
+    <!-- Pad content to not be hidden behind absolute footer -->
+    <div class="h-16 no-print"></div>
 </body>
 </html>
