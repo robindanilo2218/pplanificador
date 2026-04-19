@@ -15,7 +15,8 @@
 - [x] Restaurar funcionalidad de Salidas (Bypass) e Ingresos Manuales directos desde la tabla.
 - [x] Restaurar funcionalidades de gestión: Botón "Borrar Todo" (PIN de Suguridad 1234), exportar Backup JSON y restaurar Backup JSON.
 - [x] Mejoras de email: Link "mailto" abriendo en pestaña nueva (`_blank`) y dobles tabulaciones (`\t\t`) intercolumnas al copiar solicitud formato texto.
+- [x] **Modularización (Refactorización de Código)**: El archivo `index.html` ya tiene demasiadas líneas, dificultando la lectura de la interfaz y la depuración; se dividió el código en `app.js` (procesos y lógicas) e `index.html` (vistas).
 
 ## Propuestas de Iteración
-1. **Modularización (Refactorización de Código)**: El archivo `index.html` ya tiene demasiadas líneas, dificultando la lectura de la interfaz y la depuración; se sugiere dividirlo mínimo en `app.js` (procesos y lógicas) e `index.html` (vistas).
-2. **Generación directa de reportes Excel específicos**: En vez de generar solo un volcado global del inventario, se podría agregar un módulo que exporte métricas de consumo por máquina o grupo a un dashboard con gráficas integradas para presentar a gerencia.
+1. **Generación directa de reportes Excel específicos**: En vez de generar solo un volcado global del inventario, se podría agregar un módulo que exporte métricas de consumo por máquina o grupo a un dashboard con gráficas integradas para presentar a gerencia.
+2. **Dashboard de Resumen Visual de Movimientos**: Construir una vista superior en la versión detallada con gráficas de pastel o barras de estado (por ejemplo, piezas Activas vs Inactivas, o ítems con nivel 0) utilizando alguna librería ligera como Chart.js.
