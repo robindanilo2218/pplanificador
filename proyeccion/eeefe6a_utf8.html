@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 
 <head>
@@ -246,14 +246,20 @@
                     class="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-4 rounded text-sm transition shadow-sm">📊
                     Exportar</button>
                 <div class="w-px bg-gray-300 mx-1 h-6"></div>
-                <button onclick="document.getElementById('zonaImportacion').classList.toggle('hidden')"
-                    class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-1 px-4 rounded text-sm transition border border-blue-300 shadow-sm flex items-center gap-1">
-                    🔄 Actualizar / Restaurar
-                </button>
+                <button id="btnMostrarImportar"
+                    class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-4 rounded text-sm transition">🔄
+                    Actualizar Datos</button>
                 <div class="w-px bg-gray-300 mx-1 h-6"></div>
                 <button onclick="exportarBackup()"
                     class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-1 px-3 rounded text-sm transition shadow-sm"
                     title="Descargar backup completo (inventario + historial)">💾 Backup</button>
+                <label
+                    class="bg-teal-100 hover:bg-teal-200 text-teal-800 font-semibold py-1 px-3 rounded text-sm transition shadow-sm cursor-pointer border border-teal-300"
+                    title="Restaurar desde un archivo backup .json">
+                    📂 Restaurar
+                    <input type="file" id="fileRestaurar" accept=".json" class="hidden"
+                        onchange="restaurarBackup(this)">
+                </label>
                 <button id="btnBorrarDatos"
                     class="bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-4 rounded text-sm transition border border-red-300">🗑️
                     Borrar Todo</button>
@@ -265,63 +271,29 @@
             <p class="text-gray-500 text-sm mt-2">Optimizando registros y buscando proyecciones vencidas.</p>
         </div>
 
-        <div id="zonaImportacion"
-            class="mb-6 transition-all duration-300 hidden bg-white p-4 rounded-lg shadow-sm border border-blue-100">
-            <h3 class="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center">
-                <span>🔄 Opciones de Actualización / Restauración</span>
-                <button onclick="document.getElementById('zonaImportacion').classList.add('hidden')"
-                    class="text-gray-400 hover:text-red-500 text-lg leading-none">&times;</button>
-            </h3>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- OPCION A -->
-                <div class="border rounded bg-gray-50 p-4 shadow-inner">
-                    <h4 class="font-bold text-blue-800 text-xs mb-3 uppercase">📋 Opción A: A partir de Archivos Fuente
-                    </h4>
-                    <div class="flex flex-col gap-3 mb-4">
-                        <div class="bg-white p-2 border rounded shadow-sm">
-                            <label class="block font-semibold mb-1 text-[11px] text-blue-800">1. Base Inventario (.xlsx,
-                                .xls)</label>
-                            <input type="file" id="fileExcel" accept=".xlsx, .xls"
-                                class="block w-full text-xs cursor-pointer">
-                        </div>
-                        <div class="bg-white p-2 border rounded shadow-sm">
-                            <label class="block font-semibold mb-1 text-[11px] text-green-800">2. Salidas Bodega
-                                (.csv)</label>
-                            <input type="file" id="fileCsv" accept=".csv" class="block w-full text-xs cursor-pointer">
-                        </div>
-                        <div class="bg-yellow-50 p-2 border border-yellow-200 rounded shadow-sm">
-                            <label class="block font-semibold mb-1 text-[11px] text-yellow-800"
-                                title="Archivos de inventario_online">3. Solicitudes Online <span
-                                    class="text-[9px] font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
-                            <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv"
-                                class="block w-full text-xs cursor-pointer" multiple>
-                            <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico. Puedes subir varios.</p>
-                        </div>
-                    </div>
-                    <button id="btnProcesar"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full text-sm shadow-sm transition">
-                        Procesar y Guardar Archivos
-                    </button>
+        <div id="zonaImportacion" class="mb-6 transition-all duration-300 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="p-4 border rounded bg-gray-50 shadow-sm">
+                    <label class="block font-semibold mb-2 text-sm text-blue-800">1. Base Inventario</label>
+                    <input type="file" id="fileExcel" accept=".xlsx, .xls" class="block w-full text-xs cursor-pointer">
                 </div>
-
-                <!-- OPCION B -->
-                <div class="border rounded bg-teal-50 p-4 shadow-inner flex flex-col">
-                    <h4 class="font-bold text-teal-800 text-xs mb-3 uppercase">💾 Opción B: Restaurar Backup (.json)
-                    </h4>
-                    <p class="text-xs text-teal-700 mb-6 leading-relaxed">Usa esta opción si previamente descargaste una
-                        copia de seguridad local. Este archivo contiene tanto el análisis como tu historial completo de
-                        solicitudes y salvas rápidas.</p>
-
-                    <label
-                        class="bg-white hover:bg-teal-100 text-teal-800 font-bold py-6 px-4 rounded text-center transition shadow-sm cursor-pointer border-2 border-dashed border-teal-300 w-full flex flex-col items-center gap-3 my-auto">
-                        <span class="text-3xl">📂</span>
-                        <span class="text-sm">Seleccionar archivo y Restaurar</span>
-                        <input type="file" id="fileRestaurar" accept=".json" class="hidden"
-                            onchange="restaurarBackup(this)">
-                    </label>
+                <div class="p-4 border rounded bg-gray-50 shadow-sm">
+                    <label class="block font-semibold mb-2 text-sm text-green-800">2. Salidas Bodega</label>
+                    <input type="file" id="fileCsv" accept=".csv" class="block w-full text-xs cursor-pointer">
+                </div>
+                <div class="p-4 border rounded bg-yellow-50 shadow-sm border-yellow-200">
+                    <label class="block font-semibold mb-2 text-sm text-yellow-800"
+                        title="Archivos de inventario_online">3. Solicitudes (Online) <span
+                            class="text-xs font-normal text-gray-500 bg-yellow-100 px-1 rounded border border-yellow-300">Opcional</span></label>
+                    <input type="file" id="fileSolicitudes" accept=".xlsx, .xls, .csv"
+                        class="block w-full text-xs cursor-pointer" multiple>
+                    <p class="text-[10px] text-gray-500 mt-1">Filtra: Electrico. Puedes subir varios.</p>
                 </div>
             </div>
+            <button id="btnProcesar"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded w-full md:w-auto h-10 shadow-sm transition">
+                Procesar y Guardar
+            </button>
         </div>
 
         <div id="tabsVistas" class="hidden mb-4 flex gap-2">
@@ -376,8 +348,10 @@
             </div>
 
             <div class="col-span-1 flex flex-col gap-4 max-h-[75vh]">
-                <div class="bg-orange-50 border border-orange-200 p-3 rounded shadow-sm flex flex-col flex-1 overflow-y-auto custom-scrollbar min-h-0"
+                <div class="bg-orange-50 border border-orange-200 p-3 rounded shadow-sm flex flex-col flex-1 overflow-hidden min-h-0"
                     id="cardCarrito">
+
+                    <!-- ENCABEZADO FIJO -->
                     <h3
                         class="font-bold text-orange-800 text-sm mb-2 border-b border-orange-200 pb-2 flex justify-between items-center shrink-0">
                         <span>🛒 Solicitud (<span id="sencCount">0</span>)</span>
@@ -390,56 +364,60 @@
                         </div>
                     </h3>
 
-                    <div class="mb-2 space-y-2 text-xs shrink-0">
-                        <div class="flex items-center gap-2">
-                            <div class="w-1 h-6 bg-orange-400 rounded-full shrink-0"></div>
-                            <input type="text" id="gMaquina" placeholder="Máquina / Destino *"
-                                class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
-                                list="listaMaquinas" onchange="vincularDatosMaquina(this.value, 'g')">
-                        </div>
-                        <div class="flex gap-1">
-                            <div class="w-1/2 flex items-center gap-1">
-                                <div class="w-0.5 h-4 bg-orange-300 rounded-full shrink-0"></div>
-                                <input type="text" id="gSerie" placeholder="Serie (Opc.)"
+                    <!-- ÁREA SCROLLEABLE (Inputs + Ítems) -->
+                    <div class="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0 pr-1">
+                        <div class="mb-2 space-y-2 text-xs shrink-0">
+                            <div class="flex items-center gap-2">
+                                <div class="w-1 h-6 bg-orange-400 rounded-full shrink-0"></div>
+                                <input type="text" id="gMaquina" placeholder="Máquina / Destino *"
                                     class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
-                                    list="listaSeries">
+                                    list="listaMaquinas" onchange="vincularDatosMaquina(this.value, 'g')">
                             </div>
-                            <div class="w-1/2 flex items-center gap-1">
-                                <div class="w-0.5 h-4 bg-orange-300 rounded-full shrink-0"></div>
-                                <input type="text" id="gModelo" placeholder="Modelo (Opc.)"
+                            <div class="flex gap-1">
+                                <div class="w-1/2 flex items-center gap-1">
+                                    <div class="w-0.5 h-4 bg-orange-300 rounded-full shrink-0"></div>
+                                    <input type="text" id="gSerie" placeholder="Serie (Opc.)"
+                                        class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
+                                        list="listaSeries">
+                                </div>
+                                <div class="w-1/2 flex items-center gap-1">
+                                    <div class="w-0.5 h-4 bg-orange-300 rounded-full shrink-0"></div>
+                                    <input type="text" id="gModelo" placeholder="Modelo (Opc.)"
+                                        class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
+                                        list="listaModelos">
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-1 h-6 bg-orange-400 rounded-full shrink-0"></div>
+                                <input type="text" id="gSeccion" placeholder="Sección *"
                                     class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
-                                    list="listaModelos">
+                                    list="listaSecciones">
+                            </div>
+                            <div class="flex gap-1">
+                                <div class="w-1/2 flex items-center gap-1">
+                                    <div class="w-0.5 h-4 bg-orange-300 rounded-full shrink-0"></div>
+                                    <input type="text" id="gTecnico" placeholder="Técnico (Opc.)"
+                                        class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
+                                        list="listaTecnicos">
+                                </div>
+                                <div class="w-1/2 flex items-center border rounded focus-within:border-orange-400 bg-white shadow-sm"
+                                    title="Fecha Sugerida">
+                                    <div class="w-0.5 h-4 bg-orange-300 ml-1 rounded-full shrink-0"></div>
+                                    <span class="text-[10px] text-gray-500 font-bold pl-1 pr-0.5">Sug:</span>
+                                    <input type="date" id="gFechaSug"
+                                        class="w-full text-[11px] p-1.5 outline-none bg-transparent appearance-none">
+                                </div>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <div class="w-1 h-6 bg-orange-400 rounded-full shrink-0"></div>
-                            <input type="text" id="gSeccion" placeholder="Sección *"
-                                class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
-                                list="listaSecciones">
-                        </div>
-                        <div class="flex gap-1">
-                            <div class="w-1/2 flex items-center gap-1">
-                                <div class="w-0.5 h-4 bg-orange-300 rounded-full shrink-0"></div>
-                                <input type="text" id="gTecnico" placeholder="Técnico (Opc.)"
-                                    class="w-full border p-1.5 rounded focus:border-orange-400 outline-none shadow-sm"
-                                    list="listaTecnicos">
-                            </div>
-                            <div class="w-1/2 flex items-center border rounded focus-within:border-orange-400 bg-white shadow-sm"
-                                title="Fecha Sugerida">
-                                <div class="w-0.5 h-4 bg-orange-300 ml-1 rounded-full shrink-0"></div>
-                                <span class="text-[10px] text-gray-500 font-bold pl-1 pr-0.5">Sug:</span>
-                                <input type="date" id="gFechaSug"
-                                    class="w-full text-[11px] p-1.5 outline-none bg-transparent appearance-none">
-                            </div>
+
+                        <div id="sencillaCarritoItems"
+                            class="flex-1 min-h-[80px] bg-white rounded border border-orange-100 p-1 space-y-1 text-xs shadow-inner">
+                            <div class="text-gray-400 text-center mt-4">Carrito vacío</div>
                         </div>
                     </div>
 
-                    <div id="sencillaCarritoItems"
-                        class="bg-white rounded border border-orange-100 p-1 space-y-1 text-xs shadow-inner min-h-[80px] mb-3 shrink-0">
-                        <div class="text-gray-400 text-center mt-4">Carrito vacío</div>
-                    </div>
-
-                    <div class="shrink-0 pt-3 mt-auto border-t border-orange-200">
+                    <!-- BOTONES FIJOS AL FINAL -->
+                    <div class="shrink-0 pt-3 mt-1 border-t border-orange-200">
                         <div class="flex gap-2">
                             <button onclick="procesarSolicitudEmail()"
                                 class="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 rounded text-xs transition">Enviar
@@ -456,6 +434,7 @@
                                 Cargar</button>
                         </div>
                     </div>
+
                 </div>
 
                 <div
@@ -631,8 +610,7 @@
 
             <div id="controlesPaginacion" class="w-full py-4 flex flex-col items-center hidden">
                 <p class="text-sm text-gray-500 mb-2">Mostrando <span id="countVisibles" class="font-bold">0</span> de
-                    <span id="countTotalFiltrados" class="font-bold">0</span> resultados
-                </p>
+                    <span id="countTotalFiltrados" class="font-bold">0</span> resultados</p>
                 <button id="btnCargarMas"
                     class="bg-white hover:bg-gray-100 text-blue-600 font-bold py-2 px-8 rounded border border-blue-300 shadow-sm transition">⬇️
                     Cargar más registros</button>
@@ -1007,6 +985,8 @@
             let carrito = [];
             let itemActualSeleccionado = null;
             let _editorSolCache = null;
+            let currentItemForIngreso = null;
+            let currentItemForSalida = null;
 
             let isBodeguero = sessionStorage.getItem('isBodeguero') === 'true';
 
@@ -1105,82 +1085,6 @@
                 });
             }
 
-            async function exportarBackup() {
-                try {
-                    const inventario = await cargarDatos() || null;
-                    const historial = await obtenerHistorial() || [];
-                    
-                    const backupObj = {
-                        version: "1.0",
-                        fecha: new Date().toISOString(),
-                        inventario: inventario,
-                        historial: historial
-                    };
-                    
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj));
-                    const link = document.createElement('a');
-                    link.setAttribute("href", dataStr);
-                    link.setAttribute("download", `Backup_Proyeccion_${new Date().toISOString().slice(0, 10)}.json`);
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                } catch (e) {
-                    alert("Error al exportar backup: " + e);
-                }
-            }
-
-            function restaurarBackup(input) {
-                const file = input.files[0];
-                if (!file) return;
-                
-                const pin = prompt('Ingrese el PIN de seguridad (1234) para restaurar el Backup. Esto REEMPLAZARÁ la base de datos actual en su totalidad:');
-                if (pin !== '1234') {
-                    if (pin !== null) alert('PIN Incorrecto. Restauración abortada.');
-                    input.value = "";
-                    return;
-                }
-                
-                if (!confirm("Restaurar un backup SOBREESCRIBIRÁ todos los datos actuales. ¿Deseas continuar?")) {
-                    input.value = "";
-                    return;
-                }
-
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const backup = JSON.parse(e.target.result);
-                        if (!backup.inventario && !backup.historial) {
-                            alert("El archivo JSON no tiene el formato de backup válido de esta aplicación.");
-                            return;
-                        }
-                        
-                        document.getElementById('zonaImportacion').classList.add('hidden');
-                        document.getElementById('pantallaCarga').classList.remove('hidden');
-                        document.getElementById('vistaDetallada').classList.add('hidden');
-                        document.getElementById('vistaSencilla').classList.add('hidden');
-                        
-                        const db = await initDB();
-                        await new Promise(r => {
-                            const tx = db.transaction([STORE_ANALISIS, STORE_HISTORIAL], 'readwrite');
-                            if (backup.inventario) tx.objectStore(STORE_ANALISIS).put(backup.inventario, 'datosGuardados');
-                            if (backup.historial) {
-                                const storeHist = tx.objectStore(STORE_HISTORIAL);
-                                storeHist.clear();
-                                backup.historial.forEach(h => storeHist.put(h));
-                            }
-                            tx.oncomplete = r;
-                        });
-                        
-                        alert("✅ Backup restaurado correctamente. El sistema se recargará para aplicar los cambios.");
-                        location.reload();
-                    } catch (err) {
-                        alert("Error al procesar el archivo JSON: " + err);
-                    }
-                    input.value = "";
-                };
-                reader.readAsText(file);
-            }
-
             async function procesarGuardadoLocalRapido() {
                 const setGrupos = new Set();
                 const setMaquinas = new Set();
@@ -1188,13 +1092,9 @@
 
                 await guardarDatos({ resultadosTabla: TODOS_LOS_DATOS, gruposUnicos: Array.from(setGrupos), maquinasUnicas: Array.from(setMaquinas) });
 
-                if (!document.getElementById('vistaDetallada').classList.contains('hidden')) {
-                    document.getElementById('tableBody').innerHTML = "";
-                    PUNTERO_PAGINA = 0;
-                    renderizarBloqueTabla();
-                } else {
-                    buscarSencilla(false);
-                }
+                document.getElementById('tableBody').innerHTML = "";
+                PUNTERO_PAGINA = 0;
+                renderizarBloqueTabla();
             }
 
             async function guardarCompraEnHistorial(solicitudId, items, formInfo) {
@@ -1355,8 +1255,8 @@
                     </td>
                     <td class="p-2 max-w-[100px] break-words"><b>${fila.inv.codigo}</b><br><span class="text-[10px] text-gray-500">${fila.inv.noParte || '-'}</span></td>
                     <td class="p-2 max-w-[200px] whitespace-normal" title="${fila.inv.descripcion}"><div class="line-clamp-2 leading-tight">${fila.inv.descripcion}</div></td>
-                    <td class="p-2"><textarea data-codigo="${fila.inv.codigo}" class="in-util w-full border rounded p-1 text-[10px] resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${fila.inv.nombreUtil || ''}</textarea></td>
-                    <td class="p-2"><textarea data-codigo="${fila.inv.codigo}" class="in-ubic w-full border rounded p-1 text-[10px] resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${fila.inv.ubicacion || ''}</textarea></td>
+                    <td class="p-2"><input type="text" data-codigo="${fila.inv.codigo}" class="in-util w-full border rounded p-1 text-[10px] ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${fila.inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    <td class="p-2"><input type="text" data-codigo="${fila.inv.codigo}" class="in-ubic w-full border rounded p-1 text-[10px] ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${fila.inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
                     <td class="p-2 text-center font-bold text-blue-800">${fila.inv.cantidad}</td>
                 </tr>`;
                 }).join('');
@@ -1401,14 +1301,14 @@
                     <td class="p-1">
                         <div class="flex gap-1 justify-center items-center">
                             <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Añadir 1 rápido" onclick="simpleAddToCart('${inv.codigo}', 1)">+1</button>
-                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Personalizar (Máquina, etc)" onclick="abrirModalDetalleSencillo('${inv.codigo}')">➕</button>
+                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Personalizar (Máquina, etc)" onclick='abrirModalDetalle(TODOS_LOS_DATOS.find(x => x.inv.codigo === "${inv.codigo}"))'>➕</button>
                             <button class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-1 py-1 rounded text-[10px] shadow-sm" title="Historial de solicitudes" onclick="verHistorialRepuesto('${inv.codigo}')">📄</button>
                         </div>
                     </td>
                     <td class="p-2 max-w-[120px] break-words"><b>${inv.codigo}</b><br><span class="text-[10px] text-gray-500">${inv.noParte || '-'}</span></td>
                     <td class="p-2 max-w-[200px] whitespace-normal"><div class="line-clamp-3 leading-tight text-[11px]" title="${inv.descripcion}">${inv.descripcion}</div></td>
-                    <td><textarea data-codigo="${inv.codigo}" class="in-util w-full min-w-[100px] border rounded p-1 text-xs resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${inv.nombreUtil || ''}</textarea></td>
-                    <td><textarea data-codigo="${inv.codigo}" class="in-ubic w-full min-w-[100px] border rounded p-1 text-xs resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${inv.ubicacion || ''}</textarea></td>
+                    <td><input type="text" data-codigo="${inv.codigo}" class="in-util w-full min-w-[100px] border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.nombreUtil || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
+                    <td><input type="text" data-codigo="${inv.codigo}" class="in-ubic w-full min-w-[100px] border rounded p-1 text-xs ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" value="${inv.ubicacion || ''}" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}></td>
                     
                     <td class="text-center p-1 cursor-pointer hover:bg-yellow-50 w-[44px]" data-ingreso-codigo="${inv.codigo}" onclick="abrirModalIngreso('${inv.codigo}')">
                         ${inv.ingresoManual ? `<span class="font-bold text-green-700 text-xs">${inv.ingresoManual.cantidad}</span><br><span class="text-[9px] text-gray-500">${inv.ingresoManual.fecha}</span>` : `<span class="text-[10px] text-gray-300 italic">+</span>`}
@@ -1589,155 +1489,6 @@
             }
 
             // -----------------------------------------------------
-            // 3b. SALIDAS LOCALES (BYPASS) E INGRESOS MANUALES
-            // -----------------------------------------------------
-            let currentItemForSalidaLocal = null;
-
-            function abrirModalSalidaLocal(codigo) {
-                const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
-                if (!fila) return;
-                currentItemForSalidaLocal = fila;
-                document.getElementById('tituloModalSalida').innerText =
-                    `Registrar Salida — ${fila.inv.nombreUtil || fila.inv.codigo}`;
-                document.getElementById('inputSalidaMaquina').value = '';
-                document.getElementById('inputSalidaSeccion').value = '';
-                document.getElementById('modalSalidaRapida').classList.remove('hidden');
-                setTimeout(() => document.getElementById('inputSalidaMaquina').focus(), 100);
-            }
-
-            function cerrarModalSalida() {
-                document.getElementById('modalSalidaRapida').classList.add('hidden');
-                currentItemForSalidaLocal = null;
-            }
-
-            function guardarSalidaRapida() {
-                if (!currentItemForSalidaLocal) return;
-                const maq = document.getElementById('inputSalidaMaquina').value.trim().toUpperCase() || 'N/A';
-                const sec = document.getElementById('inputSalidaSeccion').value.trim().toUpperCase() || 'N/A';
-                const inv = currentItemForSalidaLocal.inv;
-
-                if (!inv.salidasLocales) inv.salidasLocales = [];
-                inv.salidasLocales.push({ cantidad: 1, maquina: maq, seccion: sec, timestamp: Date.now() });
-
-                // Actualizar cantidad en TODOS_LOS_DATOS
-                inv.cantidad = Math.max(0, (inv.cantidad || 0) - 1);
-
-                procesarGuardadoLocalRapido();
-                cerrarModalSalida();
-
-                // Refrescar celda de salidas en la tabla activa
-                const spanSalida = document.querySelector(`[onclick*="abrirModalSalidaLocal('${inv.codigo}')"]`)
-                    ?.closest('td')?.querySelector('span.font-bold');
-                if (spanSalida) {
-                    spanSalida.innerText = inv.salidasLocales.reduce((a, s) => a + s.cantidad, 0);
-                }
-            }
-
-            function corregirSalidaLocal(codigo) {
-                const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
-                if (!fila || !fila.inv.salidasLocales || fila.inv.salidasLocales.length === 0)
-                    return alert('No hay salidas registradas para revertir.');
-                if (!confirm('¿Revertir la ÚLTIMA salida registrada para este ítem?')) return;
-                fila.inv.salidasLocales.pop();
-                fila.inv.cantidad = (fila.inv.cantidad || 0) + 1;
-                procesarGuardadoLocalRapido();
-            }
-
-            function verHistorialSalidasLocales(codigo) {
-                const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
-                if (!fila || !fila.inv.salidasLocales || !fila.inv.salidasLocales.length) {
-                    return alert('No hay salidas locales registradas para este ítem.');
-                }
-                const rows = fila.inv.salidasLocales
-                    .slice().reverse()
-                    .map(s => {
-                        const d = new Date(s.timestamp || s.fecha);
-                        const ds = isNaN(d) ? '-' : d.toLocaleString('es-GT');
-                        return `<tr class="border-b text-xs"><td class="p-1">${ds}</td><td class="p-1 text-center font-bold text-red-600">-${s.cantidad}</td><td class="p-1">${s.maquina || 'N/A'}</td><td class="p-1">${s.seccion || 'N/A'}</td></tr>`;
-                    }).join('');
-
-                let m = document.getElementById('modalSalidasLocalesHist');
-                if (!m) {
-                    m = document.createElement('div');
-                    m.id = 'modalSalidasLocalesHist';
-                    m.className = 'fixed inset-0 bg-gray-900 bg-opacity-70 z-[70] flex items-center justify-center p-4 backdrop-blur-sm no-print';
-                    m.innerHTML = `
-                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
-                        <div class="bg-red-700 text-white p-3 flex justify-between items-center rounded-t-xl">
-                            <h3 class="font-bold text-sm" id="salidasHistTitulo"></h3>
-                            <button onclick="document.getElementById('modalSalidasLocalesHist').classList.add('hidden')" class="text-white text-xl font-bold leading-none hover:text-red-200">&times;</button>
-                        </div>
-                        <div class="overflow-y-auto flex-1 custom-scrollbar p-3">
-                            <table class="w-full text-left">
-                                <thead class="bg-gray-100 text-xs font-bold sticky top-0">
-                                    <tr><th class="p-1">Fecha</th><th class="p-1 text-center">Cant.</th><th class="p-1">Máquina</th><th class="p-1">Sección</th></tr>
-                                </thead>
-                                <tbody id="salidasHistBody"></tbody>
-                            </table>
-                        </div>
-                    </div>`;
-                    document.body.appendChild(m);
-                }
-                document.getElementById('salidasHistTitulo').innerText = `📤 Salidas: ${codigo}`;
-                document.getElementById('salidasHistBody').innerHTML = rows;
-                m.classList.remove('hidden');
-            }
-
-            // ── Ingreso Manual ─────────────────────────────────────
-            let currentItemForIngreso = null;
-
-            function abrirModalIngreso(codigo) {
-                const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
-                if (!fila) return;
-                currentItemForIngreso = fila;
-                document.getElementById('tituloModalIngreso').innerText =
-                    `Ingreso Manual — ${fila.inv.nombreUtil || fila.inv.codigo}`;
-                document.getElementById('inputIngresoCant').value = '';
-                document.getElementById('inputIngresoFecha').value = new Date().toISOString().slice(0, 10);
-                document.getElementById('modalIngresoManual').classList.remove('hidden');
-                setTimeout(() => document.getElementById('inputIngresoCant').focus(), 100);
-            }
-
-            function cerrarModalIngreso() {
-                document.getElementById('modalIngresoManual').classList.add('hidden');
-                currentItemForIngreso = null;
-            }
-
-            function guardarIngresoManual() {
-                if (!currentItemForIngreso) return;
-                const cant = parseInt(document.getElementById('inputIngresoCant').value);
-                const fecha = document.getElementById('inputIngresoFecha').value;
-                if (isNaN(cant) || cant <= 0) return alert('Ingrese una cantidad válida.');
-                if (!fecha) return alert('Seleccione la fecha del ingreso.');
-
-                const inv = currentItemForIngreso.inv;
-                const [y, m, d] = fecha.split('-');
-                inv.ingresoManual = { cantidad: cant, fecha: `${d}/${m}/${y}` };
-                inv.cantidad = (inv.cantidad || 0) + cant;
-
-                procesarGuardadoLocalRapido();
-
-                // Actualizar celda de ingreso en la fila visible
-                const celdaIngreso = document.querySelector(`td[data-ingreso-codigo="${inv.codigo}"]`);
-                if (celdaIngreso) {
-                    celdaIngreso.innerHTML = `<span class="font-bold text-green-700 text-xs">${cant}</span><br><span class="text-[9px] text-gray-500">${d}/${m}/${y}</span>`;
-                }
-                cerrarModalIngreso();
-            }
-
-            function borrarIngresoManual() {
-                if (!currentItemForIngreso) return;
-                if (!confirm('¿Eliminar el ingreso manual de este ítem?')) return;
-                const inv = currentItemForIngreso.inv;
-                if (inv.ingresoManual) {
-                    inv.cantidad = Math.max(0, (inv.cantidad || 0) - inv.ingresoManual.cantidad);
-                    inv.ingresoManual = null;
-                }
-                procesarGuardadoLocalRapido();
-                cerrarModalIngreso();
-            }
-
-            // -----------------------------------------------------
             // 4. HISTORIAL DE PEDIDOS, PDF Y CARRITO
             // -----------------------------------------------------
             async function verHistorialRepuesto(codigo) {
@@ -1869,37 +1620,10 @@
                             <button onclick="abrirEditorSolicitud(event, this)" class="text-indigo-500 hover:text-indigo-800 px-1 transition" title="Editar datos">✏️</button>
                             <button onclick="generarPdfHistorial(event, this)" class="text-gray-500 hover:text-blue-700 transition px-1" title="Imprimir PDF">🖨️</button>
                             <button onclick="repetirOrden(event, this)" class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-2 py-0.5 rounded shadow-sm text-[9px] active:scale-95 transition-transform">Repetir</button>
-                            <button onclick="eliminarSolicitudHistorial(event, '${h.id_solicitud}')" class="text-red-500 hover:text-red-700 transition px-1" title="Eliminar registro">🗑️</button>
                         </div>
                     </div>
                 </div>`;
                 }).join('');
-            }
-
-            async function eliminarSolicitudHistorial(event, idSol) {
-                event.stopPropagation();
-                const pwd = prompt('Ingrese PIN de seguridad para eliminar (1234):');
-                if (pwd !== '1234') {
-                    if (pwd !== null) alert('PIN Incorrecto. Eliminación abortada.');
-                    return;
-                }
-                if (!confirm('¿Está seguro de eliminar la solicitud ' + idSol + ' de este historial? Esta acción no se puede deshacer.')) return;
-                
-                try {
-                    const db = await initDB();
-                    const tx = db.transaction(STORE_HISTORIAL, 'readwrite');
-                    const store = tx.objectStore(STORE_HISTORIAL);
-                    store.delete(idSol);
-                    
-                    tx.oncomplete = () => {
-                        renderHistorialSencillo();
-                        if (typeof renderizarHistorial === 'function' && document.getElementById('modalHistorial') && !document.getElementById('modalHistorial').classList.contains('hidden')) {
-                            renderizarHistorial();
-                        }
-                    };
-                } catch(e) {
-                    alert('Error al eliminar: ' + e);
-                }
             }
 
             function generarPdfHistorial(event, btnElement) {
@@ -2158,33 +1882,12 @@
                 const maq = val.trim().toUpperCase();
                 const historial = await obtenerHistorial();
 
-                let match = historial
+                const match = historial
                     .filter(h => h.form && h.form.maquina && h.form.maquina.toUpperCase() === maq)
                     .sort((a, b) => b.fecha_log - a.fecha_log)[0];
 
-                let formToFill = match ? match.form : null;
-
-                if (!formToFill) {
-                    let ultSalida = null;
-                    TODOS_LOS_DATOS.forEach(f => {
-                        if (f.inv.salidasLocales) {
-                            f.inv.salidasLocales.forEach(s => {
-                                if (s.maquina && s.maquina.toUpperCase() === maq) {
-                                    let t = s.timestamp || s.fecha || 0;
-                                    if (!ultSalida || t > ultSalida.timestamp) {
-                                        ultSalida = { sec: s.seccion, timestamp: t };
-                                    }
-                                }
-                            });
-                        }
-                    });
-                    if (ultSalida) {
-                        formToFill = { seccion: ultSalida.sec, serie: '', modelo: '', tecnico: '' };
-                    }
-                }
-
-                if (formToFill) {
-                    const f = formToFill;
+                if (match && match.form) {
+                    const f = match.form;
                     const setVal = (idSuffix, value) => {
                         const el = document.getElementById(prefix + idSuffix);
                         if (el && !el.value && value) {
@@ -2547,8 +2250,8 @@
 
                 if (usarTexto) {
                     let lines = [`SOLICITUD #${idSol}${sufijo}`, `Destino: ${gMaq} | Sección: ${gSec}${extInfo}`, `Técnico: ${gTec}`, ''];
-                    lines.push(['#', 'Código', 'PN', 'Descripción', 'Cant.'].join('\t\t'));
-                    items.forEach((it, idx) => lines.push([idx + 1, it.codigo, it.noParte || '-', it.descripcion, it.cant].join('\t\t')));
+                    lines.push(['#', 'Código', 'PN', 'Descripción', 'Cant.'].join('\t'));
+                    items.forEach((it, idx) => lines.push([idx + 1, it.codigo, it.noParte || '-', it.descripcion, it.cant].join('\t')));
                     textoPlano = lines.join('\n');
                     contenidoCopia = [new ClipboardItem({ 'text/plain': new Blob([textoPlano], { type: 'text/plain' }) })];
                 } else {
@@ -2572,8 +2275,8 @@
                     alert(`Solicitud #${idSol} lista. No se pudo copiar automáticamente; usa el PDF.`);
                 }
 
-                const cuerpoBase = encodeURIComponent(`Buen día,\n\nAdjunto solicitud de compra #${idSol} | Máq: ${gMaq}:\n\n[PRESIONA CTRL + V AQUI]\n\nSaludos.`);
-                window.open(`mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`, '_blank');
+                const cuerpoBase = encodeURIComponent(`David,\n\nAdjunto solicitud de compra #${idSol} | Máq: ${gMaq}:\n\n[PRESIONA CTRL + V AQUI]\n\nSaludos.`);
+                window.location.href = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
             }
 
             async function procesarSolicitudEmail() {
@@ -2693,12 +2396,6 @@
                     if (f.maquinasUnicas) {
                         f.maquinasUnicas.split(',').forEach(m => sugerencias.maquinas.add(m.trim().toUpperCase()));
                     }
-                    if (f.inv.salidasLocales) {
-                        f.inv.salidasLocales.forEach(s => {
-                            if (s.maquina && s.maquina !== 'N/A') sugerencias.maquinas.add(s.maquina.trim().toUpperCase());
-                            if (s.seccion && s.seccion !== 'N/A') sugerencias.secciones.add(s.seccion.trim().toUpperCase());
-                        });
-                    }
                 });
 
                 const poblar = (id, set) => {
@@ -2771,7 +2468,6 @@
                                 <th class="px-4 py-2 border-b text-center">Cant.</th>
                                 <th class="px-4 py-2 border-b">Máquina / Sec.</th>
                                 <th class="px-4 py-2 border-b">Técnico</th>
-                                <th class="px-4 py-2 border-b text-center">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2783,9 +2479,6 @@
                                     <td class="px-4 py-2 text-center font-bold text-orange-600 text-sm">${f.it.cant}</td>
                                     <td class="px-4 py-2"><b>${f.it.maquina || ''}</b><br><span class="text-gray-500">${f.it.seccion || ''}</span></td>
                                     <td class="px-4 py-2">${f.it.tecnico || ''}</td>
-                                    <td class="px-4 py-2 text-center">
-                                        <button onclick="eliminarSolicitudHistorial(event, '${f.id}')" class="text-red-500 hover:text-red-800 transition p-1 bg-red-50 rounded" title="Eliminar registro">🗑️</button>
-                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -2925,36 +2618,6 @@
                 }
             });
 
-            // ── Buscador vista detallada ──────────────────────────────
-            document.getElementById('btnEjecutarBusqueda').addEventListener('click', ejecutarBusqueda);
-
-            document.getElementById('busquedaTexto').addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') ejecutarBusqueda();
-            });
-
-            document.getElementById('btnCargarMas').addEventListener('click', renderizarBloqueTabla);
-
-            ['filtroGrupo','filtroMaquina','filtroStock','filtroEstado','filtroProyeccion',
-             'filtroUltimaSalida','filtroUltimoIngreso','filtroIngresoManual',
-             'filtroSalidaDesde','filtroSalidaHasta'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.addEventListener('change', ejecutarBusqueda);
-            });
-
-            document.getElementById('btnBorrarDatos').addEventListener('click', async () => {
-                const pin = prompt('Ingrese el PIN de seguridad (1234) para borrar absolutamente todos los datos (Inventario e Historial):');
-                if (pin !== '1234') {
-                    if (pin !== null) alert('PIN Incorrecto. Eliminación abortada.');
-                    return;
-                }
-                if (!confirm('¡ADVERTENCIA CRÍTICA!\n\nEsto borrará TODO el inventario, el historial de salidas, las salidas locales y los borradores.\nEsta acción NO se puede deshacer.\n\n¿Estás completamente seguro?')) return;
-                
-                await borrarDatosLocales();
-                localStorage.clear();
-                alert('Todos los datos han sido borrados con éxito. La página se recargará ahora.');
-                location.reload();
-            });
-
             document.getElementById('thSortProyeccion').addEventListener('click', () => {
                 DATOS_FILTRADOS.sort((a, b) => {
                     const valA = a.proyeccionMs; const valB = b.proyeccionMs;
@@ -3009,94 +2672,11 @@
                         if (e.target.classList.contains('in-util')) obj.inv.nombreUtil = val;
                         if (e.target.classList.contains('in-ubic')) obj.inv.ubicacion = val;
                         procesarGuardadoLocalRapido();
-                        const dupInput = document.querySelector(`#tableBody input[data-codigo="${cod}"].${e.target.classList[0]}, #tableBody textarea[data-codigo="${cod}"].${e.target.classList[0]}`);
+                        const dupInput = document.querySelector(`#tableBody input[data-codigo="${cod}"].${e.target.classList[0]}`);
                         if (dupInput) dupInput.value = val;
                     }
                 }
             });
-
-            // -----------------------------------------------------
-            // 5. LECTURA DE ARCHIVOS Y PROCESAMIENTO
-            // -----------------------------------------------------
-            function calcularCuartil(arr, q) {
-                const ordenado = [...arr].sort((a, b) => a - b);
-                const pos = (ordenado.length - 1) * q;
-                const base = Math.floor(pos);
-                const rest = pos - base;
-                return (ordenado[base + 1] !== undefined) ? ordenado[base] + rest * (ordenado[base + 1] - ordenado[base]) : ordenado[base];
-            }
-
-            function obtenerCincoCuartiles(arr) {
-                if (!arr || arr.length === 0) return [null, null, null, null, null];
-                if (arr.length === 1) return [arr[0], arr[0], arr[0], arr[0], arr[0]];
-                if (arr.length === 2) {
-                    const min = Math.min(arr[0], arr[1]);
-                    const max = Math.max(arr[0], arr[1]);
-                    const media = (min + max) / 2;
-                    return [min, min, media, max, max];
-                }
-                return [calcularCuartil(arr, 0), calcularCuartil(arr, 0.25), calcularCuartil(arr, 0.50), calcularCuartil(arr, 0.75), calcularCuartil(arr, 1)];
-            }
-
-            function parseFechaRobusta(fechaRaw) {
-                if (!fechaRaw) return null;
-                if (fechaRaw instanceof Date) return fechaRaw.getTime();
-                if (typeof fechaRaw === 'number') return new Date(Math.round((fechaRaw - 25569) * 86400 * 1000)).getTime();
-                if (typeof fechaRaw === 'string') {
-                    let text = fechaRaw.trim();
-                    let parts = text.split('/');
-                    if (parts.length === 3) {
-                        let year = parts[2].length === 2 ? "20" + parts[2] : parts[2];
-                        return new Date(`${year}-${parts[1]}-${parts[0]}T12:00:00`).getTime();
-                    }
-                    let partsDash = text.split('-');
-                    if (partsDash.length === 3 && partsDash[0].length <= 2) {
-                        let year = partsDash[2].length === 2 ? "20" + partsDash[2] : partsDash[2];
-                        return new Date(`${year}-${partsDash[1]}-${partsDash[0]}T12:00:00`).getTime();
-                    }
-                    return new Date(text).getTime();
-                }
-                return null;
-            }
-
-            function leerExcel(file) {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        try {
-                            const data = new Uint8Array(e.target.result);
-                            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                            resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
-                        } catch (err1) {
-                            const readerFallback = new FileReader();
-                            readerFallback.onload = (e2) => {
-                                try {
-                                    const text = e2.target.result;
-                                    if (text.toLowerCase().includes('<table')) {
-                                        const parser = new DOMParser();
-                                        const doc = parser.parseFromString(text, 'text/html');
-                                        const table = doc.querySelector('table');
-                                        if (table) {
-                                            const wbHTML = XLSX.utils.table_to_book(table, { cellDates: true });
-                                            return resolve(XLSX.utils.sheet_to_json(wbHTML.Sheets[wbHTML.SheetNames[0]]));
-                                        }
-                                    }
-                                    const wbFallback = XLSX.read(text, { type: 'binary', cellDates: true });
-                                    resolve(XLSX.utils.sheet_to_json(wbFallback.Sheets[wbFallback.SheetNames[0]]));
-                                } catch (errFallback) { reject(new Error("Formato irreconocible.")); }
-                            };
-                            readerFallback.readAsBinaryString(file);
-                        }
-                    };
-                    reader.readAsArrayBuffer(file);
-                });
-            }
-
-            function leerCSV(file) {
-                return new Promise((resolve, reject) => {
-                    Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => resolve(res.data), error: reject });
-                });
-            }
 
             document.getElementById('btnProcesar').addEventListener('click', async () => {
                 const fileExcel = document.getElementById('fileExcel').files[0];
@@ -3323,36 +2903,6 @@
                     document.getElementById('btnProcesar').innerText = "Procesar y Guardar";
                 }
             });
-
-            function inicializarInterfaz(datos) {
-                TODOS_LOS_DATOS = datos.resultadosTabla;
-                TODOS_LOS_DATOS.sort((a, b) => {
-                    if (!a.proyeccionMs && !b.proyeccionMs) return (b.ultimaSalida || 0) - (a.ultimaSalida || 0);
-                    if (!a.proyeccionMs) return 1; if (!b.proyeccionMs) return -1;
-                    return a.proyeccionMs - b.proyeccionMs;
-                });
-
-                const selGrupo = document.getElementById('filtroGrupo');
-                const selMaquina = document.getElementById('filtroMaquina');
-                if (selGrupo && selMaquina && datos.gruposUnicos && datos.maquinasUnicas) {
-                    selGrupo.innerHTML = '<option value="todos">Todos</option>';
-                    datos.gruposUnicos.sort().forEach(g => selGrupo.innerHTML += `<option value="${g}">${g}</option>`);
-                    selMaquina.innerHTML = '<option value="todas">Todas</option>';
-                    datos.maquinasUnicas.sort().forEach(m => selMaquina.innerHTML += `<option value="${m}">${m}</option>`);
-                }
-
-                const tbn = document.getElementById('resultTable'); if (tbn) tbn.classList.remove('hidden');
-                const tv = document.getElementById('tabsVistas'); if (tv) tv.classList.remove('hidden');
-                if (typeof setVista === 'function') setVista('sencilla');
-
-                document.getElementById('zonaImportacion').classList.add('hidden');
-                const cc = document.getElementById('controlesSesion'); if (cc) cc.classList.remove('hidden');
-                document.getElementById('pantallaCarga').classList.add('hidden');
-
-                if (typeof buscarSencilla === 'function') buscarSencilla();
-                if (typeof ejecutarBusqueda === 'function') ejecutarBusqueda();
-                if (typeof actualizarDatalists === 'function') actualizarDatalists();
-            }
 
             document.addEventListener('DOMContentLoaded', async () => {
                 if (document.getElementById('gFechaSug')) {

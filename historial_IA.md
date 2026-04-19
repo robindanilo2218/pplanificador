@@ -1,7 +1,12 @@
-## 2026-04-18
-- Restauración y refinamiento estético del modal de Licencia MIT y pie de página.
-- Corrección de visibilidad del footer mediante posicionamiento relativo y z-index optimizado.
-
-## 2026-04-17
-- Implementación de edición de solicitudes históricas, reenvío multiformato (Tabulado/HTML) y vista sencilla inteligente con score mixto.
-- Optimización de UI detallada (filtros de ingresos manuales, headers multilinea) y sanidad de repositorio mediante .gitignore.
+18/04/2026: Restauración de lógica de negocio (vinculación de máquina, historial de búsqueda), implementación de Sparklines industriales y limpieza de duplicados en el DOM de la aplicación de Proyección.
+18/04/2026: Corrección de errores de sintaxis (',' expected) y eliminación de fragmentos de código rotos en /proyeccion/index.html.
+18/04/2026: Revisión integral de index.html, corrección de escapes de variables en onclick strings y verificación de preserverancia de componentes (Datalists, Modal de Licencia).
+18/04/2026: Refactorización y unificación de la interfaz gráfica de `Actualizar Datos` para que proponga explícitamente actualizar por archivos separados o restaurar directo desde un Backup JSON.
+18/04/2026: Reparación iterativa del autocompletado: Inicialización de Datalists interactivos al cargar el sistema, e integración de `salidas locales` (Bypass) como fuente de verdad para sugerir Secciones y autollenar formularios sin depender de solicitudes completas.
+18/04/2026: Corrección visual en la lista de solicitudes del carrito: Se restauró el scroll nativo de la tarjeta principal y se añadió la propiedad `shrink-0` a la caja de ítems para forzar su crecimiento vertical sin reventar sus bordes físicos, resolviendo el solapamiento con los botones inferiores.
+18/04/2026: Seguridad en Historial: Se añadió un botón para eliminar manualmente solicitudes en ambas vistas ("Últimas Solicitudes" y el Modal general "Hist. Pedidos"), incluyendo protección mediante PIN de seguridad (1234) para prevenir borrados accidentales irreversibles y refrescando las vistas en tiempo real.
+18/04/2026: Campos Nombre Útil y Ubicación ahora son `<textarea rows="3">` en ambas vistas (Sencilla y Detallada), permitiendo hasta 3 líneas de texto; se actualizó el selector de sincronización entre vistas para incluir textarea.
+18/04/2026: Restauración de listeners perdidos en vista detallada: botón "Buscar", tecla Enter en campo de texto, botón "Cargar más" y re-filtrado automático al cambiar cualquier selector de filtro.
+18/04/2026: Restauración completa de funciones de Salida Local (Bypass) e Ingreso Manual perdidas: abrirModalSalidaLocal, guardarSalidaRapida, corregirSalidaLocal, verHistorialSalidasLocales, abrirModalIngreso, guardarIngresoManual, borrarIngresoManual.
+18/04/2026: Restauración de las opciones de Backup (Descargar y Restaurar JSON) y botón "Borrar Todo", ahora integrado con un PIN de seguridad (1234) para mayor confianza del operario.
+18/04/2026: Envío de correo electrónico: Se actualizó _enviarSolicitud para que el enlace mailto se abra en una nueva pestaña (window.open) y se agregaron doble tabulaciones entre columnas al copiar la versión en texto plano para mantener mejor estructura visual al pegar en Outlook u otras herramientas.
