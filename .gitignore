@@ -7,9 +7,18 @@ proyeccion/hosts
 proyeccion/hosts.txt
 proyeccion/log_chat_*.md
 proyeccion/scratch/
+proyeccion/pendientes.md
+proyeccion/index_old.html
+proyeccion/eeefe6a_utf8.html
+proyeccion/eeefe6a.html
 old_version.md
 nueva_version.md
 test.js
+AGENTS.md
+audit.sh
+audit2.sh
+historial_IA.md
+pendientes.md
 
 # Estándares
 node_modules/
