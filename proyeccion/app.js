@@ -1725,11 +1725,43 @@
                     alert(`Solicitud #${idSol} lista. No se pudo copiar automáticamente; usa el PDF.`);
                 }
 
-                const cuerpoBase = encodeURIComponent(`Buen día,\n\nAdjunto solicitud de compra #${idSol} | Máq: ${gMaq}:\n\n[PRESIONA CTRL + V AQUI]\n\nSaludos.`);
+                // Función local para rellenar texto a ancho fijo (padding)
+                const pad = (str, len) => {
+                    const s = String(str ?? '-').replace(/\r?\n/g, ' ');
+                    return s.length >= len ? s.slice(0, len) : s + ' '.repeat(len - s.length);
+                };
+
+                // Construir tabla ASCII con todos los datos del item
+                const SEP = '-'.repeat(90);
+                const encabezado = [
+                    `SOLICITUD DE REPUESTOS #${idSol}${sufijo}`,
+                    SEP,
+                    `Fecha        : ${new Date().toLocaleString('es-GT')}`,
+                    `Máquina      : ${gMaq}`,
+                    `Sección      : ${gSec}`,
+                    gTec ? `Técnico      : ${gTec}` : null,
+                    gSer ? `No. Serie    : ${gSer}` : null,
+                    gMod ? `Modelo       : ${gMod}` : null,
+                    SEP,
+                ].filter(Boolean).join('\n');
+
+                const colW = [4, 14, 14, 40, 6];  // #, Código, No.Parte, Descripción, Cant
+                const header = `${pad('#',colW[0])} ${pad('CÓDIGO',colW[1])} ${pad('NO. PARTE',colW[2])} ${pad('DESCRIPCIÓN',colW[3])} ${pad('CANT',colW[4])}`;
+                const divider = colW.map(w => '-'.repeat(w)).join('-');
+
+                const filas = items.map((it, i) =>
+                    `${pad(i+1,colW[0])} ${pad(it.codigo,colW[1])} ${pad(it.noParte||'-',colW[2])} ${pad(it.descripcion,colW[3])} ${pad(it.cant,colW[4])}`
+                ).join('\n');
+
+                const cuerpoTexto =
+                    `Buen día,\n\nSe adjunta la siguiente solicitud de compra de repuestos:\n\n` +
+                    `${encabezado}\n${header}\n${divider}\n${filas}\n${SEP}\n\n` +
+                    `Total ítems: ${items.length}\n\nSaludos,\n${gTec || 'Depto. Eléctrico'}`;
+
+                const cuerpoBase = encodeURIComponent(cuerpoTexto);
                 const mailtoUrl = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
 
                 // target="_blank" fuerza que Gmail (si es el handler del OS) abra en pestaña nueva
-                // y no desplace la app. Para Outlook desktop, el OS lo abre como app externa igualmente.
                 const aLink = document.createElement('a');
                 aLink.href = mailtoUrl;
                 aLink.target = '_blank';
