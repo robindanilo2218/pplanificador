@@ -842,12 +842,17 @@
                 const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
                 if (!fila) return;
 
-                carrito.push({
-                    codigo: fila.inv.codigo,
-                    noParte: fila.inv.noParte || "-",
-                    descripcion: fila.inv.descripcion,
-                    cant: parseFloat(cant)
-                });
+                const existente = carrito.find(i => i.codigo === codigo && !i.esNuevo);
+                if (existente) {
+                    existente.cant += parseFloat(cant);
+                } else {
+                    carrito.push({
+                        codigo: fila.inv.codigo,
+                        noParte: fila.inv.noParte || "-",
+                        descripcion: fila.inv.descripcion,
+                        cant: parseFloat(cant)
+                    });
+                }
                 guardarCarritoLocal();
                 actualizarMiniCarrito();
                 actualizarBadgeCarrito();
