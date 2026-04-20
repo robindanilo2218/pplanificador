@@ -1734,7 +1734,8 @@
                 // Construir tabla ASCII con todos los datos del item
                 const SEP = '-'.repeat(90);
                 const encabezado = [
-                    `SOLICITUD DE REPUESTOS #${idSol}${sufijo}`,
+                    esReenvio ? '*** REENVÍO DE SOLICITUD ***' : null,
+                    `SOLICITUD DE COMPRA  #${idSol}`,
                     SEP,
                     `Fecha        : ${new Date().toLocaleString('es-GT')}`,
                     `Máquina      : ${gMaq}`,
@@ -1745,7 +1746,7 @@
                     SEP,
                 ].filter(Boolean).join('\n');
 
-                const colW = [4, 14, 14, 40, 6];  // #, Código, No.Parte, Descripción, Cant
+                const colW = [4, 14, 14, 40, 6];
                 const header = `${pad('#',colW[0])} ${pad('CÓDIGO',colW[1])} ${pad('NO. PARTE',colW[2])} ${pad('DESCRIPCIÓN',colW[3])} ${pad('CANT',colW[4])}`;
                 const divider = colW.map(w => '-'.repeat(w)).join('-');
 
@@ -1754,7 +1755,7 @@
                 ).join('\n');
 
                 const cuerpoTexto =
-                    `Buen día,\n\nSe adjunta la siguiente solicitud de compra de repuestos:\n\n` +
+                    `Buen día,\n\n` +
                     `${encabezado}\n${header}\n${divider}\n${filas}\n${SEP}\n\n` +
                     `Total ítems: ${items.length}\n\nSaludos,\n${gTec || 'Depto. Eléctrico'}`;
 
