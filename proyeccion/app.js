@@ -1176,7 +1176,7 @@
                 } else {
                     contenedor.innerHTML = `<table class="min-w-full text-xs text-left mb-4">
                     <thead class="bg-gray-100 shadow-sm sticky top-0"><tr>
-                        <th class="p-2 border">Fecha</th>
+                        <th class="p-2 border whitespace-nowrap">Fecha</th>
                         <th class="p-2 border">Código</th>
                         <th class="p-2 border">Descripción</th>
                         <th class="p-2 border text-center">Cant</th>
@@ -1184,12 +1184,15 @@
                     </tr></thead>
                     <tbody>
                         ${todasLasSalidas.map(s => `
-                            <tr class="hover:bg-red-50 transition border-b">
+                            <tr class="hover:bg-red-50 transition border-b align-top">
                                 <td class="p-2 text-[10px] whitespace-nowrap text-gray-600">${s.fechaStr}</td>
-                                <td class="p-2 font-bold text-blue-700 max-w-[80px] truncate" title="${s.noParte}">${s.codigo}</td>
-                                <td class="p-2"><div class="line-clamp-2 leading-tight" title="${s.descripcion}">${s.descripcion}</div></td>
-                                <td class="p-2 text-center font-bold text-red-600 text-sm">-${s.cantidad}</td>
-                                <td class="p-2 text-[10px] leading-tight"><b>Máq:</b> ${s.maquina}<br><b>Sec:</b> ${s.seccion}</td>
+                                <td class="p-2 font-bold text-blue-700 min-w-[90px]">
+                                    ${s.codigo}
+                                    ${s.noParte && s.noParte !== '-' ? `<br><span class="font-normal text-gray-400 text-[9px]">${s.noParte}</span>` : ''}
+                                </td>
+                                <td class="p-2 whitespace-normal break-words leading-snug min-w-[160px]">${s.descripcion}</td>
+                                <td class="p-2 text-center font-bold text-red-600 text-sm whitespace-nowrap">-${s.cantidad}</td>
+                                <td class="p-2 text-[10px] leading-tight whitespace-nowrap"><b>Máq:</b> ${s.maquina}<br><b>Sec:</b> ${s.seccion}</td>
                             </tr>
                         `).join('')}
                     </tbody>
