@@ -1,59 +1,78 @@
-const CACHE_NAME = 'pplanificador-v2';
-const ASSETS = [
-    './',
-    './index.html',
-    './manifest.json',
-    './icon.svg',
-    'https://cdn.tailwindcss.com',
-    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
-    './app.js'
+const CACHE_NAME = 'pplanificador-v3';
+
+// Solo archivos locales en el pre-caché de instalación.
+// Las CDN se cachean dinámicamente en el primer fetch con conexión.
+const PRECACHE_ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './icon.svg',
+  './app.js'
 ];
 
-// Install Service Worker
-self.addEventListener('install', event => {
-    event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => {
-                console.log('SW: Caching assets');
-                return cache.addAll(ASSETS);
-            })
-            .then(() => self.skipWaiting())
-    );
+// 1. INSTALACIÓN: cachea solo archivos locales (no falla si no hay CDN)
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[SW] Pre-cacheando app shell local...');
+      // addAll falla si una URL falla; usamos add individual para mayor resiliencia
+      return Promise.allSettled(
+        PRECACHE_ASSETS.map(url => cache.add(url).catch(err => console.warn('[SW] No se pudo cachear:', url, err)))
+      );
+    })
+  );
+  self.skipWaiting();
 });
 
-// Activate Service Worker
-self.addEventListener('activate', event => {
-    event.waitUntil(
-        caches.keys().then(keys => {
-            return Promise.all(
-                keys.filter(key => key !== CACHE_NAME)
-                    .map(key => caches.delete(key))
-            );
+// 2. ACTIVACIÓN: limpia cachés de versiones anteriores
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter(name => name !== CACHE_NAME)
+          .map(name => {
+            console.log('[SW] Borrando caché antiguo:', name);
+            return caches.delete(name);
+          })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+// 3. FETCH: Cache-First para locales, Network-First para CDN externas
+self.addEventListener('fetch', (event) => {
+  const url = event.request.url;
+
+  // Ignorar peticiones que no sean GET o que sean chrome-extension
+  if (event.request.method !== 'GET' || url.startsWith('chrome-extension')) return;
+
+  // Estrategia: intentar caché primero, luego red, cachear si llega de red
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        // Está en caché → devolver inmediatamente (funciona offline)
+        return cachedResponse;
+      }
+
+      // No está en caché → intentar red
+      return fetch(event.request)
+        .then((networkResponse) => {
+          // Cachear copia si la respuesta es válida (2xx)
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
         })
-    );
-    self.clients.claim();
-});
-
-// Fetching assets
-self.addEventListener('fetch', event => {
-    event.respondWith(
-        caches.match(event.request)
-            .then(cachedResponse => {
-                if (cachedResponse) {
-                    return cachedResponse;
-                }
-                return fetch(event.request).then(networkResponse => {
-                    // Only cache successful responses for generic https? requests
-                    if (event.request.method === 'GET' && event.request.url.startsWith('http')) {
-                        const responseClone = networkResponse.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-                    }
-                    return networkResponse;
-                }).catch(() => {
-                    // Si no hay conexión, devolvemos silenciosamente para que la app no muestre error brutal o simplemente ignoramos el fallo.
-                    // Esto evita que "muestre que no hay conexión".
-                });
-            })
-    );
+        .catch(() => {
+          // Sin red y sin caché: devolver página principal como fallback
+          // Evita que Chrome muestre el dinosaurio
+          return caches.match('./index.html');
+        });
+    })
+  );
 });
