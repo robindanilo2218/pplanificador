@@ -1546,7 +1546,18 @@
                     <tr class="${rowClass}">
                         <td class="px-4 py-2">${codigoBadge}</td>
                         <td class="px-4 py-2 text-xs font-semibold">${item.descripcion}${nombreUtilBadge}${maqInfo}</td>
-                        <td class="px-4 py-2 text-center font-black text-lg text-orange-600">${item.cant}</td>
+                        <td class="px-3 py-1 text-center">
+                            <div class="flex items-center justify-center gap-1">
+                                <button onclick="ajustarCantCarrito(${index}, -1)"
+                                    class="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-red-200 text-gray-700 font-bold rounded text-sm transition leading-none">−</button>
+                                <input type="number" min="1" value="${item.cant}"
+                                    class="w-14 text-center font-black text-base text-orange-600 border border-gray-300 rounded py-0.5 outline-none focus:border-orange-400"
+                                    onchange="setCantCarrito(${index}, this.value)"
+                                    oninput="if(this.value<1)this.value=1">
+                                <button onclick="ajustarCantCarrito(${index}, 1)"
+                                    class="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-green-200 text-gray-700 font-bold rounded text-sm transition leading-none">+</button>
+                            </div>
+                        </td>
                         <td class="px-4 py-2 text-center">
                             <button onclick="eliminarDelCarrito('${index}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1 px-2 rounded transition" title="Eliminar">❌</button>
                         </td>
@@ -1577,6 +1588,27 @@
             function cerrarCarrito() { document.getElementById('modalCarrito').classList.add('hidden'); }
             function eliminarDelCarrito(index) { carrito.splice(index, 1); guardarCarritoLocal(); actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if (!m.classList.contains('hidden')) abrirCarrito(); }
             function vaciarCarrito() { if (confirm("¿Seguro que deseas vaciar todo el carrito?")) { carrito = []; guardarCarritoLocal(); actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if (!m.classList.contains('hidden')) abrirCarrito(); } }
+
+            function setCantCarrito(index, valor) {
+                const n = parseFloat(valor);
+                if (isNaN(n) || n < 1) return;
+                carrito[index].cant = n;
+                guardarCarritoLocal();
+                actualizarBadgeCarrito();
+                actualizarMiniCarrito();
+            }
+
+            function ajustarCantCarrito(index, delta) {
+                const nueva = (carrito[index]?.cant || 1) + delta;
+                if (nueva < 1) return;
+                carrito[index].cant = nueva;
+                guardarCarritoLocal();
+                actualizarBadgeCarrito();
+                actualizarMiniCarrito();
+                // Actualizar el input directamente sin re-renderizar toda la tabla
+                const inputs = document.querySelectorAll('#contenedorItemsCarrito input[type="number"]');
+                if (inputs[index]) inputs[index].value = nueva;
+            }
 
             function generarPdfCarrito() {
                 if (carrito.length === 0) return alert("El carrito está vacío. Añade repuestos primero.");
