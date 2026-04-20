@@ -125,21 +125,32 @@
                 try {
                     const inventario = await cargarDatos() || null;
                     const historial = await obtenerHistorial() || [];
-                    
+                    const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+
                     const backupObj = {
-                        version: "1.0",
+                        version: "2.0",
                         fecha: new Date().toISOString(),
                         inventario: inventario,
-                        historial: historial
+                        historial: historial,
+                        borradores: borradores
                     };
-                    
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj));
+
+                    const nItems = inventario?.resultadosTabla?.length || 0;
+                    const nHist = historial.length;
+                    const nBorr = borradores.length;
+
+                    const json = JSON.stringify(backupObj);
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
-                    link.setAttribute("href", dataStr);
-                    link.setAttribute("download", `Backup_Proyeccion_${new Date().toISOString().slice(0, 10)}.json`);
+                    link.href = url;
+                    link.download = `Backup_Proyeccion_${new Date().toISOString().slice(0, 10)}.json`;
                     document.body.appendChild(link);
                     link.click();
                     link.remove();
+                    URL.revokeObjectURL(url);
+
+                    alert(`✅ Backup generado correctamente.\n\n📦 Inventario: ${nItems} repuestos\n📜 Historial solicitudes: ${nHist} registros\n📝 Borradores: ${nBorr} guardados\n\nGuarda este archivo en un lugar seguro.`);
                 } catch (e) {
                     alert("Error al exportar backup: " + e);
                 }
@@ -148,14 +159,14 @@
             function restaurarBackup(input) {
                 const file = input.files[0];
                 if (!file) return;
-                
+
                 const pin = prompt('Ingrese el PIN de seguridad (1234) para restaurar el Backup. Esto REEMPLAZARÁ la base de datos actual en su totalidad:');
                 if (pin !== '1234') {
                     if (pin !== null) alert('PIN Incorrecto. Restauración abortada.');
                     input.value = "";
                     return;
                 }
-                
+
                 if (!confirm("Restaurar un backup SOBREESCRIBIRÁ todos los datos actuales. ¿Deseas continuar?")) {
                     input.value = "";
                     return;
@@ -169,12 +180,12 @@
                             alert("El archivo JSON no tiene el formato de backup válido de esta aplicación.");
                             return;
                         }
-                        
+
                         document.getElementById('zonaImportacion').classList.add('hidden');
                         document.getElementById('pantallaCarga').classList.remove('hidden');
                         document.getElementById('vistaDetallada').classList.add('hidden');
                         document.getElementById('vistaSencilla').classList.add('hidden');
-                        
+
                         const db = await initDB();
                         await new Promise(r => {
                             const tx = db.transaction([STORE_ANALISIS, STORE_HISTORIAL], 'readwrite');
@@ -186,8 +197,20 @@
                             }
                             tx.oncomplete = r;
                         });
-                        
-                        alert("✅ Backup restaurado correctamente. El sistema se recargará para aplicar los cambios.");
+
+                        // Restaurar borradores desde localStorage
+                        if (backup.borradores && Array.isArray(backup.borradores)) {
+                            localStorage.setItem('cartBorradores', JSON.stringify(backup.borradores));
+                        }
+
+                        // Limpiar carrito activo para evitar mezcla con datos restaurados
+                        localStorage.removeItem('carritoActivo');
+
+                        const nItems = backup.inventario?.resultadosTabla?.length || 0;
+                        const nHist = (backup.historial || []).length;
+                        const nBorr = (backup.borradores || []).length;
+
+                        alert(`✅ Backup restaurado correctamente.\n\n📦 Inventario: ${nItems} repuestos\n📜 Historial: ${nHist} registros\n📝 Borradores: ${nBorr} recuperados\n\nEl sistema se recargará ahora.`);
                         location.reload();
                     } catch (err) {
                         alert("Error al procesar el archivo JSON: " + err);
