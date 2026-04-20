@@ -15,13 +15,67 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <script>
-        // SERVICE WORKER REGISTRATION
+        // REGISTRO Y CONTROL DE VERSIONES DEL SERVICE WORKER
+        let swRegistration = null;
+        let newWorkerWaiting = null;
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-                    navigator.serviceWorker.register('./sw.js').catch(err => console.error('Error PWA:', err));
+                    navigator.serviceWorker.register('./sw.js').then(reg => {
+                        swRegistration = reg;
+
+                        // Pedir versión al SW activo
+                        if (reg.active) {
+                            reg.active.postMessage('GET_VERSION');
+                        }
+
+                        // Detectar nuevo SW en espera (actualizar)
+                        reg.addEventListener('updatefound', () => {
+                            const newWorker = reg.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    newWorkerWaiting = newWorker;
+                                    mostrarBadgeActualizacion();
+                                }
+                            });
+                        });
+
+                        // Si ya hay uno esperando desde antes de cargar
+                        if (reg.waiting && navigator.serviceWorker.controller) {
+                            newWorkerWaiting = reg.waiting;
+                            mostrarBadgeActualizacion();
+                        }
+
+                    }).catch(err => console.error('Error PWA:', err));
+
+                    // Recibir mensajes del SW (versión)
+                    navigator.serviceWorker.addEventListener('message', (event) => {
+                        if (event.data && event.data.type === 'VERSION') {
+                            const el = document.getElementById('swVersionLabel');
+                            if (el) el.textContent = 'v' + event.data.version;
+                        }
+                    });
+
+                    // Al activarse el nuevo SW, recargar automáticamente
+                    navigator.serviceWorker.addEventListener('controllerchange', () => {
+                        window.location.reload();
+                    });
                 }
             });
+        }
+
+        function mostrarBadgeActualizacion() {
+            const badge = document.getElementById('swUpdateBadge');
+            if (badge) badge.classList.remove('hidden');
+        }
+
+        function forzarActualizacion() {
+            if (newWorkerWaiting) {
+                newWorkerWaiting.postMessage('SKIP_WAITING');
+            } else if (swRegistration) {
+                swRegistration.update().then(() => window.location.reload());
+            }
         }
     </script>
 
@@ -216,7 +270,19 @@
 
     <div class="max-w-[1400px] mx-auto bg-white p-3 md:p-6 rounded-lg shadow-md no-print">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-            <h1 class="text-2xl font-bold text-blue-800">Análisis de Rotación e Inventario</h1>
+            <div class="flex items-center gap-2">
+                <h1 class="text-2xl font-bold text-blue-800">Análisis de Rotación e Inventario</h1>
+                <!-- Badge de versión PWA -->
+                <div class="flex items-center gap-1">
+                    <span id="swVersionLabel"
+                        class="text-[10px] font-mono text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full"
+                        title="Versión de la app instalada en este navegador">v...</span>
+                    <button id="swUpdateBadge"
+                        onclick="forzarActualizacion()"
+                        class="hidden text-[10px] font-bold bg-amber-400 hover:bg-amber-500 text-amber-900 px-2 py-0.5 rounded-full animate-pulse shadow transition"
+                        title="Hay una actualización disponible. Clic para instalar y recargar.">&#8593; Actualizar</button>
+                </div>
+            </div>
 
             <div id="controlesSesion" class="hidden flex flex-wrap gap-2 items-center">
                 <button id="btnToggleBodeguero" onclick="toggleBodeguero()"

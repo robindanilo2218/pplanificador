@@ -1,4 +1,5 @@
-const CACHE_NAME = 'pplanificador-v3';
+const APP_VERSION = '1.3.0';
+const CACHE_NAME = `pplanificador-v${APP_VERSION}`;
 
 // Solo archivos locales en el pre-caché de instalación.
 // Las CDN se cachean dinámicamente en el primer fetch con conexión.
@@ -75,4 +76,13 @@ self.addEventListener('fetch', (event) => {
         });
     })
   );
+});
+// 4. MENSAJE: responde a postMessage para enviar versión o forzar activación
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data === 'GET_VERSION') {
+    event.source.postMessage({ type: 'VERSION', version: APP_VERSION });
+  }
 });
