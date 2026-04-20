@@ -1731,7 +1731,7 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
         return s.length >= len ? s.slice(0, len) : s + ' '.repeat(len - s.length);
     };
 
-    // Construir tabla ASCII con todos los datos del item
+    // Encabezado compartido para ambos modos
     const SEP = '-'.repeat(90);
     const encabezado = [
         esReenvio ? '*** REENVÍO DE SOLICITUD ***' : null,
@@ -1746,18 +1746,29 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
         SEP,
     ].filter(Boolean).join('\n');
 
-    const colW = [4, 14, 14, 40, 6];
-    const header = `${pad('#', colW[0])} ${pad('CÓDIGO', colW[1])} ${pad('NO. PARTE', colW[2])} ${pad('DESCRIPCIÓN', colW[3])} ${pad('CANT', colW[4])}`;
-    const divider = colW.map(w => '-'.repeat(w)).join('-');
+    let cuerpoTexto;
 
-    const filas = items.map((it, i) =>
-        `${pad(i + 1, colW[0])} ${pad(it.codigo, colW[1])} ${pad(it.noParte || '-', colW[2])} ${pad(it.descripcion, colW[3])} ${pad(it.cant, colW[4])}`
-    ).join('\n');
+    if (usarTexto) {
+        // MODO TEXTO: tabla ASCII completa en el cuerpo
+        const colW = [4, 14, 14, 40, 6];
+        const header = `${pad('#', colW[0])} ${pad('CÓDIGO', colW[1])} ${pad('NO. PARTE', colW[2])} ${pad('DESCRIPCIÓN', colW[3])} ${pad('CANT', colW[4])}`;
+        const divider = colW.map(w => '-'.repeat(w)).join('-');
+        const filas = items.map((it, i) =>
+            `${pad(i + 1, colW[0])} ${pad(it.codigo, colW[1])} ${pad(it.noParte || '-', colW[2])} ${pad(it.descripcion, colW[3])} ${pad(it.cant, colW[4])}`
+        ).join('\n');
 
-    const cuerpoTexto =
-        `Buen día,\n\n` +
-        `${encabezado}\n${header}\n${divider}\n${filas}\n${SEP}\n\n` +
-        `Total ítems: ${items.length}\n\nSaludos,\n${gTec || 'Depto. Eléctrico'}`;
+        cuerpoTexto =
+            `Buen día,\n\n` +
+            `${encabezado}\n${header}\n${divider}\n${filas}\n${SEP}\n\n` +
+            `Total ítems: ${items.length}\n\nSaludos,\n${gTec || 'Depto. Eléctrico'}`;
+    } else {
+        // MODO HTML: encabezado + indicación de pegar tabla formateada
+        cuerpoTexto =
+            `Buen día,\n\n` +
+            `${encabezado}\n\n` +
+            `>>> PEGAR TABLA AQUÍ — presiona CTRL+V en el cuerpo del correo <<<\n\n` +
+            `Total ítems: ${items.length}\n\nSaludos,\n${gTec || 'Depto. Eléctrico'}`;
+    }
 
     const cuerpoBase = encodeURIComponent(cuerpoTexto);
     const mailtoUrl = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
