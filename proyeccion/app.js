@@ -59,7 +59,11 @@
                     secD.classList.remove('w-full');
                     btnS.classList.replace('bg-gray-200', 'bg-blue-600'); btnS.classList.replace('text-gray-800', 'text-white');
                     btnD.classList.replace('bg-blue-600', 'bg-gray-200'); btnD.classList.replace('text-white', 'text-gray-800');
-                    renderSencilla(calcularDatosSencilla());
+                    if (document.getElementById('busqSencilla') && document.getElementById('busqSencilla').value.trim() !== '') {
+                        buscarSencilla();
+                    } else {
+                        renderSencilla(calcularDatosSencilla());
+                    }
                     renderHistorialSencillo();
                     actualizarMiniCarrito();
                 } else {
@@ -1055,7 +1059,7 @@
                             descripcion: fila.inv.descripcion,
                             cant: parseFloat(i.cant || 1)
                         });
-                    } else if (i.codigo === "CREAR CODIGO NUEVO") {
+                    } else if (i.codigo === "CREAR CODIGO NUEVO" || i.codigo === "NUEVO-REGISTRO") {
                         carrito.push({ ...i });
                     }
                 });
@@ -1349,21 +1353,74 @@
             }
 
             function agregarArticuloNuevoCarro() {
-                const desc = prompt("Ingrese el nombre/descripción del repuesto que NO existe actualmente en el catálogo:");
-                if (!desc) return;
-                const cant = parseFloat(prompt("¿Qué cantidad exacta se solicitará?", "1"));
-                if (isNaN(cant) || cant <= 0) return alert("Cantidad inválida cancelada.");
+                // Limpiar campos del modal
+                ['nrDescripcion','nrNoParte','nrObservaciones'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                const cantEl = document.getElementById('nrCantidad');
+                if (cantEl) cantEl.value = '1';
+                const urgEl = document.getElementById('nrUrgencia');
+                if (urgEl) urgEl.value = 'Normal';
+                // Precargar máquina/sección de los campos globales si están llenos
+                const maqEl = document.getElementById('nrMaquina');
+                const secEl = document.getElementById('nrSeccion');
+                if (maqEl) maqEl.value = document.getElementById('gMaquina')?.value || '';
+                if (secEl) secEl.value = document.getElementById('gSeccion')?.value || '';
+                document.getElementById('modalNuevoRepuesto').classList.remove('hidden');
+                setTimeout(() => document.getElementById('nrDescripcion')?.focus(), 100);
+            }
+
+            function cerrarModalNuevoRepuesto() {
+                document.getElementById('modalNuevoRepuesto').classList.add('hidden');
+            }
+
+            function confirmarNuevoRepuesto() {
+                const desc = document.getElementById('nrDescripcion').value.trim();
+                if (!desc) {
+                    document.getElementById('nrDescripcion').focus();
+                    document.getElementById('nrDescripcion').classList.add('border-red-400');
+                    return;
+                }
+                document.getElementById('nrDescripcion').classList.remove('border-red-400');
+
+                const noParte = document.getElementById('nrNoParte').value.trim() || '-';
+                const cant = parseFloat(document.getElementById('nrCantidad').value) || 1;
+                const maquina = document.getElementById('nrMaquina').value.trim().toUpperCase() || '-';
+                const seccion = document.getElementById('nrSeccion').value.trim().toUpperCase() || '-';
+                const urgencia = document.getElementById('nrUrgencia').value;
+                const obs = document.getElementById('nrObservaciones').value.trim();
+
+                // Tag de urgencia para el label
+                const urgTag = urgencia === 'Critico' ? '🔴 ' : urgencia === 'Urgente' ? '⚡ ' : '';
+
+                // Descripción enriquecida con observaciones si hay
+                const descFull = obs ? `${desc.toUpperCase()} | OBS: ${obs}` : desc.toUpperCase();
 
                 carrito.push({
-                    codigo: "CREAR CODIGO NUEVO",
-                    noParte: "-",
-                    descripcion: desc.toUpperCase().trim(),
-                    cant: cant
+                    codigo: 'NUEVO-REGISTRO',
+                    noParte: noParte,
+                    descripcion: descFull,
+                    nombreUtil: `${urgTag}Solicitud Primera Vez`,
+                    maquina: maquina,
+                    seccion: seccion,
+                    cant: cant,
+                    esNuevo: true
                 });
+
                 guardarCarritoLocal();
                 actualizarMiniCarrito();
                 actualizarBadgeCarrito();
+                cerrarModalNuevoRepuesto();
+
+                // Feedback visual rápido
+                const badge = document.getElementById('badgeCarrito');
+                if (badge) {
+                    badge.classList.add('scale-125', 'bg-emerald-500');
+                    setTimeout(() => badge.classList.remove('scale-125', 'bg-emerald-500'), 600);
+                }
             }
+
 
             function abrirEditorSolicitud(event, btn) {
                 event.stopPropagation();
@@ -1446,16 +1503,27 @@
                 if (carrito.length === 0) {
                     contenedor.innerHTML = '<p class="text-center text-gray-500 my-10">El carrito está vacío.</p>';
                 } else {
-                    const itemsHtml = carrito.map((item, index) => `
-                    <tr class="border-b hover:bg-gray-50">
-                        <td class="px-4 py-2 font-mono text-xs font-bold text-blue-700">${item.codigo}</td>
-                        <td class="px-4 py-2 text-xs font-semibold">${item.descripcion}</td>
+                    const itemsHtml = carrito.map((item, index) => {
+                        const rowClass = item.esNuevo ? 'border-b bg-emerald-50 hover:bg-emerald-100' : 'border-b hover:bg-gray-50';
+                        const codigoBadge = item.esNuevo
+                            ? `<span class="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">✨ NUEVO</span>`
+                            : `<span class="font-mono text-xs font-bold text-blue-700">${item.codigo}</span>`;
+                        const nombreUtilBadge = item.nombreUtil
+                            ? `<br><span class="text-[10px] text-emerald-600 font-semibold">${item.nombreUtil}</span>`
+                            : '';
+                        const maqInfo = item.esNuevo && item.maquina && item.maquina !== '-'
+                            ? `<br><span class="text-[10px] text-gray-500">${item.maquina}${item.seccion && item.seccion !== '-' ? ' / ' + item.seccion : ''}</span>`
+                            : '';
+                        return `
+                    <tr class="${rowClass}">
+                        <td class="px-4 py-2">${codigoBadge}</td>
+                        <td class="px-4 py-2 text-xs font-semibold">${item.descripcion}${nombreUtilBadge}${maqInfo}</td>
                         <td class="px-4 py-2 text-center font-black text-lg text-orange-600">${item.cant}</td>
                         <td class="px-4 py-2 text-center">
                             <button onclick="eliminarDelCarrito('${index}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1 px-2 rounded transition" title="Eliminar">❌</button>
                         </td>
-                    </tr>
-                `).join('');
+                    </tr>`;
+                    }).join('');
 
                     contenedor.innerHTML = `
                     <div class="p-4 overflow-x-auto border rounded bg-white shadow-sm">

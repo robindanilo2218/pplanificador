@@ -13,3 +13,4 @@
 18/04/2026: Modularización del código base, extrayendo la extensa lógica de JavaScript (>2300 líneas) de `index.html` hacia un nuevo archivo independiente `app.js` para mejorar la mantenibilidad y organización del proyecto.
 19/04/2026: Modificación del campo Descripción en vistas sencilla y detallada a un `textarea` de 3 líneas con scroll nativo (clase custom-scrollbar) para mejor visibilidad y lectura continua de repuestos con nombres largos.
 20/04/2026: Implementación de persistencia local del Carrito para evitar pérdida de datos al recargar, y actualización del Service Worker para lograr completa funcionalidad de red Offline sin mostrar alertas de conexión perdidas.
+20/04/2026: Modal completo para agregar repuestos nuevos (nunca vistos en catálogo) con campos de descripción, No. Parte, cantidad, máquina, sección, urgencia y observaciones; los ítems nuevos se distinguen visualmente en verde con badge "✨ NUEVO" y etiqueta "Solicitud Primera Vez".

@@ -864,6 +864,76 @@
             </div>
         </div>
 
+        <!-- MODAL REPUESTO NUEVO (no existe en catálogo) -->
+        <div id="modalNuevoRepuesto"
+            class="fixed inset-0 bg-gray-900 bg-opacity-80 z-[110] hidden flex items-center justify-center p-4 backdrop-blur-sm no-print">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-[fadeIn_0.3s_ease-out]">
+                <div class="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-5 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-base font-bold flex items-center gap-2">✨ Agregar Repuesto Nuevo</h2>
+                        <p class="text-[11px] text-emerald-100 mt-0.5">Repuesto que NO existe actualmente en el catálogo</p>
+                    </div>
+                    <button onclick="cerrarModalNuevoRepuesto()" class="text-white hover:text-emerald-200 text-2xl font-bold leading-none">&times;</button>
+                </div>
+                <div class="p-5 space-y-3 text-sm overflow-y-auto max-h-[70vh] custom-scrollbar">
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800 flex items-start gap-2">
+                        <span class="text-base">💡</span>
+                        <span>Este ítem se marcará como <strong>"Solicitud Primera Vez"</strong>. Completa los datos que conozcas.</span>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Descripción del Repuesto <span class="text-red-500">*</span></label>
+                        <input type="text" id="nrDescripcion" placeholder="Ej: RODAMIENTO 6205 2RS, VARIADOR 5HP 220V..."
+                            class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">No. Parte / Referencia</label>
+                            <input type="text" id="nrNoParte" placeholder="Ej: 6205-2RS, ABC-123..."
+                                class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Cantidad <span class="text-red-500">*</span></label>
+                            <input type="number" id="nrCantidad" value="1" min="1"
+                                class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-emerald-500">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Máquina / Destino</label>
+                            <input type="text" id="nrMaquina" placeholder="Ej: LINEA-1..." list="listaMaquinas"
+                                class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Sección</label>
+                            <input type="text" id="nrSeccion" placeholder="Ej: Eléctrico..." list="listaSecciones"
+                                class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-emerald-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Urgencia</label>
+                        <select id="nrUrgencia" class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-emerald-500 bg-white">
+                            <option value="Normal">Normal</option>
+                            <option value="Urgente">⚡ Urgente</option>
+                            <option value="Critico">🔴 Crítico</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Observaciones / Dónde se usa</label>
+                        <textarea id="nrObservaciones" rows="2" placeholder="Ej: Para mantenimiento preventivo de bomba hidráulica..."
+                            class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-emerald-500 resize-none"></textarea>
+                    </div>
+                </div>
+                <div class="bg-gray-50 border-t p-4 flex gap-3 justify-end">
+                    <button onclick="cerrarModalNuevoRepuesto()"
+                        class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 font-semibold text-sm hover:bg-gray-100 transition">Cancelar</button>
+                    <button onclick="confirmarNuevoRepuesto()"
+                        class="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition shadow-md flex items-center gap-2">
+                        🛒 Agregar a Solicitud
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div id="modalHistorial"
             class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm no-print">
             <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl overflow-hidden flex flex-col max-h-[90vh]">
