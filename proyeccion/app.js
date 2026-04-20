@@ -1726,7 +1726,17 @@
                 }
 
                 const cuerpoBase = encodeURIComponent(`Buen día,\n\nAdjunto solicitud de compra #${idSol} | Máq: ${gMaq}:\n\n[PRESIONA CTRL + V AQUI]\n\nSaludos.`);
-                window.open(`mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`, '_blank');
+                const mailtoUrl = `mailto:${destinatario}?cc=${copia}&subject=${asunto}&body=${cuerpoBase}`;
+
+                // target="_blank" fuerza que Gmail (si es el handler del OS) abra en pestaña nueva
+                // y no desplace la app. Para Outlook desktop, el OS lo abre como app externa igualmente.
+                const aLink = document.createElement('a');
+                aLink.href = mailtoUrl;
+                aLink.target = '_blank';
+                aLink.rel = 'noopener';
+                document.body.appendChild(aLink);
+                aLink.click();
+                aLink.remove();
             }
 
             async function procesarSolicitudEmail() {
