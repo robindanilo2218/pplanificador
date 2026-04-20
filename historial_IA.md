@@ -11,3 +11,5 @@
 18/04/2026: Restauración de las opciones de Backup (Descargar y Restaurar JSON) y botón "Borrar Todo", ahora integrado con un PIN de seguridad (1234) para mayor confianza del operario.
 18/04/2026: Envío de correo electrónico: Se actualizó _enviarSolicitud para que el enlace mailto se abra en una nueva pestaña (window.open) y se agregaron doble tabulaciones entre columnas al copiar la versión en texto plano para mantener mejor estructura visual al pegar en Outlook u otras herramientas.
 18/04/2026: Modularización del código base, extrayendo la extensa lógica de JavaScript (>2300 líneas) de `index.html` hacia un nuevo archivo independiente `app.js` para mejorar la mantenibilidad y organización del proyecto.
+19/04/2026: Modificación del campo Descripción en vistas sencilla y detallada a un `textarea` de 3 líneas con scroll nativo (clase custom-scrollbar) para mejor visibilidad y lectura continua de repuestos con nombres largos.
+20/04/2026: Implementación de persistencia local del Carrito para evitar pérdida de datos al recargar, y actualización del Service Worker para lograr completa funcionalidad de red Offline sin mostrar alertas de conexión perdidas.

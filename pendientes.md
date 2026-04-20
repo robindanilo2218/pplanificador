@@ -1,6 +1,8 @@
 # Pendientes y Propuestas
 
 ## En Progreso / Completado
+- [x] Corregir la conectividad offline (PWA Service Worker) cacheando el motor del app para que no reporte error de red y siga 100% funcional.
+- [x] Persistir lista de la "Solicitud Actual" en LocalStorage para evitar recargas perdidas en caso de actualizar la PWA inadvertidamente.
 - [x] Restaurar barras verticales en Solicitud Actual (estética de barras dobles).
 - [x] Implementar Sparklines de tendencia de consumo en columna Proyección.
 - [x] Restaurar vincularDatosMaquina (autocompletado inteligente).

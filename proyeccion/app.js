@@ -15,6 +15,8 @@
             let _tabSencilla = 'destacados';
 
             let carrito = [];
+            function guardarCarritoLocal() { localStorage.setItem('carritoActivo', JSON.stringify(carrito)); }
+            function cargarCarritoLocal() { try { const g = localStorage.getItem('carritoActivo'); if(g) carrito = JSON.parse(g); } catch(e) { carrito = []; } }
             let itemActualSeleccionado = null;
             let _editorSolCache = null;
 
@@ -364,7 +366,9 @@
                         </div>
                     </td>
                     <td class="p-2 max-w-[100px] break-words"><b>${fila.inv.codigo}</b><br><span class="text-[10px] text-gray-500">${fila.inv.noParte || '-'}</span></td>
-                    <td class="p-2 max-w-[200px] whitespace-normal" title="${fila.inv.descripcion}"><div class="line-clamp-2 leading-tight">${fila.inv.descripcion}</div></td>
+                    <td class="p-1 max-w-[200px] align-top">
+                        <div class="w-full min-w-[160px] p-1 text-[11px] leading-tight text-gray-800 break-words whitespace-normal break-all">${fila.inv.descripcion}</div>
+                    </td>
                     <td class="p-2"><textarea data-codigo="${fila.inv.codigo}" class="in-util w-full border rounded p-1 text-[10px] resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${fila.inv.nombreUtil || ''}</textarea></td>
                     <td class="p-2"><textarea data-codigo="${fila.inv.codigo}" class="in-ubic w-full border rounded p-1 text-[10px] resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${fila.inv.ubicacion || ''}</textarea></td>
                     <td class="p-2 text-center font-bold text-blue-800">${fila.inv.cantidad}</td>
@@ -416,7 +420,9 @@
                         </div>
                     </td>
                     <td class="p-2 max-w-[120px] break-words"><b>${inv.codigo}</b><br><span class="text-[10px] text-gray-500">${inv.noParte || '-'}</span></td>
-                    <td class="p-2 max-w-[200px] whitespace-normal"><div class="line-clamp-3 leading-tight text-[11px]" title="${inv.descripcion}">${inv.descripcion}</div></td>
+                    <td class="p-1 max-w-[200px] align-top">
+                        <div class="w-full min-w-[160px] p-1 text-[11px] leading-tight text-gray-800 break-words whitespace-normal break-all">${inv.descripcion}</div>
+                    </td>
                     <td><textarea data-codigo="${inv.codigo}" class="in-util w-full min-w-[100px] border rounded p-1 text-xs resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${inv.nombreUtil || ''}</textarea></td>
                     <td><textarea data-codigo="${inv.codigo}" class="in-ubic w-full min-w-[100px] border rounded p-1 text-xs resize-none leading-tight ${!isBodeguero ? 'bg-gray-50 text-gray-500 cursor-not-allowed border-transparent' : 'border-gray-300'}" rows="3" onclick="event.stopPropagation()" ${!isBodeguero ? 'readonly' : ''}>${inv.ubicacion || ''}</textarea></td>
                     
@@ -815,6 +821,7 @@
                     descripcion: fila.inv.descripcion,
                     cant: parseFloat(cant)
                 });
+                guardarCarritoLocal();
                 actualizarMiniCarrito();
                 actualizarBadgeCarrito();
             }
@@ -1052,6 +1059,7 @@
                         carrito.push({ ...i });
                     }
                 });
+                guardarCarritoLocal();
 
                 const jsonform = card.getAttribute('data-sol-form');
                 if (jsonform) {
@@ -1240,6 +1248,7 @@
                     descripcion: itemActualSeleccionado.inv.descripcion,
                     cant: cant
                 });
+                guardarCarritoLocal();
                 if (maq) document.getElementById('gMaquina').value = maq;
                 if (sec !== "-") document.getElementById('gSeccion').value = sec;
                 const ser = document.getElementById('inpSerie').value.trim();
@@ -1277,6 +1286,7 @@
                 });
                 localStorage.setItem('cartBorradores', JSON.stringify(borradores));
                 carrito = [];
+                guardarCarritoLocal();
                 actualizarMiniCarrito();
                 actualizarBadgeCarrito();
             }
@@ -1315,6 +1325,7 @@
                 if (carrito.length > 0 && !confirm("Tienes items activos en el carrito. Cargarlo lo sobrescribirá. ¿Continuar?")) return;
 
                 carrito = b.items;
+                guardarCarritoLocal();
                 if (document.getElementById('gMaquina')) document.getElementById('gMaquina').value = b.form.maq || '';
                 if (document.getElementById('gSeccion')) document.getElementById('gSeccion').value = b.form.sec || '';
                 if (document.getElementById('gTecnico')) document.getElementById('gTecnico').value = b.form.tec || '';
@@ -1349,6 +1360,7 @@
                     descripcion: desc.toUpperCase().trim(),
                     cant: cant
                 });
+                guardarCarritoLocal();
                 actualizarMiniCarrito();
                 actualizarBadgeCarrito();
             }
@@ -1467,8 +1479,8 @@
             }
 
             function cerrarCarrito() { document.getElementById('modalCarrito').classList.add('hidden'); }
-            function eliminarDelCarrito(index) { carrito.splice(index, 1); actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if (!m.classList.contains('hidden')) abrirCarrito(); }
-            function vaciarCarrito() { if (confirm("¿Seguro que deseas vaciar todo el carrito?")) { carrito = []; actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if (!m.classList.contains('hidden')) abrirCarrito(); } }
+            function eliminarDelCarrito(index) { carrito.splice(index, 1); guardarCarritoLocal(); actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if (!m.classList.contains('hidden')) abrirCarrito(); }
+            function vaciarCarrito() { if (confirm("¿Seguro que deseas vaciar todo el carrito?")) { carrito = []; guardarCarritoLocal(); actualizarBadgeCarrito(); actualizarMiniCarrito(); const m = document.getElementById('modalCarrito'); if (!m.classList.contains('hidden')) abrirCarrito(); } }
 
             function generarPdfCarrito() {
                 if (carrito.length === 0) return alert("El carrito está vacío. Añade repuestos primero.");
@@ -1606,7 +1618,7 @@
 
                 await _enviarSolicitud(idSol, carrito, formData, false);
 
-                carrito = []; actualizarBadgeCarrito(); actualizarMiniCarrito(); cerrarCarrito(); renderHistorialSencillo(); actualizarDatalists();
+                carrito = []; guardarCarritoLocal(); actualizarBadgeCarrito(); actualizarMiniCarrito(); cerrarCarrito(); renderHistorialSencillo(); actualizarDatalists();
             }
 
             async function reenviarSolicitudHistorial(event, btn) {
@@ -2174,7 +2186,7 @@
                                     codigo, grupo: grupoCodigo, noParte: String(noParte), descripcion: desc, cantidad: cant,
                                     ultimaCompra: fechaCompra,
                                     ubicacion: metaDatos[codigo] ? metaDatos[codigo].ubicacion : '',
-                                    nombreUtil: metaDatos[codigo] && metaDatos[codigo].nombreUtil ? metaDatos[codigo].nombreUtil : generarNombreUtil(desc),
+                                    nombreUtil: metaDatos[codigo] && metaDatos[codigo].nombreUtil ? metaDatos[codigo].nombreUtil : '',
                                     ingresoManual: mIngreso,
                                     salidasLocales: mSalidas
                                 };
@@ -2365,6 +2377,7 @@
             }
 
             document.addEventListener('DOMContentLoaded', async () => {
+                cargarCarritoLocal();
                 if (document.getElementById('gFechaSug')) {
                     document.getElementById('gFechaSug').value = new Date().toISOString().slice(0, 10);
                 }

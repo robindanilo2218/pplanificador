@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pplanificador-v1';
+const CACHE_NAME = 'pplanificador-v2';
 const ASSETS = [
     './',
     './index.html',
@@ -6,7 +6,8 @@ const ASSETS = [
     './icon.svg',
     'https://cdn.tailwindcss.com',
     'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js'
+    'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
+    './app.js'
 ];
 
 // Install Service Worker
@@ -43,11 +44,15 @@ self.addEventListener('fetch', event => {
                     return cachedResponse;
                 }
                 return fetch(event.request).then(networkResponse => {
-                    // Don't cache data or analytics if they exist, only static files
-                    if (event.request.url.startsWith('http')) {
-                        return networkResponse;
+                    // Only cache successful responses for generic https? requests
+                    if (event.request.method === 'GET' && event.request.url.startsWith('http')) {
+                        const responseClone = networkResponse.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
                     }
                     return networkResponse;
+                }).catch(() => {
+                    // Si no hay conexión, devolvemos silenciosamente para que la app no muestre error brutal o simplemente ignoramos el fallo.
+                    // Esto evita que "muestre que no hay conexión".
                 });
             })
     );
