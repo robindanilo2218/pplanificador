@@ -239,9 +239,17 @@ async function procesarGuardadoLocalRapido() {
 async function guardarCompraEnHistorial(solicitudId, items, formInfo) {
     try {
         const db = await initDB();
-        const tx = db.transaction(STORE_HISTORIAL, 'readwrite');
-        const store = tx.objectStore(STORE_HISTORIAL);
-        store.put({ id_solicitud: solicitudId, fecha_log: new Date().getTime(), items: items, form: formInfo || {} });
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_HISTORIAL, 'readwrite');
+            tx.objectStore(STORE_HISTORIAL).put({
+                id_solicitud: solicitudId,
+                fecha_log: new Date().getTime(),
+                items: items,
+                form: formInfo || {}
+            });
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+        });
     } catch (error) { console.error("Error guardando historial", error); }
 }
 
@@ -981,6 +989,7 @@ function generarPdfHistorial(event, btnElement) {
                             ${form.tecnico ? `<div style="flex: 1 1 45%;"><strong>Técnico Solicita:</strong> ${form.tecnico}</div>` : ''}
                             ${form.modelo ? `<div style="flex: 1 1 45%;"><strong>Modelo:</strong> ${form.modelo}</div>` : ''}
                             ${form.serie ? `<div style="flex: 1 1 45%;"><strong>Serie:</strong> ${form.serie}</div>` : ''}
+                            ${form.fechaSug ? `<div style="flex: 1 1 45%;"><strong>Fecha Sugerida de Cierre:</strong> ${form.fechaSug}</div>` : ''}
                         </div>
                     </div>
 
@@ -1281,6 +1290,7 @@ function agregarAlCarrito() {
         codigo: itemActualSeleccionado.inv.codigo,
         noParte: itemActualSeleccionado.inv.noParte || "-",
         descripcion: itemActualSeleccionado.inv.descripcion,
+        nombreUtil: itemActualSeleccionado.inv.nombreUtil || '',
         cant: cant
     });
     guardarCarritoLocal();
@@ -1433,6 +1443,7 @@ function confirmarNuevoRepuesto() {
         noParte: noParte,
         descripcion: descFull,
         nombreUtil: `${urgTag}Solicitud Primera Vez`,
+        urgencia: urgencia,
         maquina: maquina,
         seccion: seccion,
         cant: cant,
@@ -1508,13 +1519,14 @@ async function guardarEdicionSolicitud(reenviar) {
         const gTec = newForm.tecnico || '';
         const extInfo = (newForm.serie ? ` | Serie: ${newForm.serie}` : '') + (newForm.modelo ? ` | Mod: ${newForm.modelo}` : '');
 
+        const feSugStr = newForm.fechaSug ? ` | Fecha Sug: ${newForm.fechaSug}` : '';
         let tablaHtml = `<div style="font-family:Arial,sans-serif;color:#333;font-size:12px;border:1px solid #ccc;padding:15px;">
                     <h2 style="color:#1e3a8a;margin-top:0;">SOLICITUD DE REPUESTOS #${solId} (Corregida)</h2>
                     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;text-align:left;">
                         <thead style="background-color:#f3f4f6;color:#1f2937;"><tr><th>#</th><th>Código / Parte</th><th>Descripción</th><th>Cant.</th></tr></thead>
                         <tbody>
-                            <tr><td colspan="4" style="background-color:#e0f2fe;text-align:center;padding:5px;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}${extInfo}</td></tr>
-                            ${items.map((it, idx) => `<tr><td>${idx + 1}</td><td><b>${it.codigo}</b><br><span style="font-size:10px;">${it.noParte || ''}</span></td><td>${it.descripcion}</td><td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td></tr>`).join('')}
+                            <tr><td colspan="4" style="background-color:#e0f2fe;text-align:center;padding:5px;"><b>Destino:</b> Máquina: ${gMaq} | Sección: ${gSec}${extInfo}${feSugStr} | Téc: ${gTec}</td></tr>
+                            ${items.map((it, idx) => `<tr><td>${idx + 1}</td><td><b>${it.codigo}</b><br><span style="font-size:10px;">${it.noParte || ''}</span></td><td>${it.descripcion}${it.nombreUtil ? `<br><span style="font-size:10px;color:#059669;">${it.nombreUtil}</span>` : ''}</td><td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td></tr>`).join('')}
                         </tbody>
                     </table></div>`;
 
@@ -1687,6 +1699,7 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
     const gTec = form.tecnico || '';
     const gSer = form.serie || '';
     const gMod = form.modelo || '';
+    const gFeS = form.fechaSug || '';
     const extInfo = (gSer ? ` | Serie: ${gSer}` : '') + (gMod ? ` | Mod: ${gMod}` : '');
 
     const destinatario = "dorozco@empresasgalindo.com";
@@ -1699,9 +1712,9 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
     let contenidoCopia, textoPlano;
 
     if (usarTexto) {
-        let lines = [`SOLICITUD #${idSol}${sufijo}`, `Destino: ${gMaq} | Sección: ${gSec}${extInfo}`, `Técnico: ${gTec}`, ''];
+        let lines = [`SOLICITUD #${idSol}${sufijo}`, `Destino: ${gMaq} | Sección: ${gSec}${extInfo}`, `Técnico: ${gTec}${gFeS ? ` | Fecha Sug: ${gFeS}` : ''}`, ''];
         lines.push(['#', 'Código', 'PN', 'Descripción', 'Cant.'].join('\t\t'));
-        items.forEach((it, idx) => lines.push([idx + 1, it.codigo, it.noParte || '-', it.descripcion, it.cant].join('\t\t')));
+        items.forEach((it, idx) => lines.push([idx + 1, it.codigo, it.noParte || '-', `${it.descripcion}${it.nombreUtil ? ' [' + it.nombreUtil + ']' : ''}`, it.cant].join('\t\t')));
         textoPlano = lines.join('\n');
         contenidoCopia = [new ClipboardItem({ 'text/plain': new Blob([textoPlano], { type: 'text/plain' }) })];
     } else {
@@ -1710,8 +1723,8 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
                     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;text-align:left;">
                         <thead style="background-color:#f3f4f6;"><tr><th>#</th><th>Código / PN</th><th>Descripción</th><th>Cant.</th></tr></thead>
                         <tbody>
-                            <tr><td colspan="4" style="background:#e0f2fe;text-align:center;"><b>Destino:</b> Máq: ${gMaq} | Secc: ${gSec}${extInfo} | Téc: ${gTec}</td></tr>
-                            ${items.map((it, i) => `<tr><td>${i + 1}</td><td><b>${it.codigo}</b><br><small>${it.noParte || ''}</small></td><td>${it.descripcion}</td><td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td></tr>`).join('')}
+                            <tr><td colspan="4" style="background:#e0f2fe;text-align:center;"><b>Destino:</b> Máq: ${gMaq} | Secc: ${gSec}${extInfo} | Téc: ${gTec}${gFeS ? ` | Fecha Sug: ${gFeS}` : ''}</td></tr>
+                            ${items.map((it, i) => `<tr><td>${i + 1}</td><td><b>${it.codigo}</b><br><small>${it.noParte || ''}</small></td><td>${it.descripcion}${it.nombreUtil ? `<br><small style="color:#059669;">${it.nombreUtil}</small>` : ''}</td><td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td></tr>`).join('')}
                         </tbody>
                     </table></div>`;
         textoPlano = `Solicitud #${idSol}${sufijo} - Máq: ${gMaq}`;
@@ -1743,6 +1756,7 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
         gTec ? `Técnico      : ${gTec}` : null,
         gSer ? `No. Serie    : ${gSer}` : null,
         gMod ? `Modelo       : ${gMod}` : null,
+        gFeS ? `Fecha Sug.   : ${gFeS}` : null,
         SEP,
     ].filter(Boolean).join('\n');
 
