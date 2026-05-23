@@ -50,15 +50,36 @@ function generarNombreUtil(desc) {
 function setVista(v) {
     const btnS = document.getElementById('btnTabSencilla');
     const btnD = document.getElementById('btnTabDetallada');
+    const btnC = document.getElementById('btnTabCatalogo');
+    const btnR = document.getElementById('btnTabRepuestosMaquina');
     const secS = document.getElementById('vistaSencilla');
     const secD = document.getElementById('vistaDetallada');
+    const secC = document.getElementById('vistaCatalogo');
+    const secR = document.getElementById('vistaRepuestosMaquina');
 
-    if (v === 'sencilla') {
-        secS.classList.remove('hidden');
+    // Hide all sections
+    if (secS) secS.classList.add('hidden');
+    if (secD) {
         secD.classList.add('hidden');
         secD.classList.remove('w-full');
-        btnS.classList.replace('bg-gray-200', 'bg-blue-600'); btnS.classList.replace('text-gray-800', 'text-white');
-        btnD.classList.replace('bg-blue-600', 'bg-gray-200'); btnD.classList.replace('text-white', 'text-gray-800');
+    }
+    if (secC) secC.classList.add('hidden');
+    if (secR) secR.classList.add('hidden');
+
+    // Reset button states
+    [btnS, btnD, btnC, btnR].forEach(btn => {
+        if (btn) {
+            btn.classList.replace('bg-blue-600', 'bg-gray-200');
+            btn.classList.replace('text-white', 'text-gray-800');
+        }
+    });
+
+    if (v === 'sencilla') {
+        if (secS) secS.classList.remove('hidden');
+        if (btnS) {
+            btnS.classList.replace('bg-gray-200', 'bg-blue-600');
+            btnS.classList.replace('text-gray-800', 'text-white');
+        }
         if (document.getElementById('busqSencilla') && document.getElementById('busqSencilla').value.trim() !== '') {
             buscarSencilla();
         } else {
@@ -66,12 +87,31 @@ function setVista(v) {
         }
         renderHistorialSencillo();
         actualizarMiniCarrito();
-    } else {
-        secS.classList.add('hidden');
-        secD.classList.remove('hidden');
-        btnD.classList.replace('bg-gray-200', 'bg-blue-600'); btnD.classList.replace('text-gray-800', 'text-white');
-        btnS.classList.replace('bg-blue-600', 'bg-gray-200'); btnS.classList.replace('text-white', 'text-gray-800');
+    } else if (v === 'detallada') {
+        if (secD) secD.classList.remove('hidden');
+        if (btnD) {
+            btnD.classList.replace('bg-gray-200', 'bg-blue-600');
+            btnD.classList.replace('text-white', 'text-gray-800');
+        }
         ejecutarBusqueda();
+    } else if (v === 'catalogo') {
+        if (secC) secC.classList.remove('hidden');
+        if (btnC) {
+            btnC.classList.replace('bg-gray-200', 'bg-blue-600');
+            btnC.classList.replace('text-white', 'text-gray-800');
+        }
+        if (document.getElementById('busqCatalogo') && document.getElementById('busqCatalogo').value.trim() !== '') {
+            buscarCatalogo();
+        } else {
+            renderCatalogo(TODOS_LOS_DATOS);
+        }
+    } else if (v === 'repuestosMaquina') {
+        if (secR) secR.classList.remove('hidden');
+        if (btnR) {
+            btnR.classList.replace('bg-gray-200', 'bg-blue-600');
+            btnR.classList.replace('text-gray-800', 'text-white');
+        }
+        inicializarVistaArbolMaquinas();
     }
 }
 
@@ -126,13 +166,15 @@ async function exportarBackup() {
         const inventario = await cargarDatos() || null;
         const historial = await obtenerHistorial() || [];
         const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+        const arbol = await cargarArbolMaquinas() || null;
 
         const backupObj = {
-            version: "2.0",
+            version: "2.1",
             fecha: new Date().toISOString(),
             inventario: inventario,
             historial: historial,
-            borradores: borradores
+            borradores: borradores,
+            arbolMaquinas: arbol
         };
 
         const nItems = inventario?.resultadosTabla?.length || 0;
@@ -190,6 +232,7 @@ function restaurarBackup(input) {
             await new Promise(r => {
                 const tx = db.transaction([STORE_ANALISIS, STORE_HISTORIAL], 'readwrite');
                 if (backup.inventario) tx.objectStore(STORE_ANALISIS).put(backup.inventario, 'datosGuardados');
+                if (backup.arbolMaquinas) tx.objectStore(STORE_ANALISIS).put(backup.arbolMaquinas, 'arbolMaquinas');
                 if (backup.historial) {
                     const storeHist = tx.objectStore(STORE_HISTORIAL);
                     storeHist.clear();
@@ -1038,7 +1081,7 @@ function cargarItemsHistorial(el, idSol) {
     renderSencilla(filtrados);
 }
 
-function abrirModalDetalle(fila) {
+async function abrirModalDetalle(fila) {
     itemActualSeleccionado = fila;
     document.getElementById('detDesc').innerText = fila.inv.descripcion;
     document.getElementById('detCodigo').innerText = `COD: ${fila.inv.codigo} | PN: ${fila.inv.noParte || '-'}`;
@@ -1062,6 +1105,11 @@ function abrirModalDetalle(fila) {
     document.getElementById('inpSeccion').value = '';
     document.getElementById('inpTecnico').value = '';
     document.getElementById('inpFechaSug').value = new Date().toISOString().split('T')[0];
+
+    // Cargar imágenes asociadas de forma asíncrona
+    imagenesDetalleActuales = await obtenerImagenesRepuesto(fila.inv.codigo, fila.inv.noParte);
+    indiceImagenDetalle = 0;
+    mostrarImagenDetalle();
 
     document.getElementById('modalDetalle').classList.remove('hidden');
     setTimeout(() => document.getElementById('inpCant').focus(), 100);
@@ -2575,12 +2623,1503 @@ function inicializarInterfaz(datos) {
     if (typeof actualizarDatalists === 'function') actualizarDatalists();
 }
 
+// -----------------------------------------------------
+// 5. MOTOR DE IMÁGENES LOCALES Y VISTA CATÁLOGO
+// -----------------------------------------------------
+let dirImagenesHandle = null;
+let IMAGENES_INDEX = {}; // Mapea clave normalizada (código o parte) -> array de { handle, suffix }
+let IMAGENES_SIMPLIFIED_INDEX = {}; // Mapea clave simplificada -> array de { handle, suffix }
+const URLS_CACHE = new Map(); // Mapea FileSystemFileHandle -> URL del ObjectURL creado
+
+// Simplifica una cadena eliminando espacios, guiones y caracteres no alfanuméricos
+function simplifyKey(str) {
+    if (!str) return '';
+    return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Abre selector de directorio nativo
+async function seleccionarCarpetaImagenes() {
+    try {
+        const handle = await window.showDirectoryPicker();
+        if (handle) {
+            await inicializarCarpetaImagenes(handle);
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            console.error("Error al seleccionar carpeta:", e);
+            alert("No se pudo cargar la carpeta. Asegúrese de que su navegador soporte el acceso a archivos locales (Chrome, Edge u Opera).");
+        }
+    }
+}
+
+// Guarda manejador en IndexedDB
+async function guardarDirHandle(handle) {
+    try {
+        const db = await initDB();
+        const tx = db.transaction(STORE_ANALISIS, 'readwrite');
+        tx.objectStore(STORE_ANALISIS).put(handle, 'directoryHandle');
+        return new Promise(r => tx.oncomplete = r);
+    } catch (e) {
+        console.warn("IndexedDB no permite guardar FileSystemHandle en este navegador:", e);
+    }
+}
+
+// Carga manejador de IndexedDB
+async function cargarDirHandle() {
+    try {
+        const db = await initDB();
+        return new Promise(r => {
+            const req = db.transaction(STORE_ANALISIS, 'readonly').objectStore(STORE_ANALISIS).get('directoryHandle');
+            req.onsuccess = () => r(req.result);
+            req.onerror = () => r(null);
+        });
+    } catch (e) {
+        console.error("Error al cargar manejador de IndexedDB:", e);
+        return null;
+    }
+}
+
+// Intenta cargar carpeta guardada y verificar si tiene permisos
+async function intentarCargarCarpetaGuardada() {
+    try {
+        const handle = await cargarDirHandle();
+        if (handle) {
+            dirImagenesHandle = handle;
+            const options = { mode: 'read' };
+            if ((await handle.queryPermission(options)) === 'granted') {
+                await inicializarCarpetaImagenes(handle);
+            } else {
+                mostrarBotonPermisoReconexion();
+            }
+        }
+    } catch (e) {
+        console.error("Error al restaurar carpeta guardada:", e);
+    }
+}
+
+// Solicita permiso explícito de lectura del handle
+async function pedirPermisoReconexion() {
+    if (!dirImagenesHandle) return;
+    try {
+        const permission = await dirImagenesHandle.requestPermission({ mode: 'read' });
+        if (permission === 'granted') {
+            await inicializarCarpetaImagenes(dirImagenesHandle);
+            ocultarBotonPermisoReconexion();
+        } else {
+            alert("Acceso denegado. Las imágenes no se cargarán.");
+        }
+    } catch (e) {
+        console.error("Error al solicitar permiso:", e);
+    }
+}
+
+function mostrarBotonPermisoReconexion() {
+    const btnRec = document.getElementById('btnReconectarCarpeta');
+    const btnSel = document.getElementById('btnSeleccionarCarpeta');
+    if (btnRec) btnRec.classList.remove('hidden');
+    if (btnSel) {
+        btnSel.innerText = "📷 Re-conectar Carpeta";
+        btnSel.classList.replace('bg-green-600', 'bg-blue-600');
+    }
+}
+
+function ocultarBotonPermisoReconexion() {
+    const btnRec = document.getElementById('btnReconectarCarpeta');
+    if (btnRec) btnRec.classList.add('hidden');
+}
+
+// Inicializa el escaneo de la carpeta
+async function inicializarCarpetaImagenes(handle) {
+    dirImagenesHandle = handle;
+    const btnSel = document.getElementById('btnSeleccionarCarpeta');
+    if (btnSel) {
+        btnSel.innerText = "⏳ Escaneando...";
+        btnSel.className = 'bg-yellow-500 text-white font-bold py-1 px-4 rounded text-sm shadow-sm flex items-center gap-1';
+    }
+
+    try {
+        await escanearCarpetaImagenes(handle);
+        console.log("Escaneo finalizado. Imágenes cargadas:", Object.keys(IMAGENES_INDEX).length);
+
+        if (btnSel) {
+            btnSel.innerText = "📷 Carpeta Conectada";
+            btnSel.className = 'bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm flex items-center gap-1';
+        }
+        ocultarBotonPermisoReconexion();
+        await guardarDirHandle(handle);
+
+        // Si la pestaña actual activa es catálogo, refrescarla
+        if (document.getElementById('vistaCatalogo') && !document.getElementById('vistaCatalogo').classList.contains('hidden')) {
+            renderCatalogo(TODOS_LOS_DATOS);
+        }
+    } catch (e) {
+        console.error("Error al inicializar carpeta de imágenes:", e);
+        if (btnSel) {
+            btnSel.innerText = "📷 Error de Carpeta";
+            btnSel.className = 'bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-4 rounded text-sm transition shadow-sm flex items-center gap-1';
+        }
+        mostrarBotonPermisoReconexion();
+    }
+}
+
+// Escanea recursivamente el directorio seleccionado (soporta múltiples estructuras e imágenes adicionales _2, _3...)
+async function escanearCarpetaImagenes(dirHandle) {
+    IMAGENES_INDEX = {};
+    IMAGENES_SIMPLIFIED_INDEX = {};
+    const queue = [{ handle: dirHandle, path: '' }];
+
+    while (queue.length > 0) {
+        const { handle, path } = queue.shift();
+        try {
+            for await (const entry of handle.values()) {
+                if (entry.kind === 'directory') {
+                    queue.push({ handle: entry, path: path + entry.name + '/' });
+                } else if (entry.kind === 'file') {
+                    const name = entry.name.toLowerCase();
+                    if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.webp')) {
+                        const baseName = entry.name.substring(0, entry.name.lastIndexOf('.'));
+
+                        // Detecta sufijos de paginación de imágenes como _2, _3, _4
+                        const matchSuffix = baseName.match(/(.+)_(\d+)$/);
+                        let baseKey = baseName;
+                        let suffixNum = 1;
+                        if (matchSuffix) {
+                            baseKey = matchSuffix[1];
+                            suffixNum = parseInt(matchSuffix[2], 10);
+                        }
+
+                        const exactKey = baseKey.trim().toLowerCase();
+                        const simpKey = simplifyKey(baseKey);
+
+                        // Agrega al índice exacto
+                        if (!IMAGENES_INDEX[exactKey]) IMAGENES_INDEX[exactKey] = [];
+                        IMAGENES_INDEX[exactKey].push({ handle: entry, suffix: suffixNum });
+
+                        // Agrega al índice simplificado
+                        if (!IMAGENES_SIMPLIFIED_INDEX[simpKey]) IMAGENES_SIMPLIFIED_INDEX[simpKey] = [];
+                        IMAGENES_SIMPLIFIED_INDEX[simpKey].push({ handle: entry, suffix: suffixNum });
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn(`Error al leer ruta: ${path}`, e);
+        }
+    }
+
+    // Ordenar los listados de imágenes por su sufijo
+    for (const key in IMAGENES_INDEX) {
+        IMAGENES_INDEX[key].sort((a, b) => a.suffix - b.suffix);
+    }
+    for (const key in IMAGENES_SIMPLIFIED_INDEX) {
+        IMAGENES_SIMPLIFIED_INDEX[key].sort((a, b) => a.suffix - b.suffix);
+    }
+}
+
+// Crea y almacena ObjectURLs cacheándolos por archivo
+async function obtenerUrlDeHandle(fileHandle) {
+    if (URLS_CACHE.has(fileHandle)) {
+        return URLS_CACHE.get(fileHandle);
+    }
+    try {
+        const file = await fileHandle.getFile();
+        const url = URL.createObjectURL(file);
+        URLS_CACHE.set(fileHandle, url);
+        return url;
+    } catch (e) {
+        console.error("Error al obtener archivo del disco local:", e);
+        return null;
+    }
+}
+
+// Busca las imágenes por código o por número de parte (con coincidencia exacta y simplificada flexible)
+async function obtenerImagenesRepuesto(codigo, noParte) {
+    if (!dirImagenesHandle) return [];
+
+    const keyCodigo = codigo ? codigo.trim().toLowerCase() : '';
+    const keyNoParte = noParte ? noParte.trim().toLowerCase() : '';
+    const simpCodigo = simplifyKey(codigo);
+    const simpNoParte = simplifyKey(noParte);
+
+    let entries = [];
+
+    // 1. Intentar coincidencia exacta con el código de repuesto (0-000-00-000)
+    if (keyCodigo && IMAGENES_INDEX[keyCodigo]) {
+        entries = IMAGENES_INDEX[keyCodigo];
+    }
+    // 2. Intentar coincidencia exacta con el número de parte
+    else if (keyNoParte && keyNoParte !== '-' && IMAGENES_INDEX[keyNoParte]) {
+        entries = IMAGENES_INDEX[keyNoParte];
+    }
+    // 3. Intentar coincidencia simplificada flexible con el código
+    else if (simpCodigo && IMAGENES_SIMPLIFIED_INDEX[simpCodigo]) {
+        entries = IMAGENES_SIMPLIFIED_INDEX[simpCodigo];
+    }
+    // 4. Intentar coincidencia simplificada flexible con el número de parte
+    else if (simpNoParte && simpNoParte !== '-' && IMAGENES_SIMPLIFIED_INDEX[simpNoParte]) {
+        entries = IMAGENES_SIMPLIFIED_INDEX[simpNoParte];
+    }
+
+    const urls = [];
+    for (const entry of entries) {
+        const url = await obtenerUrlDeHandle(entry.handle);
+        if (url) urls.push(url);
+    }
+    return urls;
+}
+
+// Carrusel de modal de detalle
+let imagenesDetalleActuales = [];
+let indiceImagenDetalle = 0;
+
+function mostrarImagenDetalle() {
+    const img = document.getElementById('detImagen');
+    const prevBtn = document.getElementById('detPrevBtn');
+    const nextBtn = document.getElementById('detNextBtn');
+    const indexLbl = document.getElementById('detImagenIndice');
+    const container = document.getElementById('detImagenContainer');
+
+    if (!img || !container) return;
+
+    if (imagenesDetalleActuales.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+    img.src = imagenesDetalleActuales[indiceImagenDetalle];
+
+    if (imagenesDetalleActuales.length > 1) {
+        if (prevBtn) prevBtn.classList.remove('hidden');
+        if (nextBtn) nextBtn.classList.remove('hidden');
+        if (indexLbl) {
+            indexLbl.innerText = `${indiceImagenDetalle + 1} / ${imagenesDetalleActuales.length}`;
+            indexLbl.classList.remove('hidden');
+        }
+    } else {
+        if (prevBtn) prevBtn.classList.add('hidden');
+        if (nextBtn) nextBtn.classList.add('hidden');
+        if (indexLbl) indexLbl.classList.add('hidden');
+    }
+}
+
+function cambiarImagenDetalle(dir) {
+    if (imagenesDetalleActuales.length === 0) return;
+    indiceImagenDetalle += dir;
+    if (indiceImagenDetalle < 0) {
+        indiceImagenDetalle = imagenesDetalleActuales.length - 1;
+    } else if (indiceImagenDetalle >= imagenesDetalleActuales.length) {
+        indiceImagenDetalle = 0;
+    }
+    mostrarImagenDetalle();
+}
+
+// Previsualización y carrusel en el modal de nuevo repuesto solicitado
+let imagenesNuevoActuales = [];
+let indiceImagenNuevo = 0;
+
+async function actualizarImagenNuevoRepuesto() {
+    const noParteInput = document.getElementById('nrNoParte');
+    if (!noParteInput) return;
+
+    const noParte = noParteInput.value.trim();
+    const container = document.getElementById('nrImagenContainer');
+    const img = document.getElementById('nrImagen');
+    const prevBtn = document.getElementById('nrPrevBtn');
+    const nextBtn = document.getElementById('nrNextBtn');
+    const indexLbl = document.getElementById('nrImagenIndice');
+
+    if (!container || !img) return;
+
+    if (!noParte || noParte === '-') {
+        container.classList.add('hidden');
+        imagenesNuevoActuales = [];
+        return;
+    }
+
+    imagenesNuevoActuales = await obtenerImagenesRepuesto('', noParte);
+    indiceImagenNuevo = 0;
+
+    if (imagenesNuevoActuales.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+    img.src = imagenesNuevoActuales[indiceImagenNuevo];
+
+    if (imagenesNuevoActuales.length > 1) {
+        if (prevBtn) prevBtn.classList.remove('hidden');
+        if (nextBtn) nextBtn.classList.remove('hidden');
+        if (indexLbl) {
+            indexLbl.innerText = `${indiceImagenNuevo + 1} / ${imagenesNuevoActuales.length}`;
+            indexLbl.classList.remove('hidden');
+        }
+    } else {
+        if (prevBtn) prevBtn.classList.add('hidden');
+        if (nextBtn) nextBtn.classList.add('hidden');
+        if (indexLbl) indexLbl.classList.add('hidden');
+    }
+}
+
+function cambiarImagenNuevo(dir) {
+    if (imagenesNuevoActuales.length === 0) return;
+    indiceImagenNuevo += dir;
+    if (indiceImagenNuevo < 0) {
+        indiceImagenNuevo = imagenesNuevoActuales.length - 1;
+    } else if (indiceImagenNuevo >= imagenesNuevoActuales.length) {
+        indiceImagenNuevo = 0;
+    }
+    const img = document.getElementById('nrImagen');
+    const indexLbl = document.getElementById('nrImagenIndice');
+    if (img) img.src = imagenesNuevoActuales[indiceImagenNuevo];
+    if (indexLbl) indexLbl.innerText = `${indiceImagenNuevo + 1} / ${imagenesNuevoActuales.length}`;
+}
+
+// Pantalla completa
+function abrirImagenPantallaCompleta(src) {
+    const m = document.getElementById('modalImagenCompleta');
+    const img = document.getElementById('imgPantallaCompleta');
+    if (m && img) {
+        img.src = src;
+        m.classList.remove('hidden');
+    }
+}
+
+function cerrarImagenPantallaCompleta() {
+    const m = document.getElementById('modalImagenCompleta');
+    if (m) m.classList.add('hidden');
+}
+
+// Lógica de Paginación, Carga y Búsqueda de Catálogo
+let _datosCatalogoCurrent = [];
+let _punteroCatalogo = 0;
+const _paginaCatalogo = 16;
+
+function buscarCatalogo() {
+    const term = document.getElementById('busqCatalogo').value.toLowerCase().trim();
+    if (!term) {
+        const btnVer = document.getElementById('btnVerTodoCatalogo');
+        if (btnVer) btnVer.classList.add('hidden');
+        renderCatalogo(TODOS_LOS_DATOS);
+        return;
+    }
+    guardarHistorialBusqueda(term);
+    const terms = term.split(/\s+/);
+    const filtrados = TODOS_LOS_DATOS.filter(fila => {
+        const text = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte || ''} ${fila.inv.nombreUtil || ''} ${fila.inv.ubicacion || ''}`.toLowerCase();
+        return terms.every(t => text.includes(t));
+    });
+    renderCatalogo(filtrados);
+    const btnVer = document.getElementById('btnVerTodoCatalogo');
+    if (btnVer) btnVer.classList.remove('hidden');
+}
+
+function limpiarBusquedaCatalogo() {
+    const inp = document.getElementById('busqCatalogo');
+    if (inp) inp.value = '';
+    const btnVer = document.getElementById('btnVerTodoCatalogo');
+    if (btnVer) btnVer.classList.add('hidden');
+    renderCatalogo(TODOS_LOS_DATOS);
+}
+
+async function renderCatalogo(datos) {
+    _datosCatalogoCurrent = datos || [];
+    _punteroCatalogo = 0;
+    const grid = document.getElementById('gridCatalogo');
+    if (!grid) return;
+
+    if (!_datosCatalogoCurrent.length) {
+        grid.innerHTML = "<div class='col-span-full text-center py-12 text-gray-400 font-bold'>Sin resultados. Intente con otra búsqueda.</div>";
+        const cont = document.getElementById('controlesCatalogo');
+        if (cont) cont.classList.add('hidden');
+        return;
+    }
+
+    const bloque = _datosCatalogoCurrent.slice(0, _paginaCatalogo);
+    grid.innerHTML = "<div class='col-span-full text-center py-6 text-blue-600 font-medium animate-pulse'>Cargando catálogo con imágenes...</div>";
+
+    const fragment = document.createDocumentFragment();
+    await agregarBloqueCatalogo(fragment, bloque);
+    grid.innerHTML = '';
+    grid.appendChild(fragment);
+
+    _punteroCatalogo = bloque.length;
+
+    const total = _datosCatalogoCurrent.length;
+    const vis = document.getElementById('countCatalogoVisibles');
+    const tot = document.getElementById('countCatalogoTotal');
+    const ctrl = document.getElementById('controlesCatalogo');
+
+    if (vis) vis.innerText = _punteroCatalogo;
+    if (tot) tot.innerText = total;
+    if (ctrl) ctrl.classList.toggle('hidden', _punteroCatalogo >= total);
+}
+
+async function cargarMasCatalogo() {
+    const grid = document.getElementById('gridCatalogo');
+    if (!grid) return;
+
+    const bloque = _datosCatalogoCurrent.slice(_punteroCatalogo, _punteroCatalogo + _paginaCatalogo);
+
+    const fragment = document.createDocumentFragment();
+    await agregarBloqueCatalogo(fragment, bloque);
+    grid.appendChild(fragment);
+
+    _punteroCatalogo += bloque.length;
+
+    const total = _datosCatalogoCurrent.length;
+    const vis = document.getElementById('countCatalogoVisibles');
+    const ctrl = document.getElementById('controlesCatalogo');
+
+    if (vis) vis.innerText = _punteroCatalogo;
+    if (ctrl) ctrl.classList.toggle('hidden', _punteroCatalogo >= total);
+}
+
+async function agregarBloqueCatalogo(parentElement, bloque) {
+    for (const fila of bloque) {
+        const { inv } = fila;
+        const codigo = inv.codigo;
+        const noParte = inv.noParte || '-';
+        const desc = inv.descripcion || '';
+        const nombreUtil = inv.nombreUtil || '';
+        const ubicacion = inv.ubicacion || '';
+        const cantidad = inv.cantidad || 0;
+
+        const imgs = await obtenerImagenesRepuesto(codigo, noParte);
+        const hasImgs = imgs.length > 0;
+        const imgSrc = hasImgs ? imgs[0] : '';
+
+        const card = document.createElement('div');
+        card.className = "bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between overflow-hidden group";
+
+        let stockBadgeClass = "bg-green-100 text-green-800 border-green-200";
+        if (cantidad === 0) stockBadgeClass = "bg-red-100 text-red-800 border-red-200";
+        else if (cantidad === 1) stockBadgeClass = "bg-yellow-100 text-yellow-800 border-yellow-200";
+
+        let imgHtml = '';
+        if (hasImgs) {
+            imgHtml = `
+                <div class="relative w-full h-40 bg-gray-50 flex items-center justify-center border-b overflow-hidden cursor-pointer" onclick="abrirImagenPantallaCompleta('${imgSrc}')">
+                    <img src="${imgSrc}" class="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105" />
+                    ${imgs.length > 1 ? `<span class="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">${imgs.length} fotos</span>` : ''}
+                </div>`;
+        } else {
+            imgHtml = `
+                <div class="w-full h-40 bg-gray-100 flex flex-col items-center justify-center border-b text-gray-400">
+                    <span class="text-3xl">📷</span>
+                    <span class="text-[10px] uppercase font-bold mt-1 tracking-wider">Sin Imagen</span>
+                </div>`;
+        }
+
+        card.innerHTML = `
+            ${imgHtml}
+            <div class="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-start gap-1 mb-1">
+                        <span class="font-mono text-xs font-bold text-blue-700 truncate" title="${codigo}">${codigo}</span>
+                        <span class="text-[10px] text-gray-500 font-semibold truncate max-w-[100px]" title="No. Parte: ${noParte}">PN: ${noParte}</span>
+                    </div>
+                    
+                    <h4 class="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight mb-2 h-8" title="${desc}">${desc}</h4>
+                    
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        ${nombreUtil ? `<span class="bg-emerald-50 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-100 truncate max-w-full" title="${nombreUtil}">🏷️ ${nombreUtil}</span>` : ''}
+                        ${ubicacion ? `<span class="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-100 truncate max-w-full" title="${ubicacion}">📍 ${ubicacion}</span>` : ''}
+                    </div>
+                </div>
+                
+                <div class="mt-auto">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs text-gray-500 font-medium">Stock:</span>
+                        <span class="text-xs font-bold px-2 py-0.5 rounded-full border ${stockBadgeClass}">${cantidad}</span>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button onclick="simpleAddToCart('${codigo}', 1); animarBotonCarrito(this);"
+                            class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 rounded text-xs transition shadow-sm flex items-center justify-center gap-1 active:scale-95">
+                            🛒 +1
+                        </button>
+                        <button onclick="abrirModalDetalleSencillo('${codigo}')"
+                            class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold px-3 py-1.5 rounded text-xs transition active:scale-95 flex items-center justify-center">
+                            🔍 Pedir
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        parentElement.appendChild(card);
+    }
+}
+
+function animarBotonCarrito(btn) {
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "✅ Añadido";
+    btn.classList.replace('bg-green-600', 'bg-emerald-500');
+    btn.classList.replace('hover:bg-green-700', 'hover:bg-emerald-600');
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.classList.replace('bg-emerald-500', 'bg-green-600');
+        btn.classList.replace('hover:bg-emerald-600', 'hover:bg-green-700');
+    }, 1200);
+}
+
+// -----------------------------------------------------
+// 6. GESTIÓN DEL ÁRBOL DE REPUESTOS EN MÁQUINA
+// -----------------------------------------------------
+let arbolMaquinas = null; // Objeto del árbol raíz
+let nodoSeleccionadoActual = null; // Nodo del árbol seleccionado actualmente
+let modoEdicionActivo = false; // Bloqueo de edición accidental (Mode Consulta vs Edición)
+
+// Árbol pre-poblado por defecto con la jerarquía industrial solicitada
+const ARBOL_DEFAULT = {
+    id: "root_1",
+    label: "EMPRESA S.A.",
+    type: "root",
+    expanded: true,
+    children: [
+        {
+            id: "linea_lc01",
+            label: "LC - Línea de Corrugación 01",
+            type: "linea",
+            expanded: true,
+            children: [
+                {
+                    id: "maq_c01",
+                    label: "Corrugadora 01",
+                    type: "maquina",
+                    children: ["Twin", "Smart", "Link", "Stand", "Crest", "Terminal"].map(eq => ({
+                        id: `eq_c01_${eq.toLowerCase()}`,
+                        label: eq,
+                        type: "equipo",
+                        children: obtenerSistemasDefault(`c01_${eq.toLowerCase()}`)
+                    }))
+                },
+                {
+                    id: "maq_c02",
+                    label: "Corrugadora 02",
+                    type: "maquina",
+                    children: ["Twin", "Smart", "Link", "Stand", "Crest", "Terminal"].map(eq => ({
+                        id: `eq_c02_${eq.toLowerCase()}`,
+                        label: eq,
+                        type: "equipo",
+                        children: obtenerSistemasDefault(`c02_${eq.toLowerCase()}`)
+                    }))
+                }
+            ]
+        },
+        {
+            id: "linea_li01",
+            label: "LI - Línea de Imprenta 01",
+            type: "linea",
+            expanded: true,
+            children: [
+                {
+                    id: "maq_i01",
+                    label: "Imprenta 01",
+                    type: "maquina",
+                    children: ["Prefeeder", "Feed", "Flexo 01", "Flexo 02", "Slotter", "Die Cutter", "Folder Counter Ejector", "Stacker", "Conveyor", "Flejadora EAM MOSCA", "Braker", "Repartidor", "Load Former"].map(eq => ({
+                        id: `eq_i01_${eq.toLowerCase().replace(/\s+/g, '')}`,
+                        label: eq,
+                        type: "equipo",
+                        children: obtenerSistemasDefault(`i01_${eq.toLowerCase().replace(/\s+/g, '')}`)
+                    }))
+                },
+                {
+                    id: "maq_i02",
+                    label: "Imprenta 02",
+                    type: "maquina",
+                    children: ["Prefeeder", "Feed", "Flexo 01", "Flexo 02", "Slotter", "Die Cutter", "Folder Counter Ejector", "Stacker", "Conveyor", "Flejadora EAM MOSCA", "Braker", "Repartidor", "Load Former"].map(eq => ({
+                        id: `eq_i02_${eq.toLowerCase().replace(/\s+/g, '')}`,
+                        label: eq,
+                        type: "equipo",
+                        children: obtenerSistemasDefault(`i02_${eq.toLowerCase().replace(/\s+/g, '')}`)
+                    }))
+                }
+            ]
+        }
+    ]
+};
+
+function obtenerSistemasDefault(prefix) {
+    return [
+        {
+            id: `sis_${prefix}_potencia`,
+            label: "Sistema de Potencia",
+            type: "sistema",
+            children: [
+                { id: `ap_${prefix}_pot_1`, label: "Motor Principal", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_pot_2`, label: "Motor de los Brazos", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_pot_3`, label: "Motor de Anilox", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_pot_4`, label: "Motor de abrir y cerrar sección", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_pot_5`, label: "Motor del Blower de vacío", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_pot_6`, label: "Motor de bandas", type: "aplicacion", linkedCodes: [] }
+            ]
+        },
+        {
+            id: `sis_${prefix}_control`,
+            label: "Sistema de Control",
+            type: "sistema",
+            children: [
+                { id: `ap_${prefix}_ctrl_1`, label: "Botonería", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_ctrl_2`, label: "Sensores (inductivos, encoder, etc.)", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_ctrl_3`, label: "PLC", type: "aplicacion", linkedCodes: [] }
+            ]
+        },
+        {
+            id: `sis_${prefix}_seguridad`,
+            label: "Sistema de Seguridad",
+            type: "sistema",
+            children: [
+                { id: `ap_${prefix}_seg_1`, label: "Botones de Emergencia", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_seg_2`, label: "Pasadores de Emergencia", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_seg_3`, label: "Tarjetas Safe", type: "aplicacion", linkedCodes: [] }
+            ]
+        },
+        {
+            id: `sis_${prefix}_neumatico`,
+            label: "Sistema Neumático",
+            type: "sistema",
+            children: [
+                { id: `ap_${prefix}_neu_1`, label: "Válvulas", type: "aplicacion", linkedCodes: [] }
+            ]
+        },
+        {
+            id: `sis_${prefix}_hidraulico`,
+            label: "Sistema Hidráulico",
+            type: "sistema",
+            children: [
+                { id: `ap_${prefix}_hid_1`, label: "Electrovalvulas", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_hid_2`, label: "Control de Presión", type: "aplicacion", linkedCodes: [] },
+                { id: `ap_${prefix}_hid_3`, label: "Control de Temperatura", type: "aplicacion", linkedCodes: [] }
+            ]
+        }
+    ];
+}
+
+// Guarda el árbol de máquinas en IndexedDB
+async function guardarArbolMaquinas(arbol) {
+    try {
+        const db = await initDB();
+        const tx = db.transaction(STORE_ANALISIS, 'readwrite');
+        tx.objectStore(STORE_ANALISIS).put(arbol, 'arbolMaquinas');
+        return new Promise(r => tx.oncomplete = r);
+    } catch (e) {
+        console.error("Error al guardar el árbol de máquinas:", e);
+    }
+}
+
+// Carga el árbol de máquinas de IndexedDB
+async function cargarArbolMaquinas() {
+    try {
+        const db = await initDB();
+        return new Promise(r => {
+            const req = db.transaction(STORE_ANALISIS, 'readonly').objectStore(STORE_ANALISIS).get('arbolMaquinas');
+            req.onsuccess = () => r(req.result);
+            req.onerror = () => r(null);
+        });
+    } catch (e) {
+        console.error("Error al cargar el árbol de máquinas:", e);
+        return null;
+    }
+}
+
+// Inicializa la vista y dibuja el árbol
+async function inicializarVistaArbolMaquinas() {
+    if (!arbolMaquinas) {
+        let arbol = await cargarArbolMaquinas();
+        if (!arbol) {
+            arbol = ARBOL_DEFAULT;
+            await guardarArbolMaquinas(arbol);
+        }
+        arbolMaquinas = arbol;
+    }
+    dibujarArbol();
+    actualizarPanelEditorNodo();
+}
+
+// Dibuja el árbol jerárquico recursivo
+function dibujarArbol() {
+    const container = document.getElementById('treeContainer');
+    if (!container) return;
+
+    if (!arbolMaquinas) {
+        container.innerHTML = "<div class='text-gray-400 py-6 text-center'>Error al cargar la estructura del árbol.</div>";
+        return;
+    }
+
+    container.innerHTML = dibujarNodoRecursivo(arbolMaquinas, 0);
+}
+
+// Genera HTML recursivo para el árbol
+function dibujarNodoRecursivo(nodo, nivel) {
+    const paddingLeft = nivel * 16;
+    const hasChildren = nodo.children && nodo.children.length > 0;
+    const expanded = nodo.expanded !== false;
+    const isSelected = nodoSeleccionadoActual && nodoSeleccionadoActual.id === nodo.id;
+
+    let icon = "⚙️";
+    if (nodo.type === "root") icon = "🏭";
+    else if (nodo.type === "linea") icon = "⚡";
+    else if (nodo.type === "maquina") icon = "📦";
+    else if (nodo.type === "equipo") icon = "🛠️";
+    else if (nodo.type === "sistema") icon = "🔧";
+    else if (nodo.type === "aplicacion") icon = "🏷️";
+
+    let arrowHtml = "";
+    if (hasChildren) {
+        arrowHtml = `<span onclick="event.stopPropagation(); toggleNodoExpansión('${nodo.id}')" class="cursor-pointer text-gray-500 hover:text-blue-700 transition px-1 inline-block text-[10px] w-4 text-center transform duration-150 ${expanded ? 'rotate-90' : ''}">▶</span>`;
+    } else {
+        arrowHtml = `<span class="w-4 inline-block"></span>`;
+    }
+
+    let linkedCountBadge = "";
+    if (nodo.linkedCodes && nodo.linkedCodes.length > 0) {
+        linkedCountBadge = `<span class="bg-blue-100 text-blue-800 text-[9px] font-bold px-1.5 py-0.2 rounded-full border border-blue-200 ml-1.5 shadow-sm">${nodo.linkedCodes.length}</span>`;
+    }
+
+    const isSelectedClass = isSelected
+        ? 'bg-blue-100 border-blue-300 font-bold text-blue-900 shadow-sm'
+        : 'hover:bg-gray-100 border-transparent text-gray-700 hover:text-gray-900';
+
+    let html = `
+        <div class="flex flex-col">
+            <div onclick="seleccionarNodoArbol('${nodo.id}')" class="flex items-center gap-1.5 py-1 pr-2 border rounded cursor-pointer transition duration-150 ${isSelectedClass} text-xs my-0.5" style="margin-left: ${paddingLeft}px;">
+                ${arrowHtml}
+                <span class="text-sm shrink-0 leading-none select-none">${icon}</span>
+                <span class="truncate block max-w-[280px] md:max-w-[400px]">${nodo.label}</span>
+                ${linkedCountBadge}
+            </div>
+    `;
+
+    if (hasChildren && expanded) {
+        nodo.children.forEach(child => {
+            html += dibujarNodoRecursivo(child, nivel + 1);
+        });
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+// Busca un nodo por id recursivamente
+function buscarNodoPorId(nodo, id) {
+    if (nodo.id === id) return nodo;
+    if (nodo.children && nodo.children.length > 0) {
+        for (const child of nodo.children) {
+            const found = buscarNodoPorId(child, id);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+// Busca el nodo padre por id
+function buscarPadreDeNodo(parent, childId) {
+    if (!parent.children) return null;
+    if (parent.children.some(c => c.id === childId)) return parent;
+    for (const child of parent.children) {
+        const found = buscarPadreDeNodo(child, childId);
+        if (found) return found;
+    }
+    return null;
+}
+
+// Expande o colapsa un nodo
+async function toggleNodoExpansión(id) {
+    if (!arbolMaquinas) return;
+    const nodo = buscarNodoPorId(arbolMaquinas, id);
+    if (nodo) {
+        nodo.expanded = nodo.expanded === false ? true : false;
+        dibujarArbol();
+        await guardarArbolMaquinas(arbolMaquinas);
+    }
+}
+
+// Expande todo el árbol
+function expandirTodoArbol() {
+    if (!arbolMaquinas) return;
+    const expandRec = (nodo) => {
+        nodo.expanded = true;
+        if (nodo.children) nodo.children.forEach(expandRec);
+    };
+    expandRec(arbolMaquinas);
+    dibujarArbol();
+    guardarArbolMaquinas(arbolMaquinas);
+}
+
+// Contrae todo el árbol
+function contraerTodoArbol() {
+    if (!arbolMaquinas) return;
+    const collapseRec = (nodo) => {
+        if (nodo.id !== "root_1") nodo.expanded = false;
+        if (nodo.children) nodo.children.forEach(collapseRec);
+    };
+    collapseRec(arbolMaquinas);
+    dibujarArbol();
+    guardarArbolMaquinas(arbolMaquinas);
+}
+
+// Selecciona un nodo del árbol
+function seleccionarNodoArbol(id) {
+    if (!arbolMaquinas) return;
+    const nodo = buscarNodoPorId(arbolMaquinas, id);
+    if (nodo) {
+        modoEdicionActivo = false; // Bloquear en modo consulta por seguridad al cambiar selección
+        nodoSeleccionadoActual = nodo;
+        dibujarArbol();
+        actualizarPanelEditorNodo();
+        cargarRepuestosVinculadosNodo();
+    }
+}
+
+// Actualiza el panel del editor
+function actualizarPanelEditorNodo() {
+    const label = document.getElementById('nodoSelLabel');
+    const campos = document.getElementById('camposEdicionNodo');
+    const inpNombre = document.getElementById('inpNombreNodo');
+    const campoCodes = document.getElementById('campoCodigosBodega');
+    const inpCodes = document.getElementById('inpCodigosNodo');
+    const campoSpecs = document.getElementById('campoSpecsBodega');
+    const inpSpecs = document.getElementById('inpSpecsNodo');
+    const btnDel = document.getElementById('btnEliminarNodo');
+    const btnDup = document.getElementById('btnDuplicarNodo');
+    const quickVinc = document.getElementById('panelVincularRapido');
+
+    // Elementos del Modo Edición / Consulta
+    const badgeModo = document.getElementById('badgeModoEdicion');
+    const btnActivar = document.getElementById('btnActivarEdicion');
+    const btnCancel = document.getElementById('btnCancelarEdicion');
+    const btnSave = document.getElementById('btnGuardarEdicion');
+
+    if (!label) return;
+
+    if (!nodoSeleccionadoActual) {
+        label.innerText = "Ninguno";
+        if (campos) campos.classList.add('hidden');
+        if (btnDel) btnDel.classList.add('hidden');
+        if (btnDup) btnDup.classList.add('hidden');
+        if (quickVinc) quickVinc.classList.add('hidden');
+        return;
+    }
+
+    label.innerText = `${nodoSeleccionadoActual.label} (${nodoSeleccionadoActual.type.toUpperCase()})`;
+    if (campos) campos.classList.remove('hidden');
+    if (inpNombre) {
+        inpNombre.value = nodoSeleccionadoActual.label;
+        inpNombre.disabled = !modoEdicionActivo;
+    }
+
+    if (nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "sistema") {
+        if (campoCodes) campoCodes.classList.remove('hidden');
+        if (campoSpecs) campoSpecs.classList.remove('hidden');
+        
+        // Panel de vincular rápido solo visible cuando la edición está activa
+        if (quickVinc) {
+            if (modoEdicionActivo) quickVinc.classList.remove('hidden');
+            else quickVinc.classList.add('hidden');
+        }
+        
+        if (inpCodes) {
+            inpCodes.value = (nodoSeleccionadoActual.linkedCodes || []).join(', ');
+            inpCodes.disabled = !modoEdicionActivo;
+        }
+        if (inpSpecs) {
+            inpSpecs.value = nodoSeleccionadoActual.specs || '';
+            inpSpecs.disabled = !modoEdicionActivo;
+        }
+    } else {
+        if (campoCodes) campoCodes.classList.add('hidden');
+        if (campoSpecs) campoSpecs.classList.add('hidden');
+        if (quickVinc) quickVinc.classList.add('hidden');
+    }
+
+    // Ocultar botones de borrar o duplicar para el nodo principal (empresa)
+    if (nodoSeleccionadoActual.id === "root_1") {
+        if (btnDel) btnDel.classList.add('hidden');
+        if (btnDup) btnDup.classList.add('hidden');
+    } else {
+        if (btnDel) btnDel.classList.remove('hidden');
+        if (btnDup) btnDup.classList.remove('hidden');
+    }
+
+    // Gestionar visualización e inputs en base al Modo Edición
+    if (badgeModo) {
+        if (modoEdicionActivo) {
+            badgeModo.innerText = "🔓 Modo Edición Activo";
+            badgeModo.className = "text-[9px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-100 text-amber-800 border-amber-300 animate-pulse";
+            if (btnActivar) btnActivar.classList.add('hidden');
+            if (btnCancel) btnCancel.classList.remove('hidden');
+            if (btnSave) btnSave.classList.remove('hidden');
+        } else {
+            badgeModo.innerText = "🔒 Modo Consulta";
+            badgeModo.className = "text-[9px] font-bold px-2 py-0.5 rounded-full border bg-gray-100 text-gray-600 border-gray-200";
+            if (btnActivar) btnActivar.classList.remove('hidden');
+            if (btnCancel) btnCancel.classList.add('hidden');
+            if (btnSave) btnSave.classList.add('hidden');
+        }
+    }
+}
+
+function cancelarEdicionNodo() {
+    modoEdicionActivo = false;
+    actualizarPanelEditorNodo();
+}
+
+// Guarda cambios en nodo (Nombre / Códigos / Especificaciones)
+async function guardarEdicionNodo() {
+    if (!arbolMaquinas || !nodoSeleccionadoActual) return;
+
+    const inpNombre = document.getElementById('inpNombreNodo');
+    const inpCodes = document.getElementById('inpCodigosNodo');
+    const inpSpecs = document.getElementById('inpSpecsNodo');
+
+    if (!inpNombre || !inpNombre.value.trim()) {
+        alert("El nombre del nodo no puede estar vacío.");
+        return;
+    }
+
+    nodoSeleccionadoActual.label = inpNombre.value.trim();
+
+    if (nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "sistema") {
+        const rawCodes = inpCodes ? inpCodes.value : '';
+        const codes = rawCodes.split(',')
+            .map(c => c.trim().toUpperCase())
+            .filter(c => c.length > 0);
+        nodoSeleccionadoActual.linkedCodes = codes;
+
+        if (inpSpecs) {
+            nodoSeleccionadoActual.specs = inpSpecs.value.trim();
+        }
+    }
+
+    modoEdicionActivo = false; // Retornar a modo consulta por seguridad
+    dibujarArbol();
+    actualizarPanelEditorNodo();
+    cargarRepuestosVinculadosNodo();
+    await guardarArbolMaquinas(arbolMaquinas);
+
+    alert("✅ Cambios guardados en el nodo correctamente.");
+}
+
+// Agrega un subnodo bajo el seleccionado
+async function abrirAgregarSubnodoPrompt() {
+    if (!arbolMaquinas) return;
+    if (!nodoSeleccionadoActual) {
+        alert("Por favor, seleccione primero un nodo en el árbol bajo el cual agregar el subnodo.");
+        return;
+    }
+
+    const label = prompt(`Escriba el nombre del nuevo subnodo a agregar bajo "${nodoSeleccionadoActual.label}":`);
+    if (!label || !label.trim()) return;
+
+    let childType = "aplicacion";
+    if (nodoSeleccionadoActual.type === "root") childType = "linea";
+    else if (nodoSeleccionadoActual.type === "linea") childType = "maquina";
+    else if (nodoSeleccionadoActual.type === "maquina") childType = "equipo";
+    else if (nodoSeleccionadoActual.type === "equipo") childType = "sistema";
+
+    const childId = `${childType}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+    const newChild = {
+        id: childId,
+        label: label.trim(),
+        type: childType,
+        expanded: true,
+        children: []
+    };
+
+    if (childType === "aplicacion" || childType === "sistema") {
+        newChild.linkedCodes = [];
+    }
+
+    if (!nodoSeleccionadoActual.children) {
+        nodoSeleccionadoActual.children = [];
+    }
+
+    nodoSeleccionadoActual.children.push(newChild);
+    nodoSeleccionadoActual.expanded = true;
+
+    dibujarArbol();
+    seleccionarNodoArbol(childId);
+    await guardarArbolMaquinas(arbolMaquinas);
+}
+
+// Elimina el nodo seleccionado con PIN de seguridad
+async function confirmarEliminarNodo() {
+    if (!arbolMaquinas || !nodoSeleccionadoActual) return;
+    if (nodoSeleccionadoActual.id === "root_1") return;
+
+    const tieneHijos = nodoSeleccionadoActual.children && nodoSeleccionadoActual.children.length > 0;
+    const tieneCodigos = nodoSeleccionadoActual.linkedCodes && nodoSeleccionadoActual.linkedCodes.length > 0;
+
+    const pin = prompt(`Para eliminar el nodo "${nodoSeleccionadoActual.label}"${tieneHijos || tieneCodigos ? ' (que contiene información o subnodos vinculados)' : ''}, ingrese el PIN de seguridad (1234):`);
+    if (pin !== '1234') {
+        if (pin !== null) alert("PIN incorrecto. Eliminación abortada.");
+        return;
+    }
+
+    if (!confirm(`¿Está seguro de eliminar el nodo "${nodoSeleccionadoActual.label}"? Esto eliminará permanentemente todos sus subnodos y relaciones.`)) return;
+
+    const parent = buscarPadreDeNodo(arbolMaquinas, nodoSeleccionadoActual.id);
+    if (parent) {
+        parent.children = parent.children.filter(c => c.id !== nodoSeleccionadoActual.id);
+        nodoSeleccionadoActual = null;
+        dibujarArbol();
+        actualizarPanelEditorNodo();
+        cargarRepuestosVinculadosNodo();
+        await guardarArbolMaquinas(arbolMaquinas);
+        alert("✅ Nodo eliminado correctamente.");
+    }
+}
+
+// Carga las tarjetas de repuestos relacionados al nodo en el panel derecho
+async function cargarRepuestosVinculadosNodo() {
+    const list = document.getElementById('repuestosVinculadosList');
+    const badge = document.getElementById('badgeCantVinculados');
+    if (!list) return;
+
+    if (badge) badge.innerText = "0";
+
+    // Cargar las sugerencias de bodega basadas en especificaciones técnicas
+    cargarSugerenciasInteligentesNodo();
+
+    if (!nodoSeleccionadoActual) {
+        list.innerHTML = "<div class='text-gray-400 text-center py-12 text-xs'>Seleccione un nodo del árbol para ver los repuestos vinculados</div>";
+        return;
+    }
+
+    const linkedCodes = nodoSeleccionadoActual.linkedCodes || [];
+
+    if (linkedCodes.length === 0) {
+        list.innerHTML = `
+            <div class='text-gray-400 text-center py-12 text-xs flex flex-col items-center gap-2'>
+                <span>Sin repuestos de Bodega vinculados a este equipo/sistema.</span>
+                ${nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "sistema" ? '<span class="text-[10px] text-gray-500 bg-white border border-dashed border-gray-300 p-2 rounded max-w-xs mt-2 leading-relaxed">Puedes escribir sus códigos de bodega separados por comas arriba o buscarlos abajo para vincularlos rápidamente.</span>' : ''}
+            </div>`;
+        return;
+    }
+
+    if (badge) badge.innerText = linkedCodes.length;
+
+    // Filtrar coincidencias del inventario consolidado
+    const relacionados = TODOS_LOS_DATOS.filter(f => {
+        const exact = f.inv.codigo.toUpperCase().trim();
+        const simp = simplifyKey(f.inv.codigo);
+
+        return linkedCodes.some(c => {
+            const matchExact = c.toUpperCase().trim();
+            const matchSimp = simplifyKey(c);
+            return exact === matchExact || simp === matchSimp;
+        });
+    });
+
+    if (relacionados.length === 0) {
+        list.innerHTML = `
+            <div class='text-gray-400 text-center py-12 text-xs flex flex-col items-center gap-2'>
+                <span>⚠️ Los códigos vinculados (${linkedCodes.join(', ')}) no existen actualmente en la base de datos de Bodega.</span>
+                <span class='text-[10px] text-red-500 bg-red-50 px-2 py-1 border border-red-100 rounded mt-2'>Verifique que los códigos coincidan con el formato consolidado.</span>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = '';
+
+    for (const fila of relacionados) {
+        const { inv } = fila;
+        const codigo = inv.codigo;
+        const noParte = inv.noParte || '-';
+        const desc = inv.descripcion || '';
+        const cantidad = inv.cantidad || 0;
+
+        const imgs = await obtenerImagenesRepuesto(codigo, noParte);
+        const hasImgs = imgs.length > 0;
+        const imgSrc = hasImgs ? imgs[0] : '';
+
+        const card = document.createElement('div');
+        card.className = "bg-white border rounded-xl p-3 shadow-sm hover:shadow-md transition duration-200 flex gap-3 align-start relative overflow-hidden group";
+
+        let stockBadgeClass = "bg-green-50 text-green-700 border-green-200";
+        if (cantidad === 0) stockBadgeClass = "bg-red-50 text-red-700 border-red-200";
+        else if (cantidad === 1) stockBadgeClass = "bg-yellow-50 text-yellow-700 border-yellow-200";
+
+        let imgHtml = '';
+        if (hasImgs) {
+            imgHtml = `
+                <div class="relative w-16 h-16 bg-gray-50 flex items-center justify-center rounded border overflow-hidden shrink-0 cursor-pointer" onclick="abrirImagenPantallaCompleta('${imgSrc}')">
+                    <img src="${imgSrc}" class="max-w-full max-h-full object-contain" />
+                </div>`;
+        } else {
+            imgHtml = `
+                <div class="w-16 h-16 bg-gray-100 flex flex-col items-center justify-center rounded border shrink-0 text-gray-400">
+                    <span class="text-xl">📷</span>
+                </div>`;
+        }
+
+        card.innerHTML = `
+            ${imgHtml}
+            <div class="flex-grow min-w-0">
+                <div class="flex justify-between items-start gap-1">
+                    <span class="font-mono text-[11px] font-bold text-blue-700 truncate" title="${codigo}">${codigo}</span>
+                    <span class="text-[9px] text-gray-500 font-semibold truncate max-w-[80px]" title="PN: ${noParte}">PN: ${noParte}</span>
+                </div>
+                <h4 class="text-[11px] font-semibold text-gray-800 line-clamp-2 leading-tight h-6 my-0.5" title="${desc}">${desc}</h4>
+                <div class="flex items-center justify-between mt-1">
+                    <span class="text-[10px] font-bold px-1.5 py-0.2 rounded border ${stockBadgeClass}">Stock: ${cantidad}</span>
+                    <div class="flex gap-1">
+                        <button onclick="simpleAddToCart('${codigo}', 1); animarBotonCarrito(this);"
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-0.5 px-2 rounded text-[10px] transition shadow-sm shrink-0 active:scale-95">
+                            🛒 +1
+                        </button>
+                        <button onclick="desvincularCodigoDeNodo('${codigo}')"
+                            class="bg-red-50 hover:bg-red-100 text-red-500 font-bold p-0.5 rounded text-[10px] transition shrink-0 hover:text-red-700" title="Desvincular del nodo">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        list.appendChild(card);
+    }
+}
+
+// Desvincula un código del nodo seleccionado
+async function desvincularCodigoDeNodo(codigo) {
+    if (!arbolMaquinas || !nodoSeleccionadoActual) return;
+
+    const exact = codigo.toUpperCase().trim();
+    const simp = simplifyKey(codigo);
+
+    nodoSeleccionadoActual.linkedCodes = (nodoSeleccionadoActual.linkedCodes || []).filter(c => {
+        const matchExact = c.toUpperCase().trim();
+        const matchSimp = simplifyKey(c);
+        return exact !== matchExact && simp !== matchSimp;
+    });
+
+    dibujarArbol();
+    actualizarPanelEditorNodo();
+    cargarRepuestosVinculadosNodo();
+    await guardarArbolMaquinas(arbolMaquinas);
+}
+
+// Buscador interactivo rápido para vincular nuevos códigos
+function buscarParaVincularRapido() {
+    const val = document.getElementById('busqVincularRapido').value.toLowerCase().trim();
+    const list = document.getElementById('resultadosVincularRapido');
+    if (!list) return;
+
+    if (!val || val.length < 2) {
+        list.classList.add('hidden');
+        return;
+    }
+
+    const filtrados = TODOS_LOS_DATOS.filter(fila => {
+        const txt = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte || ''}`.toLowerCase();
+        return txt.includes(val);
+    }).slice(0, 10);
+
+    if (filtrados.length === 0) {
+        list.innerHTML = "<div class='p-2 text-gray-400 text-center'>Sin coincidencias en Bodega</div>";
+        list.classList.remove('hidden');
+        return;
+    }
+
+    list.innerHTML = filtrados.map(fila => `
+        <div onclick="vincularCodigoRapido('${fila.inv.codigo}')" class="p-1.5 hover:bg-orange-50 cursor-pointer flex justify-between items-center text-[10px] select-none border-b last:border-0">
+            <div class="leading-tight truncate flex-grow mr-2">
+                <span class="font-mono font-bold text-blue-700 block">${fila.inv.codigo}</span>
+                <span class="text-gray-500 truncate block max-w-[200px]" title="${fila.inv.descripcion}">${fila.inv.descripcion}</span>
+            </div>
+            <button class="bg-orange-500 text-white font-bold px-1.5 py-0.5 rounded text-[9px] hover:bg-orange-600 transition shadow-sm shrink-0">🔌 Vincular</button>
+        </div>
+    `).join('');
+
+    list.classList.remove('hidden');
+}
+
+async function vincularCodigoRapido(codigo) {
+    if (!arbolMaquinas || !nodoSeleccionadoActual) return;
+
+    if (!nodoSeleccionadoActual.linkedCodes) {
+        nodoSeleccionadoActual.linkedCodes = [];
+    }
+
+    const exact = codigo.toUpperCase().trim();
+    if (!nodoSeleccionadoActual.linkedCodes.includes(exact)) {
+        nodoSeleccionadoActual.linkedCodes.push(exact);
+    }
+
+    limpiarBusqVincularRapido();
+    dibujarArbol();
+    actualizarPanelEditorNodo();
+    cargarRepuestosVinculadosNodo();
+    await guardarArbolMaquinas(arbolMaquinas);
+}
+
+function limpiarBusqVincularRapido() {
+    const inp = document.getElementById('busqVincularRapido');
+    if (inp) inp.value = '';
+    const list = document.getElementById('resultadosVincularRapido');
+    if (list) {
+        list.innerHTML = '';
+        list.classList.add('hidden');
+    }
+}
+
+// Carga sugerencias inteligentes del inventario en base a especificaciones del equipo
+async function cargarSugerenciasInteligentesNodo() {
+    const seccionSugs = document.getElementById('seccionSugerenciasSpecs');
+    const listSugs = document.getElementById('repuestosSugeridosList');
+    const badgeSugs = document.getElementById('badgeCantSugerencias');
+    if (!seccionSugs || !listSugs) return;
+
+    if (!nodoSeleccionadoActual || (nodoSeleccionadoActual.type !== "aplicacion" && nodoSeleccionadoActual.type !== "sistema")) {
+        seccionSugs.classList.add('hidden');
+        return;
+    }
+
+    seccionSugs.classList.remove('hidden');
+
+    const labelText = nodoSeleccionadoActual.label || '';
+    const specsText = nodoSeleccionadoActual.specs || '';
+
+    // Si no hay texto de especificación, indicar al usuario
+    if (!specsText.trim()) {
+        listSugs.innerHTML = `
+            <div class="text-gray-400 text-center py-6 text-[10px] flex flex-col items-center gap-1 bg-gray-50 border border-dashed rounded p-3 leading-normal">
+                <span>💡 Agregue especificaciones técnicas (como marca, HP, RPM, rodamientos, etc.) arriba para buscar automáticamente repuestos relacionados en Bodega.</span>
+            </div>`;
+        if (badgeSugs) badgeSugs.innerText = "0";
+        return;
+    }
+
+    // Tokenizar la combinación del nombre y especificaciones
+    const combText = (labelText + " " + specsText).toLowerCase();
+    const tokens = combText.match(/[a-z0-9]+/g) || [];
+
+    // Palabras de ruido genéricas a ignorar
+    const ruido = new Set([
+        "sistema", "del", "los", "las", "para", "con", "linea", "equipo", "maquina", 
+        "potencia", "control", "seguridad", "neumatico", "hidraulico", "principal", 
+        "abrir", "cerrar", "seccion", "brazos", "anilox", "blower", "vacio", "bandas", 
+        "botoneria", "sensores", "inductivos", "encoder", "plc", "valvulas", 
+        "electrovalvulas", "presion", "temperatura", "botones", "emergencia", 
+        "pasadores", "tarjetas", "safe", "datos", "placa",
+        // Artículos y pronombres comunes (incluye 2 letras)
+        "de", "la", "el", "en", "un", "al", "lo", "es", "no", "si", "su", "ya", "se", "me", "te", "mi", "tu", "con", "por", "sus"
+    ]);
+
+    const terminos = tokens.filter(t => t.length >= 2 && !ruido.has(t));
+
+    if (terminos.length === 0) {
+        listSugs.innerHTML = `<div class="text-gray-400 text-center py-4 text-[10px]">Escriba especificaciones más descriptivas (ej: Weg, 6205, etc.) para iniciar la búsqueda.</div>`;
+        if (badgeSugs) badgeSugs.innerText = "0";
+        return;
+    }
+
+    const linkedCodes = nodoSeleccionadoActual.linkedCodes || [];
+    const simplificadosLinked = linkedCodes.map(c => simplifyKey(c));
+
+    // Buscar coincidencias y calcular relevancia
+    const sugeridos = TODOS_LOS_DATOS.map(fila => {
+        const { inv } = fila;
+        const codigo = inv.codigo;
+        const noParte = inv.noParte || '';
+        const desc = inv.descripcion || '';
+        const nombreUtil = inv.nombreUtil || '';
+
+        // Excluir repuestos ya vinculados
+        if (linkedCodes.includes(codigo.toUpperCase().trim()) || simplificadosLinked.includes(simplifyKey(codigo))) {
+            return null;
+        }
+
+        const itemText = (codigo + " " + noParte + " " + desc + " " + nombreUtil).toLowerCase();
+
+        let score = 0;
+        terminos.forEach(term => {
+            if (itemText.includes(term)) {
+                score++;
+            }
+        });
+
+        return score > 0 ? { fila, score } : null;
+    })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score || b.fila.inv.cantidad - a.fila.inv.cantidad)
+        .slice(0, 5);
+
+    if (sugeridos.length === 0) {
+        listSugs.innerHTML = `
+            <div class="text-gray-400 text-center py-6 text-[10px] bg-gray-50 border border-dashed rounded p-3 leading-normal">
+                No se encontraron repuestos en Bodega que coincidan con "${terminos.join(', ')}".
+            </div>`;
+        if (badgeSugs) badgeSugs.innerText = "0";
+        return;
+    }
+
+    if (badgeSugs) badgeSugs.innerText = sugeridos.length;
+    listSugs.innerHTML = '';
+
+    for (const { fila } of sugeridos) {
+        const { inv } = fila;
+        const codigo = inv.codigo;
+        const noParte = inv.noParte || '-';
+        const desc = inv.descripcion || '';
+        const cantidad = inv.cantidad || 0;
+
+        const imgs = await obtenerImagenesRepuesto(codigo, noParte);
+        const hasImgs = imgs.length > 0;
+        const imgSrc = hasImgs ? imgs[0] : '';
+
+        const card = document.createElement('div');
+        card.className = "bg-white border border-blue-100 rounded-lg p-2.5 shadow-sm hover:border-blue-300 transition duration-150 flex gap-2.5 items-start relative";
+
+        let stockBadgeClass = "bg-green-50 text-green-700 border-green-100";
+        if (cantidad === 0) stockBadgeClass = "bg-red-50 text-red-700 border-red-100";
+        else if (cantidad === 1) stockBadgeClass = "bg-yellow-50 text-yellow-700 border-yellow-100";
+
+        let imgHtml = '';
+        if (hasImgs) {
+            imgHtml = `
+                <div class="relative w-12 h-12 bg-gray-50 flex items-center justify-center rounded border overflow-hidden shrink-0 cursor-pointer" onclick="abrirImagenPantallaCompleta('${imgSrc}')">
+                    <img src="${imgSrc}" class="max-w-full max-h-full object-contain" />
+                </div>`;
+        } else {
+            imgHtml = `
+                <div class="w-12 h-12 bg-gray-50 flex flex-col items-center justify-center rounded border shrink-0 text-gray-400 text-xs">
+                    📷
+                </div>`;
+        }
+
+        card.innerHTML = `
+            ${imgHtml}
+            <div class="flex-grow min-w-0">
+                <div class="flex justify-between items-start gap-1">
+                    <span class="font-mono text-[10px] font-bold text-blue-700 truncate" title="${codigo}">${codigo}</span>
+                    <span class="text-[8px] text-gray-500 truncate max-w-[70px]" title="PN: ${noParte}">PN: ${noParte}</span>
+                </div>
+                <h5 class="text-[10px] font-semibold text-gray-700 line-clamp-1 leading-tight my-0.5" title="${desc}">${desc}</h5>
+                <div class="flex items-center justify-between mt-1">
+                    <span class="text-[8px] font-bold px-1.5 py-0.2 rounded border ${stockBadgeClass}">Stock: ${cantidad}</span>
+                    <button onclick="vincularCodigoRapido('${codigo}'); animarBotonVinculacion(this);"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-0.5 px-2 rounded text-[9px] transition shadow-sm shrink-0 active:scale-95 flex items-center gap-1">
+                        🔌 Vincular
+                    </button>
+                </div>
+            </div>
+        `;
+        listSugs.appendChild(card);
+    }
+}
+
+// Pequeña animación visual para el botón al vincular
+function animarBotonVinculacion(btn) {
+    if (!btn) return;
+    btn.innerHTML = "🔌 Vinculado";
+    btn.className = "bg-green-600 text-white font-bold py-0.5 px-2 rounded text-[9px] transition shadow-sm shrink-0 scale-95";
+}
+
+// Activa el Modo Edición solicitando el PIN 1234
+function activarModoEdicion() {
+    if (!nodoSeleccionadoActual) return;
+    const pin = prompt(`Ingrese el PIN de seguridad (1234) para activar el Modo Edición y poder modificar "${nodoSeleccionadoActual.label}":`);
+    if (pin === '1234') {
+        modoEdicionActivo = true;
+        actualizarPanelEditorNodo();
+    } else {
+        if (pin !== null) alert("PIN incorrecto. Modo Edición bloqueado.");
+    }
+}
+
+// Duplica recursivamente el nodo seleccionado y toda su subestructura
+async function duplicarNodoActual() {
+    if (!arbolMaquinas || !nodoSeleccionadoActual) return;
+    if (nodoSeleccionadoActual.id === "root_1") {
+        alert("No se puede duplicar el nodo raíz de la empresa.");
+        return;
+    }
+
+    const parent = buscarPadreDeNodo(arbolMaquinas, nodoSeleccionadoActual.id);
+    if (!parent) {
+        alert("Error: No se encontró el nodo padre del elemento a duplicar.");
+        return;
+    }
+
+    const oldLabel = nodoSeleccionadoActual.label;
+    let newLabel = oldLabel;
+
+    // Detectar y auto-incrementar números al final de la etiqueta (ej: Corrugadora 01 -> Corrugadora 02)
+    const match = oldLabel.match(/(.*?)\s*(\d+)$/);
+    if (match) {
+        const base = match[1].trim();
+        let num = parseInt(match[2], 10);
+        const padLength = match[2].length;
+        do {
+            num++;
+            const paddedNum = String(num).padStart(padLength, '0');
+            newLabel = `${base} ${paddedNum}`;
+        } while (existeLabelEnHermanos(parent, newLabel));
+    } else {
+        let count = 2;
+        newLabel = `${oldLabel} 02`;
+        while (existeLabelEnHermanos(parent, newLabel)) {
+            count++;
+            newLabel = `${oldLabel} ${String(count).padStart(2, '0')}`;
+        }
+    }
+
+    if (!confirm(`¿Desea duplicar "${oldLabel}" y todas sus subestructuras con el nombre "${newLabel}"?`)) return;
+
+    // Clonar recursivamente con nuevos IDs únicos
+    const clon = clonarNodoConNuevosIds(nodoSeleccionadoActual, newLabel);
+
+    if (!parent.children) parent.children = [];
+    parent.children.push(clon);
+
+    dibujarArbol();
+    seleccionarNodoArbol(clon.id); // Seleccionar el nodo clonado
+    await guardarArbolMaquinas(arbolMaquinas);
+
+    alert(`✅ Estructura duplicada correctamente como "${newLabel}".`);
+}
+
+// Verifica si un nombre de etiqueta ya existe entre los nodos hermanos
+function existeLabelEnHermanos(parent, label) {
+    if (!parent || !parent.children) return false;
+    return parent.children.some(c => c.label.toLowerCase().trim() === label.toLowerCase().trim());
+}
+
+// Genera nuevos IDs recursivos para clonar subestructuras evitando colisiones
+function clonarNodoConNuevosIds(nodo, nuevaLabel) {
+    const nuevoId = `${nodo.type}_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+    const clon = {
+        id: nuevoId,
+        label: nuevaLabel || nodo.label,
+        type: nodo.type,
+        expanded: nodo.expanded !== false,
+        children: []
+    };
+
+    if (nodo.linkedCodes) clon.linkedCodes = [...nodo.linkedCodes];
+    if (nodo.specs) clon.specs = nodo.specs;
+
+    if (nodo.children && nodo.children.length > 0) {
+        clon.children = nodo.children.map(child => clonarNodoConNuevosIds(child));
+    }
+
+    return clon;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     cargarCarritoLocal();
     if (document.getElementById('gFechaSug')) {
         document.getElementById('gFechaSug').value = new Date().toISOString().slice(0, 10);
     }
     aplicarEstadoBodeguero();
+
+    // Intentar restaurar acceso a la carpeta de imágenes persistida
+    await intentarCargarCarpetaGuardada();
 
     try {
         const datosGuardados = await cargarDatos();
