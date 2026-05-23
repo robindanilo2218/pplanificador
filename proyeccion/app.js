@@ -115,6 +115,46 @@ function setVista(v) {
     }
 }
 
+// Navega a la vista detallada filtrando por un código de repuesto específico
+function irADetalleCodigo(codigo) {
+    if (!codigo) return;
+    
+    // Asignar el texto de búsqueda
+    const inpBusq = document.getElementById('busquedaTexto');
+    if (inpBusq) inpBusq.value = codigo.trim();
+    
+    // Restablecer filtros a valores por defecto para asegurar la visibilidad
+    const selStock = document.getElementById('filtroStock');
+    if (selStock) selStock.value = 'todos';
+    
+    const selProy = document.getElementById('filtroProyeccion');
+    if (selProy) selProy.value = 'todas';
+    
+    const selGrupo = document.getElementById('filtroGrupo');
+    if (selGrupo) selGrupo.value = 'todos';
+    
+    const selMaquina = document.getElementById('filtroMaquina');
+    if (selMaquina) selMaquina.value = 'todas';
+    
+    const selEstado = document.getElementById('filtroEstado');
+    if (selEstado) selEstado.value = 'todos';
+    
+    const selSalida = document.getElementById('filtroUltimaSalida');
+    if (selSalida) selSalida.value = 'todas';
+    
+    const selIngreso = document.getElementById('filtroUltimoIngreso');
+    if (selIngreso) selIngreso.value = 'todas';
+    
+    const selIngManual = document.getElementById('filtroIngresoManual');
+    if (selIngManual) selIngManual.value = 'todos';
+    
+    const selTipo = document.getElementById('tipoBusqueda');
+    if (selTipo) selTipo.value = 'and';
+
+    // Activar la vista detallada
+    setVista('detallada');
+}
+
 // -----------------------------------------------------
 // 2. BASE DE DATOS LOCAL E HISTORIAL
 // -----------------------------------------------------
@@ -167,19 +207,24 @@ async function exportarBackup() {
         const historial = await obtenerHistorial() || [];
         const borradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
         const arbol = await cargarArbolMaquinas() || null;
+        const carritoActivo = JSON.parse(localStorage.getItem('carritoActivo') || '[]');
+        const historialBusquedas = JSON.parse(localStorage.getItem('historialBusquedas') || '[]');
 
         const backupObj = {
-            version: "2.1",
+            version: "2.2",
             fecha: new Date().toISOString(),
             inventario: inventario,
             historial: historial,
             borradores: borradores,
-            arbolMaquinas: arbol
+            arbolMaquinas: arbol,
+            carritoActivo: carritoActivo,
+            historialBusquedas: historialBusquedas
         };
 
         const nItems = inventario?.resultadosTabla?.length || 0;
         const nHist = historial.length;
         const nBorr = borradores.length;
+        const nCar = carritoActivo.length;
 
         const json = JSON.stringify(backupObj);
         const blob = new Blob([json], { type: 'application/json' });
@@ -192,7 +237,7 @@ async function exportarBackup() {
         link.remove();
         URL.revokeObjectURL(url);
 
-        alert(`✅ Backup generado correctamente.\n\n📦 Inventario: ${nItems} repuestos\n📜 Historial solicitudes: ${nHist} registros\n📝 Borradores: ${nBorr} guardados\n\nGuarda este archivo en un lugar seguro.`);
+        alert(`✅ Backup generado correctamente.\n\n📦 Inventario: ${nItems} repuestos\n📜 Historial solicitudes: ${nHist} registros\n📝 Borradores: ${nBorr} guardados\n🛒 Carrito activo: ${nCar} ítems\n\nGuarda este archivo en un lugar seguro.`);
     } catch (e) {
         alert("Error al exportar backup: " + e);
     }
@@ -246,8 +291,17 @@ function restaurarBackup(input) {
                 localStorage.setItem('cartBorradores', JSON.stringify(backup.borradores));
             }
 
-            // Limpiar carrito activo para evitar mezcla con datos restaurados
-            localStorage.removeItem('carritoActivo');
+            // Restaurar carrito activo desde localStorage si existe en el backup
+            if (backup.carritoActivo && Array.isArray(backup.carritoActivo)) {
+                localStorage.setItem('carritoActivo', JSON.stringify(backup.carritoActivo));
+            } else {
+                localStorage.removeItem('carritoActivo');
+            }
+
+            // Restaurar historial de búsquedas si existe en el backup
+            if (backup.historialBusquedas && Array.isArray(backup.historialBusquedas)) {
+                localStorage.setItem('historialBusquedas', JSON.stringify(backup.historialBusquedas));
+            }
 
             const nItems = backup.inventario?.resultadosTabla?.length || 0;
             const nHist = (backup.historial || []).length;
@@ -3338,6 +3392,48 @@ async function inicializarVistaArbolMaquinas() {
     actualizarPanelEditorNodo();
 }
 
+// Calcula recursivamente el estado de desabastecimiento (falta) y sin vincular para un nodo y sus hijos
+function calcularEstadoNodo(nodo) {
+    if (typeof TODOS_LOS_DATOS === 'undefined' || !TODOS_LOS_DATOS) {
+        return { falta: 0, sinVincular: 0 };
+    }
+    const hasChildren = nodo.children && nodo.children.length > 0;
+    if (!hasChildren) {
+        // Nodo hoja: Determinar si tiene códigos vinculados válidos
+        const isLinked = nodo.linkedCodes && nodo.linkedCodes.filter(c => c.trim().length > 0).length > 0;
+        if (!isLinked) {
+            return { falta: 0, sinVincular: 1 };
+        } else {
+            const cantReq = typeof nodo.cantReq === 'number' ? nodo.cantReq : 1;
+            let stockTotal = 0;
+            nodo.linkedCodes.forEach(code => {
+                const exact = code.toUpperCase().trim();
+                const simp = simplifyKey(code);
+                const match = TODOS_LOS_DATOS.find(f => {
+                    const fExact = f.inv.codigo.toUpperCase().trim();
+                    const fSimp = simplifyKey(f.inv.codigo);
+                    return fExact === exact || fSimp === simp;
+                });
+                if (match) {
+                    stockTotal += match.inv.cantidad || 0;
+                }
+            });
+            const falta = Math.max(0, cantReq - stockTotal);
+            return { falta, sinVincular: 0 };
+        }
+    } else {
+        // Nodo padre: Agregar recursivamente los valores de los hijos
+        let falta = 0;
+        let sinVincular = 0;
+        nodo.children.forEach(child => {
+            const res = calcularEstadoNodo(child);
+            falta += res.falta;
+            sinVincular += res.sinVincular;
+        });
+        return { falta, sinVincular };
+    }
+}
+
 // Dibuja el árbol jerárquico recursivo
 function dibujarArbol() {
     const container = document.getElementById('treeContainer');
@@ -3365,6 +3461,7 @@ function dibujarNodoRecursivo(nodo, nivel) {
     else if (nodo.type === "equipo") icon = "🛠️";
     else if (nodo.type === "sistema") icon = "🔧";
     else if (nodo.type === "aplicacion") icon = "🏷️";
+    else if (nodo.type === "repuesto") icon = "🧩";
 
     let arrowHtml = "";
     if (hasChildren) {
@@ -3374,8 +3471,31 @@ function dibujarNodoRecursivo(nodo, nivel) {
     }
 
     let linkedCountBadge = "";
-    if (nodo.linkedCodes && nodo.linkedCodes.length > 0) {
-        linkedCountBadge = `<span class="bg-blue-100 text-blue-800 text-[9px] font-bold px-1.5 py-0.2 rounded-full border border-blue-200 ml-1.5 shadow-sm">${nodo.linkedCodes.length}</span>`;
+    const resEstado = calcularEstadoNodo(nodo);
+    
+    if (!hasChildren) {
+        // Diagnóstico de nodo hoja
+        const isLinked = nodo.linkedCodes && nodo.linkedCodes.filter(c => c.trim().length > 0).length > 0;
+        if (!isLinked) {
+            linkedCountBadge = `<span class="bg-amber-50 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-200 ml-1.5 shadow-sm shrink-0">⚠️ Sin vincular</span>`;
+        } else if (resEstado.falta > 0) {
+            linkedCountBadge = `<span class="bg-red-50 text-red-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-red-200 ml-1.5 shadow-sm animate-pulse shrink-0">🔴 Falta: ${resEstado.falta}</span>`;
+        } else {
+            linkedCountBadge = `<span class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-200 ml-1.5 shadow-sm shrink-0">✅ OK</span>`;
+        }
+    } else {
+        // Resumen de diagnóstico en nodo padre
+        let badgesHtml = [];
+        if (resEstado.falta > 0) {
+            badgesHtml.push(`<span class="bg-red-50 text-red-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-red-200 shadow-sm shrink-0">🔴 Falta: ${resEstado.falta}</span>`);
+        }
+        if (resEstado.sinVincular > 0) {
+            badgesHtml.push(`<span class="bg-amber-50 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-200 shadow-sm shrink-0">⚠️ Sin vincular: ${resEstado.sinVincular}</span>`);
+        }
+        if (resEstado.falta === 0 && resEstado.sinVincular === 0) {
+            badgesHtml.push(`<span class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-200 shadow-sm shrink-0">✅ OK</span>`);
+        }
+        linkedCountBadge = `<div class="flex gap-1 ml-1.5">${badgesHtml.join("")}</div>`;
     }
 
     const isSelectedClass = isSelected
@@ -3510,9 +3630,13 @@ function actualizarPanelEditorNodo() {
         inpNombre.disabled = !modoEdicionActivo;
     }
 
-    if (nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "sistema") {
+    const campoCantReq = document.getElementById('campoCantidadRequerida');
+    const inpCantReq = document.getElementById('inpCantidadRequerida');
+
+    if (nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "repuesto" || nodoSeleccionadoActual.type === "sistema") {
         if (campoCodes) campoCodes.classList.remove('hidden');
         if (campoSpecs) campoSpecs.classList.remove('hidden');
+        if (campoCantReq) campoCantReq.classList.remove('hidden');
         
         // Panel de vincular rápido solo visible cuando la edición está activa
         if (quickVinc) {
@@ -3528,9 +3652,14 @@ function actualizarPanelEditorNodo() {
             inpSpecs.value = nodoSeleccionadoActual.specs || '';
             inpSpecs.disabled = !modoEdicionActivo;
         }
+        if (inpCantReq) {
+            inpCantReq.value = typeof nodoSeleccionadoActual.cantReq === 'number' ? nodoSeleccionadoActual.cantReq : 1;
+            inpCantReq.disabled = !modoEdicionActivo;
+        }
     } else {
         if (campoCodes) campoCodes.classList.add('hidden');
         if (campoSpecs) campoSpecs.classList.add('hidden');
+        if (campoCantReq) campoCantReq.classList.add('hidden');
         if (quickVinc) quickVinc.classList.add('hidden');
     }
 
@@ -3573,6 +3702,7 @@ async function guardarEdicionNodo() {
     const inpNombre = document.getElementById('inpNombreNodo');
     const inpCodes = document.getElementById('inpCodigosNodo');
     const inpSpecs = document.getElementById('inpSpecsNodo');
+    const inpCantReq = document.getElementById('inpCantidadRequerida');
 
     if (!inpNombre || !inpNombre.value.trim()) {
         alert("El nombre del nodo no puede estar vacío.");
@@ -3581,7 +3711,7 @@ async function guardarEdicionNodo() {
 
     nodoSeleccionadoActual.label = inpNombre.value.trim();
 
-    if (nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "sistema") {
+    if (nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "repuesto" || nodoSeleccionadoActual.type === "sistema") {
         const rawCodes = inpCodes ? inpCodes.value : '';
         const codes = rawCodes.split(',')
             .map(c => c.trim().toUpperCase())
@@ -3590,6 +3720,11 @@ async function guardarEdicionNodo() {
 
         if (inpSpecs) {
             nodoSeleccionadoActual.specs = inpSpecs.value.trim();
+        }
+
+        if (inpCantReq) {
+            const val = parseInt(inpCantReq.value, 10);
+            nodoSeleccionadoActual.cantReq = isNaN(val) || val < 1 ? 1 : val;
         }
     }
 
@@ -3610,6 +3745,11 @@ async function abrirAgregarSubnodoPrompt() {
         return;
     }
 
+    if (nodoSeleccionadoActual.type === "repuesto") {
+        alert("No se pueden agregar subnodos bajo un repuesto individual.");
+        return;
+    }
+
     const label = prompt(`Escriba el nombre del nuevo subnodo a agregar bajo "${nodoSeleccionadoActual.label}":`);
     if (!label || !label.trim()) return;
 
@@ -3618,6 +3758,8 @@ async function abrirAgregarSubnodoPrompt() {
     else if (nodoSeleccionadoActual.type === "linea") childType = "maquina";
     else if (nodoSeleccionadoActual.type === "maquina") childType = "equipo";
     else if (nodoSeleccionadoActual.type === "equipo") childType = "sistema";
+    else if (nodoSeleccionadoActual.type === "sistema") childType = "aplicacion";
+    else if (nodoSeleccionadoActual.type === "aplicacion") childType = "repuesto";
 
     const childId = `${childType}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
@@ -3629,8 +3771,9 @@ async function abrirAgregarSubnodoPrompt() {
         children: []
     };
 
-    if (childType === "aplicacion" || childType === "sistema") {
+    if (childType === "aplicacion" || childType === "repuesto" || childType === "sistema") {
         newChild.linkedCodes = [];
+        newChild.cantReq = 1;
     }
 
     if (!nodoSeleccionadoActual.children) {
@@ -3739,9 +3882,16 @@ async function cargarRepuestosVinculadosNodo() {
         const card = document.createElement('div');
         card.className = "bg-white border rounded-xl p-3 shadow-sm hover:shadow-md transition duration-200 flex gap-3 align-start relative overflow-hidden group";
 
-        let stockBadgeClass = "bg-green-50 text-green-700 border-green-200";
-        if (cantidad === 0) stockBadgeClass = "bg-red-50 text-red-700 border-red-200";
-        else if (cantidad === 1) stockBadgeClass = "bg-yellow-50 text-yellow-700 border-yellow-200";
+        const cantReq = nodoSeleccionadoActual.cantReq || 1;
+        let stockBadgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+        let stockText = `Stock: ${cantidad} / Req: ${cantReq}`;
+        
+        if (cantidad < cantReq) {
+            stockBadgeClass = "bg-red-50 text-red-700 border-red-200 font-extrabold animate-pulse";
+            stockText = `Stock: ${cantidad} / Req: ${cantReq} ⚠️`;
+        } else if (cantidad === cantReq) {
+            stockBadgeClass = "bg-yellow-50 text-yellow-700 border-yellow-200";
+        }
 
         let imgHtml = '';
         if (hasImgs) {
@@ -3760,12 +3910,12 @@ async function cargarRepuestosVinculadosNodo() {
             ${imgHtml}
             <div class="flex-grow min-w-0">
                 <div class="flex justify-between items-start gap-1">
-                    <span class="font-mono text-[11px] font-bold text-blue-700 truncate" title="${codigo}">${codigo}</span>
+                    <span class="font-mono text-[11px] font-bold text-blue-700 truncate cursor-pointer hover:underline" onclick="irADetalleCodigo('${codigo}')" title="Ver en Vista Detallada">${codigo}</span>
                     <span class="text-[9px] text-gray-500 font-semibold truncate max-w-[80px]" title="PN: ${noParte}">PN: ${noParte}</span>
                 </div>
-                <h4 class="text-[11px] font-semibold text-gray-800 line-clamp-2 leading-tight h-6 my-0.5" title="${desc}">${desc}</h4>
+                <h4 class="text-[11px] font-semibold text-gray-800 line-clamp-2 leading-tight h-6 my-0.5 cursor-pointer hover:text-blue-600 transition" onclick="irADetalleCodigo('${codigo}')" title="Ver en Vista Detallada">${desc}</h4>
                 <div class="flex items-center justify-between mt-1">
-                    <span class="text-[10px] font-bold px-1.5 py-0.2 rounded border ${stockBadgeClass}">Stock: ${cantidad}</span>
+                    <span class="text-[10px] font-bold px-1.5 py-0.2 rounded border ${stockBadgeClass}">${stockText}</span>
                     <div class="flex gap-1">
                         <button onclick="simpleAddToCart('${codigo}', 1); animarBotonCarrito(this);"
                             class="bg-green-600 hover:bg-green-700 text-white font-bold py-0.5 px-2 rounded text-[10px] transition shadow-sm shrink-0 active:scale-95">
@@ -3996,10 +4146,10 @@ async function cargarSugerenciasInteligentesNodo() {
             ${imgHtml}
             <div class="flex-grow min-w-0">
                 <div class="flex justify-between items-start gap-1">
-                    <span class="font-mono text-[10px] font-bold text-blue-700 truncate" title="${codigo}">${codigo}</span>
+                    <span class="font-mono text-[10px] font-bold text-blue-700 truncate cursor-pointer hover:underline" onclick="irADetalleCodigo('${codigo}')" title="Ver en Vista Detallada">${codigo}</span>
                     <span class="text-[8px] text-gray-500 truncate max-w-[70px]" title="PN: ${noParte}">PN: ${noParte}</span>
                 </div>
-                <h5 class="text-[10px] font-semibold text-gray-700 line-clamp-1 leading-tight my-0.5" title="${desc}">${desc}</h5>
+                <h5 class="text-[10px] font-semibold text-gray-700 line-clamp-1 leading-tight my-0.5 cursor-pointer hover:text-blue-600 transition" onclick="irADetalleCodigo('${codigo}')" title="Ver en Vista Detallada">${desc}</h5>
                 <div class="flex items-center justify-between mt-1">
                     <span class="text-[8px] font-bold px-1.5 py-0.2 rounded border ${stockBadgeClass}">Stock: ${cantidad}</span>
                     <button onclick="vincularCodigoRapido('${codigo}'); animarBotonVinculacion(this);"
@@ -4103,6 +4253,7 @@ function clonarNodoConNuevosIds(nodo, nuevaLabel) {
 
     if (nodo.linkedCodes) clon.linkedCodes = [...nodo.linkedCodes];
     if (nodo.specs) clon.specs = nodo.specs;
+    if (typeof nodo.cantReq === 'number') clon.cantReq = nodo.cantReq;
 
     if (nodo.children && nodo.children.length > 0) {
         clon.children = nodo.children.map(child => clonarNodoConNuevosIds(child));

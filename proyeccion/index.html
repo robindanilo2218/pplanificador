@@ -468,9 +468,13 @@
                         
                         <div id="camposEdicionNodo" class="hidden flex-col gap-2 border-t border-blue-100/50 pt-2 mt-1">
                             <div class="flex gap-2">
-                                <div class="flex-1">
+                                <div class="flex-grow">
                                     <label class="block font-bold text-[10px] text-gray-500 mb-0.5 uppercase">Nombre del Nodo</label>
                                     <input type="text" id="inpNombreNodo" class="w-full border rounded p-1.5 text-xs outline-none focus:border-blue-500" placeholder="Ej: Motor Anilox..." />
+                                </div>
+                                <div id="campoCantidadRequerida" class="w-24 hidden shrink-0">
+                                    <label class="block font-bold text-[10px] text-gray-500 mb-0.5 uppercase" title="Cantidad de este repuesto requerida en la máquina">Cant. Req</label>
+                                    <input type="number" id="inpCantidadRequerida" min="1" class="w-full border rounded p-1.5 text-xs outline-none focus:border-blue-500" placeholder="1" />
                                 </div>
                                 <div id="campoCodigosBodega" class="flex-1 hidden">
                                     <label class="block font-bold text-[10px] text-gray-500 mb-0.5 uppercase" title="Separa múltiples códigos con comas">Códigos de Bodega Vinculados</label>

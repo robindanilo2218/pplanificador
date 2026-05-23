@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '2.0.0';
 const CACHE_NAME = `pplanificador-v${APP_VERSION}`;
 
 // Solo archivos locales en el pre-caché de instalación.
