@@ -569,9 +569,9 @@ function _filasSencillaHtml(datos) {
                 <tr class="border-b hover:bg-blue-50 transition" data-repuesto-codigo="${fila.inv.codigo}">
                     <td class="p-1">
                         <div class="flex gap-0.5 justify-center items-center">
-                            <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Añadir 1 rápido" onclick="simpleAddToCart('${fila.inv.codigo}', 1)">+1</button>
-                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Personalizar" onclick="abrirModalDetalleSencillo('${fila.inv.codigo}')">+</button>
-                            <button class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-1 py-1 rounded text-[10px]" title="Ver historial de solicitudes de este repuesto" onclick="verHistorialRepuesto('${fila.inv.codigo}')">📄</button>
+                            <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Añadir 1 rápido" onclick="event.stopPropagation(); simpleAddToCart('${fila.inv.codigo}', 1)">+1</button>
+                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Ficha técnica y solicitud" onclick="event.stopPropagation(); abrirModalDetalleSencillo('${fila.inv.codigo}')">🔎</button>
+                            <button class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-1 py-1 rounded text-[10px]" title="Ver historial de solicitudes de este repuesto" onclick="event.stopPropagation(); verHistorialRepuesto('${fila.inv.codigo}')">📄</button>
                         </div>
                     </td>
                     <td class="p-2 max-w-[100px] break-words"><b>${fila.inv.codigo}</b><br><span class="text-[10px] text-gray-500">${fila.inv.noParte || '-'}</span></td>
@@ -624,9 +624,9 @@ function renderizarBloqueTabla() {
         tr.innerHTML = `
                     <td class="p-1">
                         <div class="flex gap-1 justify-center items-center">
-                            <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Añadir 1 rápido" onclick="simpleAddToCart('${inv.codigo}', 1)">+1</button>
-                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Personalizar (Máquina, etc)" onclick="abrirModalDetalleSencillo('${inv.codigo}')">➕</button>
-                            <button class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-1 py-1 rounded text-[10px] shadow-sm" title="Historial de solicitudes" onclick="verHistorialRepuesto('${inv.codigo}')">📄</button>
+                            <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Añadir 1 rápido" onclick="event.stopPropagation(); simpleAddToCart('${inv.codigo}', 1)">+1</button>
+                            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-2 py-1 rounded text-[10px] shadow-sm" title="Ficha técnica y solicitud" onclick="event.stopPropagation(); abrirModalDetalleSencillo('${inv.codigo}')">🔎</button>
+                            <button class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-1 py-1 rounded text-[10px] shadow-sm" title="Historial de solicitudes" onclick="event.stopPropagation(); verHistorialRepuesto('${inv.codigo}')">📄</button>
                         </div>
                     </td>
                     <td class="p-2 max-w-[120px] break-words"><b>${inv.codigo}</b><br><span class="text-[10px] text-gray-500">${inv.noParte || '-'}</span></td>
@@ -1018,8 +1018,14 @@ async function verHistorialRepuesto(codigo) {
 }
 
 function abrirModalDetalleSencillo(codigo) {
-    const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo === codigo);
-    if (fila) abrirModalDetalle(fila);
+    if (!codigo) return;
+    const clean = codigo.trim().toUpperCase();
+    const fila = TODOS_LOS_DATOS.find(f => f.inv.codigo.trim().toUpperCase() === clean);
+    if (fila) {
+        abrirModalDetalle(fila);
+    } else {
+        console.error("No se encontró el repuesto en TODOS_LOS_DATOS:", codigo);
+    }
 }
 
 function simpleAddToCart(codigo, cant) {
@@ -1216,67 +1222,76 @@ function cargarItemsHistorial(el, idSol) {
 }
 
 async function abrirModalDetalle(fila) {
-    itemActualSeleccionado = fila;
-    document.getElementById('detDesc').innerText = fila.inv.descripcion;
-    document.getElementById('detCodigo').innerText = `COD: ${fila.inv.codigo} | PN: ${fila.inv.noParte || '-'}`;
-    document.getElementById('detStock').innerText = fila.inv.cantidad;
-    document.getElementById('detEstado').innerHTML = `<span class="badge ${fila.estadoClase} text-xs shadow-sm">${fila.estado}</span>`;
-    document.getElementById('detDemanda').innerText = fila.demandaAnual !== null ? fila.demandaAnual : "N/A";
-    document.getElementById('detProyeccion').innerText = fila.proyeccionTexto;
-    document.getElementById('detPrimeraSalida').innerText = formatFechaCorto(fila.primeraSalida);
-    document.getElementById('detUltimaSalida').innerText = formatFechaCorto(fila.ultimaSalida);
-    document.getElementById('detQ0').innerText = formatQ(fila.qConsumo[0]);
-    document.getElementById('detQ1').innerText = formatQ(fila.qConsumo[1]);
-    document.getElementById('detQ2').innerText = formatQ(fila.qConsumo[2]);
-    document.getElementById('detQ3').innerText = formatQ(fila.qConsumo[3]);
-    document.getElementById('detQ4').innerText = formatQ(fila.qConsumo[4]);
-    const elMaquinas = document.getElementById('detMaquinas');
-    if (elMaquinas) elMaquinas.innerText = fila.maquinasUnicas;
+    try {
+        itemActualSeleccionado = fila;
+        document.getElementById('detDesc').innerText = fila.inv.descripcion;
+        document.getElementById('detCodigo').innerText = `COD: ${fila.inv.codigo} | PN: ${fila.inv.noParte || '-'}`;
+        document.getElementById('detStock').innerText = fila.inv.cantidad;
+        document.getElementById('detEstado').innerHTML = `<span class="badge ${fila.estadoClase} text-xs shadow-sm">${fila.estado}</span>`;
+        document.getElementById('detDemanda').innerText = fila.demandaAnual !== null ? fila.demandaAnual : "N/A";
+        document.getElementById('detProyeccion').innerText = fila.proyeccionTexto;
+        document.getElementById('detPrimeraSalida').innerText = formatFechaCorto(fila.primeraSalida);
+        document.getElementById('detUltimaSalida').innerText = formatFechaCorto(fila.ultimaSalida);
+        
+        // Evitar fallos si qConsumo no está definido para este item
+        const q = fila.qConsumo || [null, null, null, null, null];
+        document.getElementById('detQ0').innerText = formatQ(q[0]);
+        document.getElementById('detQ1').innerText = formatQ(q[1]);
+        document.getElementById('detQ2').innerText = formatQ(q[2]);
+        document.getElementById('detQ3').innerText = formatQ(q[3]);
+        document.getElementById('detQ4').innerText = formatQ(q[4]);
+        
+        const elMaquinas = document.getElementById('detMaquinas');
+        if (elMaquinas) elMaquinas.innerText = fila.maquinasUnicas;
 
-    // Dibujar el árbol de máquinas podado donde se utiliza el repuesto
-    const treeCont = document.getElementById('detArbolUso');
-    if (treeCont) {
-        const pruned = buscarCoincidenciasYPrunar(arbolMaquinas, fila.inv.codigo);
-        if (pruned) {
-            treeCont.innerHTML = dibujarPrunedNodoHtml(pruned, 0);
-        } else {
-            treeCont.innerHTML = `
-                <div class="text-gray-400 italic py-3 px-1 text-center text-xs">
-                    ⚠️ Este repuesto aún no está vinculado a ninguna máquina.
-                    <br>
-                    <button class="mt-2.5 px-3 py-1.5 bg-blue-50 text-blue-700 font-bold border border-blue-200 hover:bg-blue-100 rounded shadow-sm text-[10px]" onclick="cerrarModalDetalle(); setVista('repuestosMaquina');">
-                        Ir a Vincular en Árbol
-                    </button>
-                </div>`;
+        // Dibujar el árbol de máquinas podado donde se utiliza el repuesto
+        const treeCont = document.getElementById('detArbolUso');
+        if (treeCont) {
+            const pruned = buscarCoincidenciasYPrunar(arbolMaquinas, fila.inv.codigo);
+            if (pruned) {
+                treeCont.innerHTML = dibujarPrunedNodoHtml(pruned, 0);
+            } else {
+                treeCont.innerHTML = `
+                    <div class="text-gray-400 italic py-3 px-1 text-center text-xs">
+                        ⚠️ Este repuesto aún no está vinculado a ninguna máquina.
+                        <br>
+                        <button class="mt-2.5 px-3 py-1.5 bg-blue-50 text-blue-700 font-bold border border-blue-200 hover:bg-blue-100 rounded shadow-sm text-[10px]" onclick="cerrarModalDetalle(); setVista('repuestosMaquina');">
+                            Ir a Vincular en Árbol
+                        </button>
+                    </div>`;
+            }
         }
+        document.getElementById('inpCant').value = 1;
+        document.getElementById('inpMaquina').value = '';
+        document.getElementById('inpSerie').value = '';
+        document.getElementById('inpModelo').value = '';
+        document.getElementById('inpSeccion').value = '';
+        document.getElementById('inpTecnico').value = '';
+        document.getElementById('inpFechaSug').value = new Date().toISOString().split('T')[0];
+        if (document.getElementById('inpUrgencia')) document.getElementById('inpUrgencia').value = 'Normal';
+
+        // Cargar imágenes asociadas de forma asíncrona (solicitando alta calidad)
+        imagenesDetalleActuales = await obtenerImagenesRepuesto(fila.inv.codigo, fila.inv.noParte, true);
+        indiceImagenDetalle = 0;
+        mostrarImagenDetalle();
+
+        document.getElementById('modalDetalle').classList.remove('hidden');
+        if (typeof actualizarBotonIgnoradoModal === 'function') actualizarBotonIgnoradoModal(fila.inv.codigo);
+        
+        // Poblar datalist de búsqueda en detalle con todos los códigos para autocompletar
+        const lst = document.getElementById('lstCodigosDetalle');
+        if (lst && typeof TODOS_LOS_DATOS !== 'undefined' && lst.children.length === 0) {
+            lst.innerHTML = TODOS_LOS_DATOS.map(x => `<option value="${x.inv.codigo}">${x.inv.descripcion.substring(0, 50)}...</option>`).join('');
+        }
+        // Limpiar buscador interno del detalle al cargar una ficha técnica
+        const inpBusq = document.getElementById('inpBuscarCodigoDetalle');
+        if (inpBusq) inpBusq.value = '';
+
+        setTimeout(() => document.getElementById('inpCant').focus(), 100);
+    } catch (err) {
+        console.error("Error al abrir detalle:", err);
+        alert("No se pudo abrir el detalle de este repuesto: " + err.message);
     }
-    document.getElementById('inpCant').value = 1;
-    document.getElementById('inpMaquina').value = '';
-    document.getElementById('inpSerie').value = '';
-    document.getElementById('inpModelo').value = '';
-    document.getElementById('inpSeccion').value = '';
-    document.getElementById('inpTecnico').value = '';
-    document.getElementById('inpFechaSug').value = new Date().toISOString().split('T')[0];
-    if (document.getElementById('inpUrgencia')) document.getElementById('inpUrgencia').value = 'Normal';
-
-    // Cargar imágenes asociadas de forma asíncrona (solicitando alta calidad)
-    imagenesDetalleActuales = await obtenerImagenesRepuesto(fila.inv.codigo, fila.inv.noParte, true);
-    indiceImagenDetalle = 0;
-    mostrarImagenDetalle();
-
-    document.getElementById('modalDetalle').classList.remove('hidden');
-    if (typeof actualizarBotonIgnoradoModal === 'function') actualizarBotonIgnoradoModal(fila.inv.codigo);
-    
-    // Poblar datalist de búsqueda en detalle con todos los códigos para autocompletar
-    const lst = document.getElementById('lstCodigosDetalle');
-    if (lst && typeof TODOS_LOS_DATOS !== 'undefined' && lst.children.length === 0) {
-        lst.innerHTML = TODOS_LOS_DATOS.map(x => `<option value="${x.inv.codigo}">${x.inv.descripcion.substring(0, 50)}...</option>`).join('');
-    }
-    // Limpiar buscador interno del detalle al cargar una ficha técnica
-    const inpBusq = document.getElementById('inpBuscarCodigoDetalle');
-    if (inpBusq) inpBusq.value = '';
-
-    setTimeout(() => document.getElementById('inpCant').focus(), 100);
 }
 
 function cerrarModalDetalle() { document.getElementById('modalDetalle').classList.add('hidden'); itemActualSeleccionado = null; }
@@ -3402,8 +3417,9 @@ async function agregarBloqueCatalogo(parentElement, bloque) {
                             🛒 +1
                         </button>
                         <button onclick="abrirModalDetalleSencillo('${codigo}')"
-                            class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold px-3 py-1.5 rounded text-xs transition active:scale-95 flex items-center justify-center">
-                            🔍 Pedir
+                            class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold px-3 py-1.5 rounded text-xs transition active:scale-95 flex items-center justify-center gap-1"
+                            title="Ver ficha técnica y personalizar solicitud">
+                            🔎 Ficha / Pedir
                         </button>
                     </div>
                 </div>
@@ -3460,7 +3476,7 @@ function guardarFiltrosSistemas() {
 }
 
 function obtenerCategoriaSistema(nodo) {
-    if (nodo.type !== "sistema") return null;
+    if (!nodo || nodo.type !== "sistema") return null;
     const label = (nodo.label || "").toLowerCase();
     const id = (nodo.id || "").toLowerCase();
     
@@ -3483,6 +3499,7 @@ function obtenerCategoriaSistema(nodo) {
 }
 
 function debeMostrarNodoSistema(nodo) {
+    if (!nodo) return true;
     if (nodo.type === "sistema") {
         const cat = obtenerCategoriaSistema(nodo);
         if (cat && filtrosSistemasActivos[cat] === false) {
@@ -4748,6 +4765,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Delegación de eventos para clics en filas de repuestos (abre detalle al hacer clic en cualquier parte de la fila)
     document.body.addEventListener('click', (e) => {
+        if (!e.target || typeof e.target.closest !== 'function') return;
+
         // No abrir modal si el usuario está seleccionando texto (arrastre para copiar)
         const sel = window.getSelection();
         if (sel && sel.toString().trim().length > 0) return;
@@ -4919,6 +4938,7 @@ async function vincularCodigoPendienteActual() {
 
 // Busca coincidencias de un código en el árbol y retorna una estructura podada (solo rutas de coincidencia)
 function buscarCoincidenciasYPrunar(nodo, codigo) {
+    if (!nodo) return null;
     if (!debeMostrarNodoSistema(nodo)) {
         return null;
     }
@@ -4949,6 +4969,7 @@ function buscarCoincidenciasYPrunar(nodo, codigo) {
 
 // Dibuja en HTML recursivo un nodo podado para el tooltip
 function dibujarPrunedNodoHtml(nodo, nivel = 0) {
+    if (!nodo) return "";
     if (!debeMostrarNodoSistema(nodo)) {
         return "";
     }
