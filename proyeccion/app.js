@@ -162,14 +162,16 @@ function irADetalleCodigo(codigo) {
 const DB_NAME = 'BodegaDB';
 const STORE_ANALISIS = 'analisisStore';
 const STORE_HISTORIAL = 'historialStore';
+const STORE_THUMBNAILS = 'thumbnailsStore';
 
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 3);
+        const request = indexedDB.open(DB_NAME, 4);
         request.onupgradeneeded = (e) => {
             const db = e.target.result;
             if (!db.objectStoreNames.contains(STORE_ANALISIS)) db.createObjectStore(STORE_ANALISIS);
             if (!db.objectStoreNames.contains(STORE_HISTORIAL)) db.createObjectStore(STORE_HISTORIAL, { keyPath: 'id_solicitud' });
+            if (!db.objectStoreNames.contains(STORE_THUMBNAILS)) db.createObjectStore(STORE_THUMBNAILS);
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
@@ -248,17 +250,14 @@ function restaurarBackup(input) {
     const file = input.files[0];
     if (!file) return;
 
-    const pin = prompt('Ingrese el PIN de seguridad (1234) para restaurar el Backup. Esto REEMPLAZARÁ la base de datos actual en su totalidad:');
+    const pin = prompt('Ingrese el PIN de seguridad (1234) para restaurar o combinar el Backup:');
     if (pin !== '1234') {
-        if (pin !== null) alert('PIN Incorrecto. Restauración abortada.');
+        if (pin !== null) alert('PIN Incorrecto. Operación abortada.');
         input.value = "";
         return;
     }
 
-    if (!confirm("Restaurar un backup SOBREESCRIBIRÁ todos los datos actuales. ¿Deseas continuar?")) {
-        input.value = "";
-        return;
-    }
+    const usarMerge = confirm("¿Deseas COMBINAR los datos del backup con los datos locales de esta computadora?\n\n• [Aceptar]: Combinará el historial, carrito, borradores, inventario y máquinas (no se perderá nada de lo que tengas guardado localmente).\n• [Cancelar]: Sobreescribirá la base de datos actual por completo (reemplazo total).");
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -269,47 +268,122 @@ function restaurarBackup(input) {
                 return;
             }
 
-            document.getElementById('zonaImportacion').classList.add('hidden');
-            document.getElementById('pantallaCarga').classList.remove('hidden');
-            document.getElementById('vistaDetallada').classList.add('hidden');
-            document.getElementById('vistaSencilla').classList.add('hidden');
-
             const db = await initDB();
-            await new Promise(r => {
-                const tx = db.transaction([STORE_ANALISIS, STORE_HISTORIAL], 'readwrite');
-                if (backup.inventario) tx.objectStore(STORE_ANALISIS).put(backup.inventario, 'datosGuardados');
-                if (backup.arbolMaquinas) tx.objectStore(STORE_ANALISIS).put(backup.arbolMaquinas, 'arbolMaquinas');
+            if (usarMerge) {
+                // FUSIONAR HISTORIAL
+                const histExistente = await obtenerHistorial();
+                const histFusionado = [...histExistente];
                 if (backup.historial) {
+                    backup.historial.forEach(h => {
+                        if (!histFusionado.some(x => x.id_solicitud === h.id_solicitud)) {
+                            histFusionado.push(h);
+                        }
+                    });
+                }
+                
+                // FUSIONAR INVENTARIO (nombreUtil, ubicacion, ingresoManual)
+                let invFusionado = backup.inventario;
+                if (backup.inventario && backup.inventario.resultadosTabla && typeof TODOS_LOS_DATOS !== 'undefined') {
+                    backup.inventario.resultadosTabla.forEach(bItem => {
+                        const localItem = TODOS_LOS_DATOS.find(x => x.inv.codigo === bItem.inv.codigo);
+                        if (localItem) {
+                            localItem.inv.nombreUtil = bItem.inv.nombreUtil || localItem.inv.nombreUtil;
+                            localItem.inv.ubicacion = bItem.inv.ubicacion || localItem.inv.ubicacion;
+                            if (bItem.inv.ingresoManual) localItem.inv.ingresoManual = bItem.inv.ingresoManual;
+                        }
+                    });
+                    const setGrupos = new Set();
+                    const setMaquinas = new Set();
+                    TODOS_LOS_DATOS.forEach(d => { setGrupos.add(d.inv.grupo); if (d.maquinasUnicas) d.maquinasUnicas.split(', ').forEach(m => setMaquinas.add(m)); });
+                    invFusionado = {
+                        resultadosTabla: TODOS_LOS_DATOS,
+                        gruposUnicos: Array.from(setGrupos),
+                        maquinasUnicas: Array.from(setMaquinas)
+                    };
+                }
+                
+                // FUSIONAR ARBOL DE MAQUINAS
+                let arbolFusionado = backup.arbolMaquinas;
+                if (backup.arbolMaquinas && arbolMaquinas) {
+                    fusionarNodosArbol(arbolMaquinas, backup.arbolMaquinas);
+                    arbolFusionado = arbolMaquinas;
+                }
+                
+                // GUARDAR EN BASE DE DATOS FUSIONADOS
+                await new Promise(r => {
+                    const tx = db.transaction([STORE_ANALISIS, STORE_HISTORIAL], 'readwrite');
+                    if (invFusionado) tx.objectStore(STORE_ANALISIS).put(invFusionado, 'datosGuardados');
+                    if (arbolFusionado) tx.objectStore(STORE_ANALISIS).put(arbolFusionado, 'arbolMaquinas');
                     const storeHist = tx.objectStore(STORE_HISTORIAL);
                     storeHist.clear();
-                    backup.historial.forEach(h => storeHist.put(h));
+                    histFusionado.forEach(h => storeHist.put(h));
+                    tx.oncomplete = r;
+                });
+
+                // FUSIONAR BORRADORES
+                if (backup.borradores && Array.isArray(backup.borradores)) {
+                    const localBorradores = JSON.parse(localStorage.getItem('cartBorradores') || '[]');
+                    const combinadosBorr = [...localBorradores];
+                    backup.borradores.forEach(b => {
+                        if (!combinadosBorr.some(x => x.nombre === b.nombre)) {
+                            combinadosBorr.push(b);
+                        }
+                    });
+                    localStorage.setItem('cartBorradores', JSON.stringify(combinadosBorr));
                 }
-                tx.oncomplete = r;
-            });
 
-            // Restaurar borradores desde localStorage
-            if (backup.borradores && Array.isArray(backup.borradores)) {
-                localStorage.setItem('cartBorradores', JSON.stringify(backup.borradores));
-            }
-
-            // Restaurar carrito activo desde localStorage si existe en el backup
-            if (backup.carritoActivo && Array.isArray(backup.carritoActivo)) {
-                localStorage.setItem('carritoActivo', JSON.stringify(backup.carritoActivo));
+                // FUSIONAR CARRITO ACTIVO
+                if (backup.carritoActivo && Array.isArray(backup.carritoActivo)) {
+                    const localCart = JSON.parse(localStorage.getItem('carritoActivo') || '[]');
+                    const combinadosCart = [...localCart];
+                    backup.carritoActivo.forEach(item => {
+                        const existente = combinadosCart.find(x => x.codigo === item.codigo && x.esNuevo === item.esNuevo);
+                        if (existente) {
+                            existente.cant = Math.max(existente.cant, item.cant);
+                        } else {
+                            combinadosCart.push(item);
+                        }
+                    });
+                    localStorage.setItem('carritoActivo', JSON.stringify(combinadosCart));
+                }
+                
+                alert(`✅ Backup COMBINADO correctamente.\n\nSe fusionaron solicitudes y especificaciones sin borrar tu trabajo local.\nEl sistema se recargará ahora.`);
+                location.reload();
+                
             } else {
-                localStorage.removeItem('carritoActivo');
+                // MODO SOBREESCRIBIR TOTAL
+                document.getElementById('zonaImportacion').classList.add('hidden');
+                document.getElementById('pantallaCarga').classList.remove('hidden');
+                document.getElementById('vistaDetallada').classList.add('hidden');
+                document.getElementById('vistaSencilla').classList.add('hidden');
+
+                await new Promise(r => {
+                    const tx = db.transaction([STORE_ANALISIS, STORE_HISTORIAL], 'readwrite');
+                    if (backup.inventario) tx.objectStore(STORE_ANALISIS).put(backup.inventario, 'datosGuardados');
+                    if (backup.arbolMaquinas) tx.objectStore(STORE_ANALISIS).put(backup.arbolMaquinas, 'arbolMaquinas');
+                    if (backup.historial) {
+                        const storeHist = tx.objectStore(STORE_HISTORIAL);
+                        storeHist.clear();
+                        backup.historial.forEach(h => storeHist.put(h));
+                    }
+                    tx.oncomplete = r;
+                });
+
+                if (backup.borradores && Array.isArray(backup.borradores)) {
+                    localStorage.setItem('cartBorradores', JSON.stringify(backup.borradores));
+                }
+                if (backup.carritoActivo && Array.isArray(backup.carritoActivo)) {
+                    localStorage.setItem('carritoActivo', JSON.stringify(backup.carritoActivo));
+                } else {
+                    localStorage.removeItem('carritoActivo');
+                }
+                if (backup.historialBusquedas && Array.isArray(backup.historialBusquedas)) {
+                    localStorage.setItem('historialBusquedas', JSON.stringify(backup.historialBusquedas));
+                }
+
+                alert(`✅ Backup RESTAURADO por completo (Sobreescrito).\n\nEl sistema se recargará ahora.`);
+                location.reload();
             }
-
-            // Restaurar historial de búsquedas si existe en el backup
-            if (backup.historialBusquedas && Array.isArray(backup.historialBusquedas)) {
-                localStorage.setItem('historialBusquedas', JSON.stringify(backup.historialBusquedas));
-            }
-
-            const nItems = backup.inventario?.resultadosTabla?.length || 0;
-            const nHist = (backup.historial || []).length;
-            const nBorr = (backup.borradores || []).length;
-
-            alert(`✅ Backup restaurado correctamente.\n\n📦 Inventario: ${nItems} repuestos\n📜 Historial: ${nHist} registros\n📝 Borradores: ${nBorr} recuperados\n\nEl sistema se recargará ahora.`);
-            location.reload();
         } catch (err) {
             alert("Error al procesar el archivo JSON: " + err);
         }
@@ -438,15 +512,16 @@ function setSencillaTab(tab) {
 function calcularDatosSencilla() {
     const ahora = Date.now();
     const mesMs = 30 * 24 * 3600 * 1000;
+    const baseData = typeof filtrarColeccionGlobal === 'function' ? filtrarColeccionGlobal(TODOS_LOS_DATOS) : TODOS_LOS_DATOS;
 
     if (_tabSencilla === 'proximos') {
-        return [...TODOS_LOS_DATOS].filter(f => f.proyeccionMs).sort((a, b) => (a.proyeccionMs || Infinity) - (b.proyeccionMs || Infinity));
+        return [...baseData].filter(f => f.proyeccionMs).sort((a, b) => (a.proyeccionMs || Infinity) - (b.proyeccionMs || Infinity));
     }
     if (_tabSencilla === 'todos') {
-        return [...TODOS_LOS_DATOS].sort((a, b) => (a.inv.descripcion || '').localeCompare(b.inv.descripcion || ''));
+        return [...baseData].sort((a, b) => (a.inv.descripcion || '').localeCompare(b.inv.descripcion || ''));
     }
 
-    return [...TODOS_LOS_DATOS]
+    return [...baseData]
         .map(f => {
             let score = 0;
             if (f.demandaAnual) score += Math.min(f.demandaAnual * 2, 40);
@@ -473,7 +548,8 @@ function buscarSencilla() {
     }
     guardarHistorialBusqueda(term);
     const terms = term.split(/\s+/);
-    const filtrados = TODOS_LOS_DATOS.filter(fila => {
+    const baseData = typeof filtrarColeccionGlobal === 'function' ? filtrarColeccionGlobal(TODOS_LOS_DATOS) : TODOS_LOS_DATOS;
+    const filtrados = baseData.filter(fila => {
         const text = `${fila.inv.codigo} ${fila.inv.descripcion} ${fila.inv.noParte || ''} ${fila.inv.nombreUtil || ''} ${fila.inv.ubicacion || ''}`.toLowerCase();
         return terms.every(t => text.includes(t));
     });
@@ -632,7 +708,8 @@ function ejecutarBusqueda() {
 
     const now = new Date(); const currentYear = now.getFullYear(); const currentMonth = now.getMonth();
 
-    DATOS_FILTRADOS = TODOS_LOS_DATOS.filter(fila => {
+    const baseData = typeof filtrarColeccionGlobal === 'function' ? filtrarColeccionGlobal(TODOS_LOS_DATOS) : TODOS_LOS_DATOS;
+    DATOS_FILTRADOS = baseData.filter(fila => {
         let mostrar = true;
 
         if (fBusqueda !== "") {
@@ -957,7 +1034,8 @@ function simpleAddToCart(codigo, cant) {
             codigo: fila.inv.codigo,
             noParte: fila.inv.noParte || "-",
             descripcion: fila.inv.descripcion,
-            cant: parseFloat(cant)
+            cant: parseFloat(cant),
+            urgencia: 'Normal'
         });
     }
     guardarCarritoLocal();
@@ -980,7 +1058,7 @@ function actualizarMiniCarrito() {
                     <div class="w-1 h-8 bg-orange-400 rounded-full group-hover:bg-orange-600 transition-colors shrink-0"></div>
                     <div class="leading-tight flex-1 min-w-0">
                         <div class="flex justify-between items-start">
-                            <span class="font-bold text-[11px] text-blue-800">${it.codigo}</span>
+                            <span class="font-bold text-[11px] text-blue-800">${it.codigo}${it.urgencia === 'Critico' ? ' 🔴' : it.urgencia === 'Urgente' ? ' ⚡' : ''}</span>
                             <span class="font-black text-orange-600 bg-orange-100 px-1.5 rounded-sm text-[11px]">${it.cant}</span>
                         </div>
                         <span class="text-[10px] text-gray-600 truncate block" title="${it.descripcion}">${it.descripcion}</span>
@@ -1152,8 +1230,26 @@ async function abrirModalDetalle(fila) {
     document.getElementById('detQ2').innerText = formatQ(fila.qConsumo[2]);
     document.getElementById('detQ3').innerText = formatQ(fila.qConsumo[3]);
     document.getElementById('detQ4').innerText = formatQ(fila.qConsumo[4]);
-    document.getElementById('detMaquinas').innerText = fila.maquinasUnicas;
+    const elMaquinas = document.getElementById('detMaquinas');
+    if (elMaquinas) elMaquinas.innerText = fila.maquinasUnicas;
 
+    // Dibujar el árbol de máquinas podado donde se utiliza el repuesto
+    const treeCont = document.getElementById('detArbolUso');
+    if (treeCont) {
+        const pruned = buscarCoincidenciasYPrunar(arbolMaquinas, fila.inv.codigo);
+        if (pruned) {
+            treeCont.innerHTML = dibujarPrunedNodoHtml(pruned, 0);
+        } else {
+            treeCont.innerHTML = `
+                <div class="text-gray-400 italic py-3 px-1 text-center text-xs">
+                    ⚠️ Este repuesto aún no está vinculado a ninguna máquina.
+                    <br>
+                    <button class="mt-2.5 px-3 py-1.5 bg-blue-50 text-blue-700 font-bold border border-blue-200 hover:bg-blue-100 rounded shadow-sm text-[10px]" onclick="cerrarModalDetalle(); setVista('repuestosMaquina');">
+                        Ir a Vincular en Árbol
+                    </button>
+                </div>`;
+        }
+    }
     document.getElementById('inpCant').value = 1;
     document.getElementById('inpMaquina').value = '';
     document.getElementById('inpSerie').value = '';
@@ -1161,13 +1257,25 @@ async function abrirModalDetalle(fila) {
     document.getElementById('inpSeccion').value = '';
     document.getElementById('inpTecnico').value = '';
     document.getElementById('inpFechaSug').value = new Date().toISOString().split('T')[0];
+    if (document.getElementById('inpUrgencia')) document.getElementById('inpUrgencia').value = 'Normal';
 
-    // Cargar imágenes asociadas de forma asíncrona
-    imagenesDetalleActuales = await obtenerImagenesRepuesto(fila.inv.codigo, fila.inv.noParte);
+    // Cargar imágenes asociadas de forma asíncrona (solicitando alta calidad)
+    imagenesDetalleActuales = await obtenerImagenesRepuesto(fila.inv.codigo, fila.inv.noParte, true);
     indiceImagenDetalle = 0;
     mostrarImagenDetalle();
 
     document.getElementById('modalDetalle').classList.remove('hidden');
+    if (typeof actualizarBotonIgnoradoModal === 'function') actualizarBotonIgnoradoModal(fila.inv.codigo);
+    
+    // Poblar datalist de búsqueda en detalle con todos los códigos para autocompletar
+    const lst = document.getElementById('lstCodigosDetalle');
+    if (lst && typeof TODOS_LOS_DATOS !== 'undefined' && lst.children.length === 0) {
+        lst.innerHTML = TODOS_LOS_DATOS.map(x => `<option value="${x.inv.codigo}">${x.inv.descripcion.substring(0, 50)}...</option>`).join('');
+    }
+    // Limpiar buscador interno del detalle al cargar una ficha técnica
+    const inpBusq = document.getElementById('inpBuscarCodigoDetalle');
+    if (inpBusq) inpBusq.value = '';
+
     setTimeout(() => document.getElementById('inpCant').focus(), 100);
 }
 
@@ -1198,10 +1306,14 @@ function repetirOrden(event, btnElement) {
                 codigo: fila.inv.codigo,
                 noParte: fila.inv.noParte || "-",
                 descripcion: fila.inv.descripcion,
-                cant: parseFloat(i.cant || 1)
+                cant: parseFloat(i.cant || 1),
+                urgencia: i.urgencia || 'Normal'
             });
         } else if (i.codigo === "CREAR CODIGO NUEVO" || i.codigo === "NUEVO-REGISTRO") {
-            carrito.push({ ...i });
+            carrito.push({
+                ...i,
+                urgencia: i.urgencia || 'Normal'
+            });
         }
     });
     guardarCarritoLocal();
@@ -1390,12 +1502,16 @@ function agregarAlCarrito() {
     if (isNaN(cant) || cant <= 0) { alert("Ingrese una cantidad válida."); return; }
     if (!maq) { alert("Especifique la máquina o destino."); return; }
 
+    const urgEl = document.getElementById('inpUrgencia');
+    const urgencia = urgEl ? urgEl.value : 'Normal';
+
     carrito.push({
         codigo: itemActualSeleccionado.inv.codigo,
         noParte: itemActualSeleccionado.inv.noParte || "-",
         descripcion: itemActualSeleccionado.inv.descripcion,
         nombreUtil: itemActualSeleccionado.inv.nombreUtil || '',
-        cant: cant
+        cant: cant,
+        urgencia: urgencia
     });
     guardarCarritoLocal();
     if (maq) document.getElementById('gMaquina').value = maq;
@@ -1661,9 +1777,19 @@ function abrirCarrito() {
             const maqInfo = item.esNuevo && item.maquina && item.maquina !== '-'
                 ? `<br><span class="text-[10px] text-gray-500">${item.maquina}${item.seccion && item.seccion !== '-' ? ' / ' + item.seccion : ''}</span>`
                 : '';
+            const urg = item.urgencia || 'Normal';
+            let urgBadge = '';
+            if (urg === 'Critico') {
+                urgBadge = `<br><span class="inline-block bg-red-100 text-red-800 text-[10px] font-bold px-1.5 py-0.5 rounded mt-1">🔴 CRÍTICO</span>`;
+            } else if (urg === 'Urgente') {
+                urgBadge = `<br><span class="inline-block bg-yellow-100 text-yellow-800 text-[10px] font-bold px-1.5 py-0.5 rounded mt-1">⚡ URGENTE</span>`;
+            } else {
+                urgBadge = `<br><span class="inline-block bg-blue-100 text-blue-800 text-[10px] font-semibold px-1.5 py-0.5 rounded mt-1">Normal</span>`;
+            }
+
             return `
                     <tr class="${rowClass}">
-                        <td class="px-4 py-2">${codigoBadge}</td>
+                        <td class="px-4 py-2">${codigoBadge}${urgBadge}</td>
                         <td class="px-4 py-2 text-xs font-semibold">${item.descripcion}${nombreUtilBadge}${maqInfo}</td>
                         <td class="px-3 py-1 text-center">
                             <div class="flex items-center justify-center gap-1">
@@ -1812,23 +1938,71 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
     const asunto = encodeURIComponent(`SOL. COMPRA #${idSol} | Máq: ${gMaq} - DEPTO ELECTRICO${sufijo}`);
 
     const usarTexto = confirm("¿En qué formato desea copiar la solicitud?\n\nAceptar = Texto con tabulaciones (para pegar en cuerpo de correo plano)\nCancelar = Tabla HTML formateada (CTRL+V en correo con formato)");
+    const incluirStats = document.getElementById('chkIncluirStats') ? document.getElementById('chkIncluirStats').checked : false;
+
+    const getStatsText = (codigo) => {
+        const f = TODOS_LOS_DATOS.find(x => x.inv.codigo === codigo);
+        if (!f) return '';
+        const med = f.qConsumo ? formatQ(f.qConsumo[2]) : '-';
+        return `Stock: ${f.inv.cantidad} | Mediana Consumo: ${med} | Demanda Anual: ${f.demandaAnual !== null ? f.demandaAnual : 'N/A'} | Rotación: ${f.estado} | Proyección: ${f.proyeccionTexto || 'N/A'}`;
+    };
 
     let contenidoCopia, textoPlano;
 
     if (usarTexto) {
         let lines = [`SOLICITUD #${idSol}${sufijo}`, `Destino: ${gMaq} | Sección: ${gSec}${extInfo}`, `Técnico: ${gTec}${gFeS ? ` | Fecha Sug: ${gFeS}` : ''}`, ''];
         lines.push(['#', 'Código', 'PN', 'Descripción', 'Cant.'].join('\t\t'));
-        items.forEach((it, idx) => lines.push([idx + 1, it.codigo, it.noParte || '-', `${it.descripcion}${it.nombreUtil ? ' [' + it.nombreUtil + ']' : ''}`, it.cant].join('\t\t')));
+        
+        items.forEach((it, idx) => {
+            const urgStr = it.urgencia === 'Critico' ? ' [🔴 CRÍTICO]' : it.urgencia === 'Urgente' ? ' [⚡ URGENTE]' : '';
+            let descWithUrg = `${it.descripcion}${it.nombreUtil ? ' [' + it.nombreUtil + ']' : ''}${urgStr}`;
+            if (incluirStats && !it.esNuevo) {
+                const stats = getStatsText(it.codigo);
+                if (stats) descWithUrg += `\n    ↳ [Estadísticas] ${stats}`;
+            }
+            lines.push([idx + 1, it.codigo, it.noParte || '-', descWithUrg, it.cant].join('\t\t'));
+        });
+
         textoPlano = lines.join('\n');
         contenidoCopia = [new ClipboardItem({ 'text/plain': new Blob([textoPlano], { type: 'text/plain' }) })];
     } else {
+        const htmlRows = items.map((it, i) => {
+            let urgHtml = '';
+            if (it.urgencia === 'Critico') {
+                urgHtml = `<span style="background-color:#fee2e2;color:#991b1b;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:4px;margin-left:5px;display:inline-block;vertical-align:middle;">🔴 CRÍTICO</span>`;
+            } else if (it.urgencia === 'Urgente') {
+                urgHtml = `<span style="background-color:#fef9c3;color:#854d0e;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:4px;margin-left:5px;display:inline-block;vertical-align:middle;">⚡ URGENTE</span>`;
+            }
+
+            let statsHtml = '';
+            if (incluirStats && !it.esNuevo) {
+                const f = TODOS_LOS_DATOS.find(x => x.inv.codigo === it.codigo);
+                if (f) {
+                    const med = f.qConsumo ? formatQ(f.qConsumo[2]) : '-';
+                    statsHtml = `
+                    <div style="margin-top:6px; padding:6px; background-color:#eff6ff; border:1px solid #bfdbfe; border-radius:4px; font-size:11px; color:#1e40af; line-height:1.4;">
+                        <strong>📊 Análisis de Consumo y Demanda:</strong><br>
+                        • <b>Stock Actual:</b> ${f.inv.cantidad} | • <b>Consumo Mediana:</b> ${med} | • <b>Demanda Anual:</b> ${f.demandaAnual !== null ? f.demandaAnual : 'N/A'}<br>
+                        • <b>Rotación:</b> ${f.estado} | • <b>Proyección Compra:</b> ${f.proyeccionTexto || 'N/A'}
+                    </div>`;
+                }
+            }
+
+            return `<tr>
+                <td>${i + 1}</td>
+                <td><b>${it.codigo}</b><br><small>${it.noParte || ''}</small></td>
+                <td>${it.descripcion}${it.nombreUtil ? `<br><small style="color:#059669;">${it.nombreUtil}</small>` : ''}${urgHtml}${statsHtml}</td>
+                <td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td>
+            </tr>`;
+        }).join('');
+
         const html = `<div style="font-family:Arial,sans-serif;color:#333;font-size:12px;border:1px solid #ccc;padding:15px;">
                     <h2 style="color:#1e3a8a;margin-top:0;">SOLICITUD DE REPUESTOS #${idSol}${sufijo}</h2>
                     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;text-align:left;">
                         <thead style="background-color:#f3f4f6;"><tr><th>#</th><th>Código / PN</th><th>Descripción</th><th>Cant.</th></tr></thead>
                         <tbody>
                             <tr><td colspan="4" style="background:#e0f2fe;text-align:center;"><b>Destino:</b> Máq: ${gMaq} | Secc: ${gSec}${extInfo} | Téc: ${gTec}${gFeS ? ` | Fecha Sug: ${gFeS}` : ''}</td></tr>
-                            ${items.map((it, i) => `<tr><td>${i + 1}</td><td><b>${it.codigo}</b><br><small>${it.noParte || ''}</small></td><td>${it.descripcion}${it.nombreUtil ? `<br><small style="color:#059669;">${it.nombreUtil}</small>` : ''}</td><td style="text-align:center;font-weight:bold;color:#d97706;">${it.cant}</td></tr>`).join('')}
+                            ${htmlRows}
                         </tbody>
                     </table></div>`;
         textoPlano = `Solicitud #${idSol}${sufijo} - Máq: ${gMaq}`;
@@ -1871,9 +2045,17 @@ async function _enviarSolicitud(idSol, items, form, esReenvio) {
         const colW = [4, 14, 14, 40, 6];
         const header = `${pad('#', colW[0])} ${pad('CÓDIGO', colW[1])} ${pad('NO. PARTE', colW[2])} ${pad('DESCRIPCIÓN', colW[3])} ${pad('CANT', colW[4])}`;
         const divider = colW.map(w => '-'.repeat(w)).join('-');
-        const filas = items.map((it, i) =>
-            `${pad(i + 1, colW[0])} ${pad(it.codigo, colW[1])} ${pad(it.noParte || '-', colW[2])} ${pad(it.descripcion, colW[3])} ${pad(it.cant, colW[4])}`
-        ).join('\n');
+        const filas = items.map((it, i) => {
+            const urgStr = it.urgencia === 'Critico' ? ' [CRITICO]' : it.urgencia === 'Urgente' ? ' [URGENTE]' : '';
+            let mainRow = `${pad(i + 1, colW[0])} ${pad(it.codigo, colW[1])} ${pad(it.noParte || '-', colW[2])} ${pad(it.descripcion + urgStr, colW[3])} ${pad(it.cant, colW[4])}`;
+            if (incluirStats && !it.esNuevo) {
+                const stats = getStatsText(it.codigo);
+                if (stats) {
+                    mainRow += `\n     ↳ [ANALISIS]: ${stats}`;
+                }
+            }
+            return mainRow;
+        }).join('\n');
 
         cuerpoTexto =
             `Buen día,\n\n` +
@@ -2854,6 +3036,9 @@ async function escanearCarpetaImagenes(dirHandle) {
                         // Agrega al índice simplificado
                         if (!IMAGENES_SIMPLIFIED_INDEX[simpKey]) IMAGENES_SIMPLIFIED_INDEX[simpKey] = [];
                         IMAGENES_SIMPLIFIED_INDEX[simpKey].push({ handle: entry, suffix: suffixNum });
+
+                        // Generar y guardar thumbnail de fondo en IndexedDB (no bloqueante)
+                        encolarGeneracionThumbnail(entry, exactKey, simpKey);
                     }
                 }
             }
@@ -2888,8 +3073,21 @@ async function obtenerUrlDeHandle(fileHandle) {
 }
 
 // Busca las imágenes por código o por número de parte (con coincidencia exacta y simplificada flexible)
-async function obtenerImagenesRepuesto(codigo, noParte) {
-    if (!dirImagenesHandle) return [];
+async function obtenerImagenesRepuesto(codigo, noParte, fullQuality = false) {
+    // 1. Intentar cargar primero el thumbnail rápido desde IndexedDB si no se requiere calidad completa
+    if (!fullQuality) {
+        const thumb = await cargarThumbnailDesdeDb(codigo, noParte);
+        if (thumb) {
+            return [thumb];
+        }
+    }
+    
+    // 2. Si se requiere calidad completa, o si no hay thumbnail guardado
+    if (!dirImagenesHandle) {
+        // Fallback final al thumbnail si la carpeta no está conectada
+        const thumb = await cargarThumbnailDesdeDb(codigo, noParte);
+        return thumb ? [thumb] : [];
+    }
 
     const keyCodigo = codigo ? codigo.trim().toLowerCase() : '';
     const keyNoParte = noParte ? noParte.trim().toLowerCase() : '';
@@ -2920,6 +3118,13 @@ async function obtenerImagenesRepuesto(codigo, noParte) {
         const url = await obtenerUrlDeHandle(entry.handle);
         if (url) urls.push(url);
     }
+    
+    // Si no se encontraron imágenes de alta pero hay un thumbnail guardado, usarlo
+    if (urls.length === 0) {
+        const thumb = await cargarThumbnailDesdeDb(codigo, noParte);
+        if (thumb) urls.push(thumb);
+    }
+    
     return urls;
 }
 
@@ -3079,7 +3284,7 @@ function limpiarBusquedaCatalogo() {
 }
 
 async function renderCatalogo(datos) {
-    _datosCatalogoCurrent = datos || [];
+    _datosCatalogoCurrent = typeof filtrarColeccionGlobal === 'function' ? filtrarColeccionGlobal(datos || TODOS_LOS_DATOS) : (datos || []);
     _punteroCatalogo = 0;
     const grid = document.getElementById('gridCatalogo');
     if (!grid) return;
@@ -3227,6 +3432,110 @@ function animarBotonCarrito(btn) {
 let arbolMaquinas = null; // Objeto del árbol raíz
 let nodoSeleccionadoActual = null; // Nodo del árbol seleccionado actualmente
 let modoEdicionActivo = false; // Bloqueo de edición accidental (Mode Consulta vs Edición)
+let idsVisibles = new Set();
+let idsOpacos = new Set();
+
+let filtrosSistemasActivos = {
+    potencia: true,
+    control: true,
+    neumatico: true,
+    hidraulico: true,
+    seguridad: true,
+    otros: true
+};
+
+function cargarFiltrosSistemas() {
+    const guardados = localStorage.getItem('filtrosSistemasActivos');
+    if (guardados) {
+        try {
+            filtrosSistemasActivos = JSON.parse(guardados);
+        } catch (e) {
+            console.error("Error al cargar filtros de sistemas:", e);
+        }
+    }
+}
+
+function guardarFiltrosSistemas() {
+    localStorage.setItem('filtrosSistemasActivos', JSON.stringify(filtrosSistemasActivos));
+}
+
+function obtenerCategoriaSistema(nodo) {
+    if (nodo.type !== "sistema") return null;
+    const label = (nodo.label || "").toLowerCase();
+    const id = (nodo.id || "").toLowerCase();
+    
+    if (label.includes("potencia") || label.includes("motor") || id.includes("potencia")) {
+        return "potencia";
+    }
+    if (label.includes("control") || label.includes("electric") || id.includes("control")) {
+        return "control";
+    }
+    if (label.includes("neumat") || id.includes("neumat")) {
+        return "neumatico";
+    }
+    if (label.includes("hidrau") || id.includes("hidrau")) {
+        return "hidraulico";
+    }
+    if (label.includes("segur") || id.includes("segur")) {
+        return "seguridad";
+    }
+    return "otros";
+}
+
+function debeMostrarNodoSistema(nodo) {
+    if (nodo.type === "sistema") {
+        const cat = obtenerCategoriaSistema(nodo);
+        if (cat && filtrosSistemasActivos[cat] === false) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function toggleFiltroSistema(key) {
+    filtrosSistemasActivos[key] = !filtrosSistemasActivos[key];
+    guardarFiltrosSistemas();
+    actualizarEstilosFiltrosSistemas();
+    dibujarArbol();
+}
+
+function seleccionarTodosSistemas(val) {
+    for (const key in filtrosSistemasActivos) {
+        filtrosSistemasActivos[key] = val;
+    }
+    guardarFiltrosSistemas();
+    actualizarEstilosFiltrosSistemas();
+    dibujarArbol();
+}
+
+function actualizarEstilosFiltrosSistemas() {
+    const config = {
+        potencia: { active: 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700', inactive: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-300' },
+        control: { active: 'bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700', inactive: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-300' },
+        neumatico: { active: 'bg-sky-600 border-sky-700 text-white hover:bg-sky-700', inactive: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-300' },
+        hidraulico: { active: 'bg-cyan-600 border-cyan-700 text-white hover:bg-cyan-700', inactive: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-300' },
+        seguridad: { active: 'bg-red-600 border-red-700 text-white hover:bg-red-700', inactive: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-300' },
+        otros: { active: 'bg-slate-600 border-slate-700 text-white hover:bg-slate-700', inactive: 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-300' }
+    };
+    
+    for (const key in config) {
+        const btn = document.getElementById(`btnSysFilter_${key}`);
+        if (btn) {
+            const isActive = filtrosSistemasActivos[key] !== false;
+            const styles = config[key];
+            
+            const allActive = styles.active.split(' ');
+            const allInactive = styles.inactive.split(' ');
+            
+            allActive.forEach(c => btn.classList.remove(c));
+            allInactive.forEach(c => btn.classList.remove(c));
+            
+            const targetClasses = isActive ? allActive : allInactive;
+            targetClasses.forEach(c => btn.classList.add(c));
+        }
+    }
+}
+
 
 // Árbol pre-poblado por defecto con la jerarquía industrial solicitada
 const ARBOL_DEFAULT = {
@@ -3391,13 +3700,19 @@ async function inicializarVistaArbolMaquinas() {
         }
         arbolMaquinas = arbol;
     }
+    cargarFiltrosSistemas();
+    actualizarEstilosFiltrosSistemas();
     dibujarArbol();
     actualizarPanelEditorNodo();
+    if (typeof actualizarBloqueHuerfanos === 'function') actualizarBloqueHuerfanos();
 }
 
 // Calcula recursivamente el estado de desabastecimiento (falta) y sin vincular para un nodo y sus hijos
 function calcularEstadoNodo(nodo) {
     if (typeof TODOS_LOS_DATOS === 'undefined' || !TODOS_LOS_DATOS) {
+        return { falta: 0, sinVincular: 0 };
+    }
+    if (!debeMostrarNodoSistema(nodo)) {
         return { falta: 0, sinVincular: 0 };
     }
     const hasChildren = nodo.children && nodo.children.length > 0;
@@ -3437,6 +3752,66 @@ function calcularEstadoNodo(nodo) {
     }
 }
 
+// Pre-calcula los conjuntos de nodos visibles y opacos en base a la selección activa
+function calcularNodosVisiblesYOpacos() {
+    idsVisibles.clear();
+    idsOpacos.clear();
+
+    if (!nodoSeleccionadoActual) {
+        return;
+    }
+
+    // 1. Obtener ancestros del nodo seleccionado (incluyendo al propio nodo)
+    const camino = buscarPadresRecursivo(arbolMaquinas, nodoSeleccionadoActual.id) || [];
+    const idsPathSelected = new Set(camino.map(n => n.id));
+    camino.forEach(n => idsVisibles.add(n.id));
+
+    // 2. Obtener todos los descendientes del nodo seleccionado
+    const descendientes = [];
+    const obtenerDescendientesIds = (n) => {
+        descendientes.push(n.id);
+        if (n.children) {
+            n.children.forEach(obtenerDescendientesIds);
+        }
+    };
+    obtenerDescendientesIds(nodoSeleccionadoActual);
+    descendientes.forEach(id => idsVisibles.add(id));
+
+    // 3. Buscar repuestos coincidentes en otros nodos (cross-reference)
+    const setCodes = new Set((nodoSeleccionadoActual.linkedCodes || []).map(c => c ? c.trim().toUpperCase() : '').filter(Boolean));
+    if (setCodes.size > 0) {
+        const nodosCoincidentes = [];
+        const buscarNodosCoincidentesPorCodigos = (n) => {
+            if (n.id !== nodoSeleccionadoActual.id && n.linkedCodes) {
+                const sharesCode = n.linkedCodes.some(c => c && setCodes.has(c.trim().toUpperCase()));
+                if (sharesCode) {
+                    nodosCoincidentes.push(n);
+                }
+            }
+            if (n.children) {
+                n.children.forEach(buscarNodosCoincidentesPorCodigos);
+            }
+        };
+        buscarNodosCoincidentesPorCodigos(arbolMaquinas);
+
+        // Cada nodo coincidente y sus ancestros son visibles y opacos (salvo si son primarios)
+        nodosCoincidentes.forEach(m => {
+            idsVisibles.add(m.id);
+            if (!idsPathSelected.has(m.id) && !descendientes.includes(m.id)) {
+                idsOpacos.add(m.id);
+            }
+
+            const pathCoinc = buscarPadresRecursivo(arbolMaquinas, m.id) || [];
+            pathCoinc.forEach(p => {
+                idsVisibles.add(p.id);
+                if (!idsPathSelected.has(p.id) && !descendientes.includes(p.id)) {
+                    idsOpacos.add(p.id);
+                }
+            });
+        });
+    }
+}
+
 // Dibuja el árbol jerárquico recursivo
 function dibujarArbol() {
     const container = document.getElementById('treeContainer');
@@ -3447,11 +3822,36 @@ function dibujarArbol() {
         return;
     }
 
-    container.innerHTML = dibujarNodoRecursivo(arbolMaquinas, 0);
+    if (typeof dibujarBreadcrumbs === 'function') dibujarBreadcrumbs();
+
+    // Calcular visibilidad en base al nodo seleccionado
+    calcularNodosVisiblesYOpacos();
+
+    let rootNodeToDraw = arbolMaquinas;
+    if (typeof nodoEnfoqueId !== 'undefined' && nodoEnfoqueId) {
+        const focused = buscarNodoPorId(arbolMaquinas, nodoEnfoqueId);
+        if (focused) {
+            rootNodeToDraw = focused;
+        } else {
+            nodoEnfoqueId = null;
+        }
+    }
+
+    container.innerHTML = dibujarNodoRecursivo(rootNodeToDraw, 0);
 }
 
-// Genera HTML recursivo para el árbol
+// Genera HTML recursivo para el árbol con paleta de colores y cross-reference
 function dibujarNodoRecursivo(nodo, nivel) {
+    // Si el nodo es un sistema filtrado, no mostrarlo ni a él ni a sus hijos
+    if (!debeMostrarNodoSistema(nodo)) {
+        return "";
+    }
+
+    // Si hay una selección activa y el nodo no es relevante para el foco, ocultarlo completamente
+    if (nodoSeleccionadoActual && idsVisibles.size > 0 && !idsVisibles.has(nodo.id)) {
+        return "";
+    }
+
     const paddingLeft = nivel * 16;
     const hasChildren = nodo.children && nodo.children.length > 0;
     const expanded = nodo.expanded !== false;
@@ -3477,7 +3877,6 @@ function dibujarNodoRecursivo(nodo, nivel) {
     const resEstado = calcularEstadoNodo(nodo);
     
     if (!hasChildren) {
-        // Diagnóstico de nodo hoja
         const isLinked = nodo.linkedCodes && nodo.linkedCodes.filter(c => c.trim().length > 0).length > 0;
         if (!isLinked) {
             linkedCountBadge = `<span class="bg-amber-50 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-200 ml-1.5 shadow-sm shrink-0">⚠️ Sin vincular</span>`;
@@ -3487,7 +3886,6 @@ function dibujarNodoRecursivo(nodo, nivel) {
             linkedCountBadge = `<span class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-200 ml-1.5 shadow-sm shrink-0">✅ OK</span>`;
         }
     } else {
-        // Resumen de diagnóstico en nodo padre
         let badgesHtml = [];
         if (resEstado.falta > 0) {
             badgesHtml.push(`<span class="bg-red-50 text-red-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-red-200 shadow-sm shrink-0">🔴 Falta: ${resEstado.falta}</span>`);
@@ -3501,17 +3899,62 @@ function dibujarNodoRecursivo(nodo, nivel) {
         linkedCountBadge = `<div class="flex gap-1 ml-1.5">${badgesHtml.join("")}</div>`;
     }
 
-    const isSelectedClass = isSelected
-        ? 'bg-blue-100 border-blue-300 font-bold text-blue-900 shadow-sm'
-        : 'hover:bg-gray-100 border-transparent text-gray-700 hover:text-gray-900';
+    // Calcular paleta de colores por nivel (Jerarquía visual)
+    let colorClass = 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100';
+    if (nivel === 0) {
+        colorClass = 'bg-slate-800 border-slate-900 text-white font-extrabold hover:bg-slate-700';
+    } else if (nivel === 1) {
+        colorClass = 'bg-indigo-50 border-indigo-200 text-indigo-900 font-bold hover:bg-indigo-100';
+    } else if (nivel === 2) {
+        colorClass = 'bg-emerald-50 border-emerald-200 text-emerald-950 font-semibold hover:bg-emerald-100';
+    } else if (nivel === 3) {
+        colorClass = 'bg-amber-50 border-amber-200 text-amber-900 font-semibold hover:bg-amber-100';
+    } else if (nivel === 4) {
+        colorClass = 'bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100';
+    } else if (nivel === 5) {
+        colorClass = 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200';
+    }
+
+    // Detección de coincidencia cruzada de repuestos (Cross-Reference)
+    let coincideRepuesto = false;
+    let codigosOverlapped = [];
+    if (nodoSeleccionadoActual && nodoSeleccionadoActual.id !== nodo.id && nodoSeleccionadoActual.linkedCodes && nodo.linkedCodes) {
+        const setSel = new Set(nodoSeleccionadoActual.linkedCodes.map(c => c ? c.trim().toUpperCase() : '').filter(Boolean));
+        nodo.linkedCodes.forEach(c => {
+            if (c) {
+                const codeClean = c.trim().toUpperCase();
+                if (codeClean && setSel.has(codeClean)) {
+                    coincideRepuesto = true;
+                    codigosOverlapped.push(c.trim());
+                }
+            }
+        });
+    }
+
+    if (coincideRepuesto) {
+        colorClass = 'bg-purple-100 border-purple-400 font-bold text-purple-950 ring-2 ring-purple-300 shadow-md';
+    }
+
+    // Si el nodo es opaco, aplicarle semi-transparencia interactiva (hover restablece opacidad)
+    if (nodoSeleccionadoActual && idsOpacos.has(nodo.id)) {
+        colorClass += ' opacity-40 hover:opacity-100 transition-opacity duration-200';
+    }
+
+    // Sobreescribir si es el nodo seleccionado
+    if (isSelected) {
+        colorClass = 'bg-blue-100 border-blue-500 font-bold text-blue-900 ring-2 ring-blue-300 shadow-md scale-[1.01]';
+    }
+
+    let matchBadge = coincideRepuesto ? `<span class="bg-purple-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded ml-1.5 shadow-sm shrink-0">🔗 También usa: ${codigosOverlapped.join(', ')}</span>` : '';
 
     let html = `
         <div class="flex flex-col">
-            <div onclick="seleccionarNodoArbol('${nodo.id}')" class="flex items-center gap-1.5 py-1 pr-2 border rounded cursor-pointer transition duration-150 ${isSelectedClass} text-xs my-0.5" style="margin-left: ${paddingLeft}px;">
+            <div onclick="seleccionarNodoArbol('${nodo.id}')" class="flex items-center gap-1.5 py-1.5 pr-2 border rounded-lg cursor-pointer transition duration-150 ${colorClass} text-xs my-0.5" style="margin-left: ${paddingLeft}px;">
                 ${arrowHtml}
                 <span class="text-sm shrink-0 leading-none select-none">${icon}</span>
                 <span class="truncate block max-w-[320px] md:max-w-[550px] lg:max-w-[650px]">${nodo.label}</span>
                 ${linkedCountBadge}
+                ${matchBadge}
             </div>
     `;
 
@@ -3616,6 +4059,7 @@ function actualizarPanelEditorNodo() {
     const btnSave = document.getElementById('btnGuardarEdicion');
 
     if (!label) return;
+    const btnFocus = document.getElementById('btnEnfocarNodo');
 
     if (!nodoSeleccionadoActual) {
         label.innerText = "Ninguno";
@@ -3623,6 +4067,7 @@ function actualizarPanelEditorNodo() {
         if (btnDel) btnDel.classList.add('hidden');
         if (btnDup) btnDup.classList.add('hidden');
         if (quickVinc) quickVinc.classList.add('hidden');
+        if (btnFocus) btnFocus.classList.add('hidden');
         return;
     }
 
@@ -3673,6 +4118,17 @@ function actualizarPanelEditorNodo() {
     } else {
         if (btnDel) btnDel.classList.remove('hidden');
         if (btnDup) btnDup.classList.remove('hidden');
+    }
+
+    if (btnFocus) {
+        btnFocus.classList.remove('hidden');
+        if (typeof nodoEnfoqueId !== 'undefined' && nodoEnfoqueId === nodoSeleccionadoActual.id) {
+            btnFocus.innerHTML = '❌ Quitar Enfoque';
+            btnFocus.className = 'bg-red-600 hover:bg-red-700 text-white font-bold px-2.5 py-1 rounded transition shadow-sm';
+        } else {
+            btnFocus.innerHTML = '🔎 Enfocar';
+            btnFocus.className = 'bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2.5 py-1 rounded transition shadow-sm';
+        }
     }
 
     // Gestionar visualización e inputs en base al Modo Edición
@@ -4289,16 +4745,54 @@ function clonarNodoConNuevosIds(nodo, nuevaLabel) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     cargarCarritoLocal();
+    
+    // Delegación de eventos para clics en filas de repuestos (abre detalle al hacer clic en cualquier parte de la fila)
+    document.body.addEventListener('click', (e) => {
+        // No abrir modal si el usuario está seleccionando texto (arrastre para copiar)
+        const sel = window.getSelection();
+        if (sel && sel.toString().trim().length > 0) return;
+
+        const tr = e.target.closest('tr[data-repuesto-codigo]');
+        if (!tr) return;
+
+        // Ignorar si el clic fue en un elemento interactivo o de edición
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'button' || tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.closest('button') || e.target.closest('a')) {
+            return;
+        }
+
+        // Ignorar si fue en una celda que tiene su propio manejador onclick ajeno al tr (como ingreso manual o acciones rápidas)
+        const closestOnclick = e.target.closest('[onclick]');
+        if (closestOnclick && closestOnclick !== tr) {
+            return;
+        }
+
+        const codigo = tr.getAttribute('data-repuesto-codigo');
+        if (codigo) {
+            abrirModalDetalleSencillo(codigo);
+        }
+    });
     if (document.getElementById('gFechaSug')) {
         document.getElementById('gFechaSug').value = new Date().toISOString().slice(0, 10);
     }
     aplicarEstadoBodeguero();
 
-    // Intentar restaurar acceso a la carpeta de imágenes persistida
-    await intentarCargarCarpetaGuardada();
-    
+    if (localStorage.getItem('headerCollapsed') === 'true') {
+        const bar = document.getElementById('topHeaderBar');
+        const btn = document.getElementById('btnToggleHeader');
+        if (bar && btn) {
+            bar.classList.add('max-h-0', 'overflow-hidden', 'opacity-0', 'pointer-events-none', 'mb-0');
+            bar.classList.remove('mb-6');
+            btn.innerHTML = '⋯';
+            btn.title = "Mostrar menú superior";
+        }
+    }
+
     // Inicializar el tooltip interactivo de repuestos
     inicializarTooltipRepuestos();
+
+    // Intentar restaurar acceso a la carpeta de imágenes persistida en segundo plano (no bloqueante)
+    intentarCargarCarpetaGuardada();
 
     try {
         const datosGuardados = await cargarDatos();
@@ -4425,6 +4919,9 @@ async function vincularCodigoPendienteActual() {
 
 // Busca coincidencias de un código en el árbol y retorna una estructura podada (solo rutas de coincidencia)
 function buscarCoincidenciasYPrunar(nodo, codigo) {
+    if (!debeMostrarNodoSistema(nodo)) {
+        return null;
+    }
     const targetSimp = simplifyKey(codigo);
     const isLinked = nodo.linkedCodes && nodo.linkedCodes.some(c => simplifyKey(c) === targetSimp);
     let childrenCoinciden = [];
@@ -4452,6 +4949,9 @@ function buscarCoincidenciasYPrunar(nodo, codigo) {
 
 // Dibuja en HTML recursivo un nodo podado para el tooltip
 function dibujarPrunedNodoHtml(nodo, nivel = 0) {
+    if (!debeMostrarNodoSistema(nodo)) {
+        return "";
+    }
     const paddingLeft = nivel * 12;
     const hasChildren = nodo.children && nodo.children.length > 0;
     
@@ -4491,13 +4991,14 @@ function dibujarPrunedNodoHtml(nodo, nivel = 0) {
     return html;
 }
 
-// Navega a un nodo en el árbol desde el tooltip
+// Navega a un nodo en el árbol desde el tooltip o modal de detalles
 function irANodoEnArbol(id) {
     if (!arbolMaquinas) return;
     
-    // 1. Ocultar tooltip
+    // 1. Ocultar tooltip y cerrar modal de detalle
     const tooltip = document.getElementById('repuestoTooltip');
     if (tooltip) tooltip.classList.add('hidden');
+    if (typeof cerrarModalDetalle === 'function') cerrarModalDetalle();
     
     // 2. Cambiar vista a la pestaña del árbol
     setVista('repuestosMaquina');
@@ -4644,12 +5145,30 @@ async function mostrarTooltipRepuesto(codigo, targetElement, mouseEvent) {
 function generarPdfArbolMaquinas() {
     if (!arbolMaquinas) return alert("No hay datos del árbol para imprimir.");
 
+    let nodoARenderizar = arbolMaquinas;
+    let tituloReporte = "Estructura de Planta y Equipos";
+    let subtituloReporte = "REPORTE COMPLETO DE MÁQUINAS Y REPUESTOS VINCULADOS";
+
+    // Si hay una selección activa o un enfoque activo, ofrecer imprimir sólo esa parte
+    const nodoFoco = nodoSeleccionadoActual || (typeof nodoEnfoqueId !== 'undefined' && nodoEnfoqueId ? buscarNodoPorId(arbolMaquinas, nodoEnfoqueId) : null);
+    if (nodoFoco && nodoFoco.id !== "root_1") {
+        const soloFoco = confirm(`¿Desea imprimir SOLO la selección/enfoque actual ("${nodoFoco.label}")?\n\n• [Aceptar] = Imprimir SOLO el subárbol de "${nodoFoco.label}".\n• [Cancelar] = Imprimir todo el árbol completo de la planta.`);
+        if (soloFoco) {
+            nodoARenderizar = nodoFoco;
+            tituloReporte = `Estructura: ${nodoFoco.label}`;
+            subtituloReporte = `REPORTE ENFOCADO DE EQUIPOS Y REPUESTOS - TIPO: ${nodoFoco.type.toUpperCase()}`;
+        }
+    }
+
     let printDiv = document.createElement('div');
     printDiv.id = 'cartPrintArea';
     
     let treeHtml = "";
     
     function renderNodoImpresion(nodo, nivel = 0) {
+        if (!debeMostrarNodoSistema(nodo)) {
+            return "";
+        }
         const paddingLeft = nivel * 20;
         
         let icon = "⚙️";
@@ -4740,14 +5259,14 @@ function generarPdfArbolMaquinas() {
         return html;
     }
     
-    treeHtml = renderNodoImpresion(arbolMaquinas, 0);
+    treeHtml = renderNodoImpresion(nodoARenderizar, 0);
 
     printDiv.innerHTML = `
         <div style="font-family: Arial, sans-serif; color: #000; padding: 10px;">
             <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 16px; display:flex; justify-content:space-between; align-items:flex-end;">
                 <div>
-                    <h1 style="color: #1e3a8a; font-size: 18px; margin:0; text-transform:uppercase;">Estructura de Planta y Equipos</h1>
-                    <h2 style="font-size: 11px; margin: 4px 0 0 0; color:#555;">REPORTE COMPLETO DE MÁQUINAS Y REPUESTOS VINCULADOS</h2>
+                    <h1 style="color: #1e3a8a; font-size: 18px; margin:0; text-transform:uppercase;">${tituloReporte}</h1>
+                    <h2 style="font-size: 11px; margin: 4px 0 0 0; color:#555;">${subtituloReporte}</h2>
                 </div>
                 <div style="font-size:9px; text-align:right; color:#777;">
                     <b>Fecha Reporte:</b> ${new Date().toLocaleString('es-GT')}<br>
@@ -4766,4 +5285,489 @@ function generarPdfArbolMaquinas() {
     window.print();
     document.body.classList.remove('printing-cart');
     document.body.removeChild(printDiv);
+}
+
+// -----------------------------------------------------
+// 8. COLA DE PROCESAMIENTO Y CACHE DE IMÁGENES (THUMBNAILS)
+// -----------------------------------------------------
+let queueThumbnails = [];
+let processThumbnailsRunning = false;
+
+// Encola un archivo para generar y guardar su thumbnail en segundo plano
+function encolarGeneracionThumbnail(fileHandle, exactKey, simpKey) {
+    queueThumbnails.push({ fileHandle, exactKey, simpKey });
+    procesarColaThumbnails();
+}
+
+// Procesa la cola de thumbnails uno por uno con pausas para mantener reactiva la UI
+async function procesarColaThumbnails() {
+    if (processThumbnailsRunning || queueThumbnails.length === 0) return;
+    processThumbnailsRunning = true;
+    
+    while (queueThumbnails.length > 0) {
+        const task = queueThumbnails.shift();
+        try {
+            await generarYGuardarThumbnail(task.fileHandle, task.exactKey, task.simpKey);
+        } catch (e) {
+            console.error("Error al procesar thumbnail en cola:", e);
+        }
+        // Pequeña pausa entre compresiones para mantener el hilo de UI 100% libre y fluido
+        await new Promise(r => setTimeout(r, 40));
+    }
+    
+    processThumbnailsRunning = false;
+}
+
+// Genera un thumbnail de baja calidad (base64) y lo guarda en IndexedDB
+async function generarYGuardarThumbnail(fileHandle, exactKey, simpKey) {
+    try {
+        const db = await initDB();
+        
+        // Verificar si ya existe en IndexedDB
+        const cacheVal = await new Promise(r => {
+            const req = db.transaction(STORE_THUMBNAILS, 'readonly').objectStore(STORE_THUMBNAILS).get(exactKey);
+            req.onsuccess = () => r(req.result);
+            req.onerror = () => r(null);
+        });
+        
+        if (cacheVal) {
+            // Ya está guardado, no hacer doble trabajo
+            return;
+        }
+        
+        const file = await fileHandle.getFile();
+        
+        // Comprimir la imagen usando canvas
+        const dataUrl = await comprimirImagenAThumbnail(file);
+        
+        if (dataUrl) {
+            const tx = db.transaction(STORE_THUMBNAILS, 'readwrite');
+            tx.objectStore(STORE_THUMBNAILS).put(dataUrl, exactKey);
+            await new Promise(r => tx.oncomplete = r);
+        }
+    } catch (e) {
+        console.warn("No se pudo pre-guardar el thumbnail para:", exactKey, e);
+    }
+}
+
+// Comprime una imagen a max 120px de ancho/alto y calidad JPEG baja (0.4)
+function comprimirImagenAThumbnail(file) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                const maxDim = 120;
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > height) {
+                    if (width > maxDim) {
+                        height = Math.round(height * (maxDim / width));
+                        width = maxDim;
+                    }
+                } else {
+                    if (height > maxDim) {
+                        width = Math.round(width * (maxDim / height));
+                        height = maxDim;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Formato JPEG liviano y calidad 0.4 para ocupar muy pocos KB
+                const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.4);
+                resolve(thumbnailDataUrl);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+// Busca un thumbnail cached en IndexedDB por código o parte
+async function cargarThumbnailDesdeDb(codigo, noParte) {
+    try {
+        const db = await initDB();
+        const key1 = codigo ? codigo.trim().toLowerCase() : '';
+        const key2 = noParte ? noParte.trim().toLowerCase() : '';
+        
+        let thumbData = null;
+        
+        if (key1) {
+            thumbData = await new Promise(r => {
+                const req = db.transaction(STORE_THUMBNAILS, 'readonly').objectStore(STORE_THUMBNAILS).get(key1);
+                req.onsuccess = () => r(req.result);
+                req.onerror = () => r(null);
+            });
+        }
+        
+        if (!thumbData && key2 && key2 !== '-') {
+            thumbData = await new Promise(r => {
+                const req = db.transaction(STORE_THUMBNAILS, 'readonly').objectStore(STORE_THUMBNAILS).get(key2);
+                req.onsuccess = () => r(req.result);
+                req.onerror = () => r(null);
+            });
+        }
+        
+        return thumbData;
+    } catch (e) {
+        console.error("Error al cargar thumbnail desde IndexedDB:", e);
+        return null;
+    }
+}
+
+// =========================================================================
+// 8. NUEVAS FUNCIONALIDADES AVANZADAS (ENFOQUE, HUERFANOS, IGNORADOS, FUSION)
+// =========================================================================
+
+// Variables globales para filtros nuevos
+let nodoEnfoqueId = null;
+let filtroHuerfanosActivo = false;
+
+// 1. Menú Superior Colapsable
+function toggleTopHeader() {
+    const bar = document.getElementById('topHeaderBar');
+    const btn = document.getElementById('btnToggleHeader');
+    if (!bar || !btn) return;
+    
+    const isCollapsed = bar.classList.contains('max-h-0');
+    
+    if (isCollapsed) {
+        bar.classList.remove('max-h-0', 'overflow-hidden', 'opacity-0', 'pointer-events-none', 'mb-0');
+        bar.classList.add('mb-6');
+        btn.innerHTML = '┇';
+        btn.title = "Ocultar menú superior";
+        localStorage.setItem('headerCollapsed', 'false');
+    } else {
+        bar.classList.add('max-h-0', 'overflow-hidden', 'opacity-0', 'pointer-events-none', 'mb-0');
+        bar.classList.remove('mb-6');
+        btn.innerHTML = '⋯';
+        btn.title = "Mostrar menú superior";
+        localStorage.setItem('headerCollapsed', 'true');
+    }
+}
+
+// 2. Lógica de Ignorar/Ocultar Repuestos por Departamento
+function obtenerIgnorados() {
+    try {
+        return JSON.parse(localStorage.getItem('ignoredCodes') || '[]');
+    } catch(e) {
+        return [];
+    }
+}
+
+function esItemIgnorado(codigo) {
+    if (!codigo) return false;
+    return obtenerIgnorados().includes(codigo.trim().toLowerCase());
+}
+
+function toggleItemIgnorado(codigo) {
+    if (!codigo) return;
+    const cleanCode = codigo.trim().toLowerCase();
+    let list = obtenerIgnorados();
+    if (list.includes(cleanCode)) {
+        list = list.filter(c => c !== cleanCode);
+    } else {
+        list.push(cleanCode);
+    }
+    localStorage.setItem('ignoredCodes', JSON.stringify(list));
+    
+    // Sincronizar y recargar la vista activa
+    sincronizarIgnoradosCheckbox(mostrarIgnorados());
+    if (typeof actualizarBloqueHuerfanos === 'function') actualizarBloqueHuerfanos();
+}
+
+function toggleItemIgnoradoActual() {
+    if (itemActualSeleccionado) {
+        toggleItemIgnorado(itemActualSeleccionado.inv.codigo);
+        actualizarBotonIgnoradoModal(itemActualSeleccionado.inv.codigo);
+    }
+}
+
+function actualizarBotonIgnoradoModal(codigo) {
+    const btn = document.getElementById('btnToggleIgnorado');
+    if (!btn) return;
+    const ignorado = esItemIgnorado(codigo);
+    if (ignorado) {
+        btn.innerHTML = '👁️ Mostrar Item';
+        btn.className = 'w-full sm:w-1/3 bg-red-100 hover:bg-red-200 text-red-700 font-bold py-3 px-4 rounded border border-red-300 transition flex items-center justify-center gap-1.5 text-xs shadow-sm no-print';
+    } else {
+        btn.innerHTML = '🚫 Ocultar Item';
+        btn.className = 'w-full sm:w-1/3 bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-700 font-bold py-3 px-4 rounded border border-gray-300 hover:border-red-300 transition flex items-center justify-center gap-1.5 text-xs shadow-sm no-print';
+    }
+}
+
+function mostrarIgnorados() {
+    const chkS = document.getElementById('chkMostrarIgnoradosSencilla');
+    const chkC = document.getElementById('chkMostrarIgnoradosCatalogo');
+    const chkD = document.getElementById('chkMostrarIgnoradosDetallada');
+    return (chkS && chkS.checked) || (chkC && chkC.checked) || (chkD && chkD.checked);
+}
+
+function sincronizarIgnoradosCheckbox(checked) {
+    ['chkMostrarIgnoradosSencilla', 'chkMostrarIgnoradosCatalogo', 'chkMostrarIgnoradosDetallada'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = checked;
+    });
+    
+    if (!document.getElementById('vistaSencilla').classList.contains('hidden')) {
+        buscarSencilla();
+    } else if (!document.getElementById('vistaCatalogo').classList.contains('hidden')) {
+        buscarCatalogo();
+    } else if (!document.getElementById('vistaDetallada').classList.contains('hidden')) {
+        ejecutarBusqueda();
+    }
+}
+
+// 3. Filtrar Repuestos Huérfanos e Inactivos (Optimización de Inventario)
+function obtenerCodigosVinculadosEnArbol() {
+    const codigos = new Set();
+    const recursivo = (nodo) => {
+        if (nodo.linkedCodes) {
+            nodo.linkedCodes.forEach(c => {
+                if (c && c.trim().length > 0) codigos.add(c.trim().toLowerCase());
+            });
+        }
+        if (nodo.children) {
+            nodo.children.forEach(recursivo);
+        }
+    };
+    if (arbolMaquinas) recursivo(arbolMaquinas);
+    return codigos;
+}
+
+function obtenerRepuestosHuerfanosYInactivos() {
+    if (typeof TODOS_LOS_DATOS === 'undefined' || !TODOS_LOS_DATOS) return [];
+    
+    const codigosVinculados = obtenerCodigosVinculadosEnArbol();
+    
+    return TODOS_LOS_DATOS.filter(f => {
+        const codigoClean = f.inv.codigo.trim().toLowerCase();
+        // Huérfano: No está en el árbol
+        const esHuerfano = !codigosVinculados.has(codigoClean);
+        // Inactivo: Sin salidas registradas
+        const esInactivo = !f.vecesUsado || f.vecesUsado === 0;
+        return esHuerfano && esInactivo;
+    });
+}
+
+function actualizarBloqueHuerfanos() {
+    const huerfanos = obtenerRepuestosHuerfanosYInactivos();
+    
+    const badge = document.getElementById('badgeCantHuerfanos');
+    if (badge) badge.innerText = huerfanos.length;
+    
+    const cont = document.getElementById('huerfanosCompactList');
+    if (!cont) return;
+    
+    if (huerfanos.length === 0) {
+        cont.innerHTML = `<div class="text-slate-400 text-center py-4">No hay repuestos inactivos.</div>`;
+        return;
+    }
+    
+    // Mostrar los primeros 8 ítems en lista muy compacta
+    const bloque = huerfanos.slice(0, 8);
+    cont.innerHTML = bloque.map(h => `
+        <div class="py-1 px-1.5 hover:bg-slate-100 transition rounded flex justify-between items-center gap-1.5 cursor-pointer border-b border-slate-100 last:border-0" onclick="abrirModalDetalleSencillo('${h.inv.codigo}')">
+            <span class="font-mono text-blue-700 font-bold shrink-0">${h.inv.codigo}</span>
+            <span class="truncate block text-gray-600 flex-grow">${h.inv.descripcion}</span>
+            <span class="text-gray-400 font-semibold shrink-0">Cant: ${h.inv.cantidad}</span>
+        </div>
+    `).join('');
+}
+
+function filtrarHuerfanosEnInventario() {
+    filtroHuerfanosActivo = true;
+    
+    // Activar avisos visuales en las tres vistas
+    ['bannerFiltroHuerfanosSencilla', 'bannerFiltroHuerfanosCatalogo', 'bannerFiltroHuerfanosDetallada'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('hidden');
+    });
+    
+    // Redirigir a vista sencilla por defecto
+    setVista('sencilla');
+}
+
+function desactivarFiltroHuerfanos() {
+    filtroHuerfanosActivo = false;
+    
+    ['bannerFiltroHuerfanosSencilla', 'bannerFiltroHuerfanosCatalogo', 'bannerFiltroHuerfanosDetallada'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+    
+    // Recargar vista activa
+    if (!document.getElementById('vistaSencilla').classList.contains('hidden')) {
+        buscarSencilla();
+    } else if (!document.getElementById('vistaCatalogo').classList.contains('hidden')) {
+        buscarCatalogo();
+    } else if (!document.getElementById('vistaDetallada').classList.contains('hidden')) {
+        ejecutarBusqueda();
+    }
+}
+
+// 4. Modo Enfoque en el Árbol (Focus Mode) y Navegación (Breadcrumbs)
+function toggleEnfoqueNodoSeleccionado() {
+    if (!nodoSeleccionadoActual) return;
+    
+    if (nodoEnfoqueId === nodoSeleccionadoActual.id) {
+        nodoEnfoqueId = null; // Quitar enfoque
+    } else {
+        nodoEnfoqueId = nodoSeleccionadoActual.id; // Enfocar
+    }
+    
+    dibujarArbol();
+    actualizarPanelEditorNodo();
+}
+
+function buscarPadresRecursivo(raiz, id, camino = []) {
+    if (raiz.id === id) {
+        return [...camino, raiz];
+    }
+    if (raiz.children) {
+        for (const child of raiz.children) {
+            const res = buscarPadresRecursivo(child, id, [...camino, raiz]);
+            if (res) return res;
+        }
+    }
+    return null;
+}
+
+function dibujarBreadcrumbs() {
+    const bar = document.getElementById('treeBreadcrumbs');
+    if (!bar) return;
+    
+    if (!nodoEnfoqueId) {
+        bar.classList.add('hidden');
+        bar.innerHTML = '';
+        return;
+    }
+    
+    const camino = buscarPadresRecursivo(arbolMaquinas, nodoEnfoqueId);
+    if (!camino) {
+        bar.classList.add('hidden');
+        return;
+    }
+    
+    const nodesHtml = camino.map((nodo, idx) => {
+        const isLast = idx === camino.length - 1;
+        const fontClass = isLast ? 'font-black text-indigo-700 font-bold' : 'text-gray-500 hover:text-indigo-600 hover:underline cursor-pointer';
+        return `<span class="${fontClass}" onclick="seleccionarNodoYEnfocar('${nodo.id}')">${nodo.label}</span>`;
+    }).join(' <span class="text-gray-400 select-none">/</span> ');
+    
+    bar.innerHTML = `
+        <span class="text-gray-400 select-none mr-1 font-bold">👁️ Enfoque:</span>
+        ${nodesHtml}
+        <button onclick="desactivarEnfoqueArbol()" class="ml-auto text-[9px] bg-red-100 hover:bg-red-200 text-red-700 px-2 py-0.5 rounded border border-red-200 shadow-sm transition font-bold uppercase tracking-wider shrink-0">Quitar Enfoque</button>
+    `;
+    bar.classList.remove('hidden');
+}
+
+function seleccionarNodoYEnfocar(id) {
+    nodoEnfoqueId = id;
+    seleccionarNodoArbol(id);
+}
+
+function desactivarEnfoqueArbol() {
+    nodoEnfoqueId = null;
+    dibujarArbol();
+    actualizarPanelEditorNodo();
+}
+
+// 5. Colección Global de Filtro Base (Huérfanos y Ignorados)
+function filtrarColeccionGlobal(dataset) {
+    let res = [...dataset];
+    
+    // A. Filtro de Huérfanos/Inactivos
+    if (typeof filtroHuerfanosActivo !== 'undefined' && filtroHuerfanosActivo) {
+        const huerfanos = obtenerRepuestosHuerfanosYInactivos();
+        const codigosHuerfanos = new Set(huerfanos.map(h => h.inv.codigo));
+        res = res.filter(f => codigosHuerfanos.has(f.inv.codigo));
+    }
+    
+    // B. Filtro de Ignorados (Indeseados)
+    if (typeof mostrarIgnorados === 'function' && !mostrarIgnorados()) {
+        const ignorados = obtenerIgnorados();
+        res = res.filter(f => !ignorados.includes(f.inv.codigo.trim().toLowerCase()));
+    }
+    
+    return res;
+}
+
+// 6. Fusión Recursiva del Árbol de Máquinas
+function fusionarNodosArbol(localNode, backupNode) {
+    if (!localNode.linkedCodes) localNode.linkedCodes = [];
+    if (backupNode.linkedCodes) {
+        backupNode.linkedCodes.forEach(code => {
+            if (code && !localNode.linkedCodes.includes(code)) {
+                localNode.linkedCodes.push(code);
+            }
+        });
+    }
+    if (backupNode.cantReq !== undefined) localNode.cantReq = backupNode.cantReq;
+    if (backupNode.expanded !== undefined) localNode.expanded = backupNode.expanded;
+    
+    if (backupNode.children) {
+        if (!localNode.children) localNode.children = [];
+        backupNode.children.forEach(bChild => {
+            const lChild = localNode.children.find(c => c.id === bChild.id || (c.label === bChild.label && c.type === bChild.type));
+            if (lChild) {
+                fusionarNodosArbol(lChild, bChild);
+            } else {
+                localNode.children.push(bChild);
+            }
+        });
+    }
+}
+
+// 7. Funciones de Navegación y Búsqueda de Registros en el Modal de Detalles
+function obtenerColeccionActiva() {
+    if (!document.getElementById('vistaSencilla').classList.contains('hidden')) {
+        return _datosSencillaCurrent || [];
+    } else if (!document.getElementById('vistaDetallada').classList.contains('hidden')) {
+        return DATOS_FILTRADOS || [];
+    } else if (!document.getElementById('vistaCatalogo').classList.contains('hidden')) {
+        return _datosCatalogoCurrent || [];
+    }
+    return TODOS_LOS_DATOS || [];
+}
+
+function navegarRegistroDetalle(direccion) {
+    const col = obtenerColeccionActiva();
+    if (!col || col.length === 0 || !itemActualSeleccionado) return;
+    
+    const index = col.findIndex(x => x.inv.codigo === itemActualSeleccionado.inv.codigo);
+    if (index === -1) return;
+    
+    let nextIndex = index + direccion;
+    if (nextIndex < 0) nextIndex = col.length - 1;
+    if (nextIndex >= col.length) nextIndex = 0;
+    
+    const nextFila = col[nextIndex];
+    if (nextFila) {
+        abrirModalDetalle(nextFila);
+    }
+}
+
+function buscarYMostrarEnDetalle(codigo) {
+    if (!codigo || typeof TODOS_LOS_DATOS === 'undefined') return;
+    const clean = codigo.trim().toUpperCase();
+    const match = TODOS_LOS_DATOS.find(x => x.inv.codigo.toUpperCase().trim() === clean);
+    if (match) {
+        abrirModalDetalle(match);
+        const inp = document.getElementById('inpBuscarCodigoDetalle');
+        if (inp) inp.value = '';
+    }
 }
