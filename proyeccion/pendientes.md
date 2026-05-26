@@ -12,7 +12,9 @@
 - [x] Autocompletado Predictivo: Sugerencias automáticas y vinculación de campos (máquina-sección-modelo) mediante historial.
 - [x] Sanidad de Repo: .gitignore y limpieza de archivos temporales.
 - [x] Filtro de Sistemas de Planta: Visualización ad-hoc global por tipo de sistema (Potencia/Motores, Control, Neumático, Hidráulico, Seguridad y Otros) respetado dinámicamente en el árbol de máquinas, conteo de desabastecimientos y reportes PDF.
+- [x] Modularización de app.js: Separación del código monolítico en 7 módulos de scripts Javascript altamente integrados y secuenciales, eliminando código residual y optimizando rendimiento.
+- [x] Visibilidad de Urgencia y Observaciones para Repuestos Nuevos: Integración de lógica en `js/cart-requests.js` para inyectar la prioridad/urgencia y las observaciones/uso en correos plano, HTML, PDF y log histórico.
 
 ## Próximas Propuestas
-1. **Visualización de Carga de Motores (Potencia):** Añadir un indicador visual de la potencia (kW/HP) y el estado operativo estimado de cada motor directamente en los nodos de potencia para facilitar la analítica rápida.
-2. **Exportador Unificado de Hojas de Ruta de Mantenimiento:** Generar un reporte impreso agrupado por máquina y sistema seleccionado conteniendo códigos y ubicaciones físicas de los repuestos faltantes para acelerar las requisiciones diarias de los técnicos.
+1. **Analítica de Rotación y Pronósticos Visuales:** Desarrollar gráficas interactivas integradas en el modal de detalles usando charts SVG nativos para predecir con mayor precisión las fechas estimadas de stock crítico.
+2. **Servicio de Alertas Locales PWA:** Notificar a través de alertas del navegador (Push Notifications offline) al usuario cuando un repuesto vinculado a un sistema de potencia prioritario se encuentre desabastecido o en stock crítico.
