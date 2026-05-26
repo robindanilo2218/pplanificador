@@ -113,6 +113,7 @@ function setVista(v) {
         }
         inicializarVistaArbolMaquinas();
     }
+    verificarSincronizacionBusqueda(v);
 }
 
 // Navega a la vista detallada filtrando por un código de repuesto específico
@@ -489,7 +490,7 @@ function limpiarBusquedaSencilla() {
 function _filasSencillaHtml(datos) {
     return datos.map(fila => {
         return `
-                <tr class="border-b hover:bg-blue-50 transition">
+                <tr class="border-b hover:bg-blue-50 transition" data-repuesto-codigo="${fila.inv.codigo}">
                     <td class="p-1">
                         <div class="flex gap-0.5 justify-center items-center">
                             <button class="bg-green-500 hover:bg-green-600 text-white font-bold px-2 py-1 rounded text-[10px]" title="Añadir 1 rápido" onclick="simpleAddToCart('${fila.inv.codigo}', 1)">+1</button>
@@ -542,6 +543,7 @@ function renderizarBloqueTabla() {
         const tr = document.createElement('tr');
 
         tr.className = "hover:bg-blue-50 transition duration-150";
+        tr.setAttribute('data-repuesto-codigo', inv.codigo);
 
         tr.innerHTML = `
                     <td class="p-1">
@@ -3145,6 +3147,7 @@ async function agregarBloqueCatalogo(parentElement, bloque) {
 
         const card = document.createElement('div');
         card.className = "bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between overflow-hidden group";
+        card.setAttribute('data-repuesto-codigo', codigo);
 
         let stockBadgeClass = "bg-green-100 text-green-800 border-green-200";
         if (cantidad === 0) stockBadgeClass = "bg-red-100 text-red-800 border-red-200";
@@ -3688,6 +3691,26 @@ function actualizarPanelEditorNodo() {
             if (btnSave) btnSave.classList.add('hidden');
         }
     }
+
+    // Renderizar botón de vinculación rápida pendiente
+    const divBotonVinc = document.getElementById('btnVincularPendienteContainer');
+    if (divBotonVinc) {
+        divBotonVinc.remove();
+    }
+    if (CODIGO_PENDIENTE_VINCULAR && (nodoSeleccionadoActual.type === "aplicacion" || nodoSeleccionadoActual.type === "repuesto" || nodoSeleccionadoActual.type === "sistema")) {
+        const parentControls = document.querySelector('#camposEdicionNodo .flex.justify-between.items-center.mt-2');
+        if (parentControls) {
+            const btnContainer = document.createElement('div');
+            btnContainer.id = 'btnVincularPendienteContainer';
+            btnContainer.className = 'ml-2';
+            btnContainer.innerHTML = `
+                <button onclick="vincularCodigoPendienteActual()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1 rounded text-[11px] transition shadow-sm animate-bounce">
+                    🔌 Vincular ${CODIGO_PENDIENTE_VINCULAR} Aquí
+                </button>
+            `;
+            parentControls.insertBefore(btnContainer, parentControls.firstChild);
+        }
+    }
 }
 
 function cancelarEdicionNodo() {
@@ -3881,6 +3904,7 @@ async function cargarRepuestosVinculadosNodo() {
 
         const card = document.createElement('div');
         card.className = "bg-white border rounded-xl p-3 shadow-sm hover:shadow-md transition duration-200 flex gap-3 align-start relative overflow-hidden group";
+        card.setAttribute('data-repuesto-codigo', codigo);
 
         const cantReq = nodoSeleccionadoActual.cantReq || 1;
         let stockBadgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -4124,6 +4148,7 @@ async function cargarSugerenciasInteligentesNodo() {
 
         const card = document.createElement('div');
         card.className = "bg-white border border-blue-100 rounded-lg p-2.5 shadow-sm hover:border-blue-300 transition duration-150 flex gap-2.5 items-start relative";
+        card.setAttribute('data-repuesto-codigo', codigo);
 
         let stockBadgeClass = "bg-green-50 text-green-700 border-green-100";
         if (cantidad === 0) stockBadgeClass = "bg-red-50 text-red-700 border-red-100";
@@ -4271,6 +4296,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Intentar restaurar acceso a la carpeta de imágenes persistida
     await intentarCargarCarpetaGuardada();
+    
+    // Inicializar el tooltip interactivo de repuestos
+    inicializarTooltipRepuestos();
 
     try {
         const datosGuardados = await cargarDatos();
@@ -4285,3 +4313,457 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('pantallaCarga').classList.add('hidden');
     }
 });
+
+// -----------------------------------------------------
+// 7. SINCRONIZACIÓN DE BÚSQUEDAS E INTERACCIONES DE TOOLTIP
+// -----------------------------------------------------
+let CODIGO_PENDIENTE_VINCULAR = null;
+
+function verificarSincronizacionBusqueda(vistaDestino) {
+    const qSencilla = document.getElementById('busqSencilla')?.value.trim() || '';
+    const qDetallada = document.getElementById('busquedaTexto')?.value.trim() || '';
+    const qCatalogo = document.getElementById('busqCatalogo')?.value.trim() || '';
+
+    const divSenc = document.getElementById('syncSearchSencilla');
+    const divDet = document.getElementById('syncSearchDetallada');
+    const divCat = document.getElementById('syncSearchCatalogo');
+
+    if (divSenc) { divSenc.classList.add('hidden'); divSenc.innerHTML = ''; }
+    if (divDet) { divDet.classList.add('hidden'); divDet.innerHTML = ''; }
+    if (divCat) { divCat.classList.add('hidden'); divCat.innerHTML = ''; }
+
+    if (vistaDestino === 'sencilla') {
+        const queryActiva = qDetallada || qCatalogo;
+        const origen = qDetallada ? 'Vista Detallada' : 'Vista Catálogo';
+        if (queryActiva && queryActiva !== qSencilla) {
+            if (divSenc) {
+                divSenc.innerHTML = `💡 ¿Traer búsqueda de <b>${origen}</b>: <span class="font-semibold underline">"${queryActiva}"</span>?`;
+                divSenc.onclick = () => {
+                    document.getElementById('busqSencilla').value = queryActiva;
+                    buscarSencilla();
+                    divSenc.classList.add('hidden');
+                };
+                divSenc.classList.remove('hidden');
+            }
+        }
+    } else if (vistaDestino === 'detallada') {
+        const queryActiva = qSencilla || qCatalogo;
+        const origen = qSencilla ? 'Vista Sencilla' : 'Vista Catálogo';
+        if (queryActiva && queryActiva !== qDetallada) {
+            if (divDet) {
+                divDet.innerHTML = `💡 ¿Traer búsqueda de <b>${origen}</b>: <span class="font-semibold underline">"${queryActiva}"</span>?`;
+                divDet.onclick = () => {
+                    document.getElementById('busquedaTexto').value = queryActiva;
+                    ejecutarBusqueda();
+                    divDet.classList.add('hidden');
+                };
+                divDet.classList.remove('hidden');
+            }
+        }
+    } else if (vistaDestino === 'catalogo') {
+        const queryActiva = qSencilla || qDetallada;
+        const origen = qSencilla ? 'Vista Sencilla' : 'Vista Detallada';
+        if (queryActiva && queryActiva !== qCatalogo) {
+            if (divCat) {
+                divCat.innerHTML = `💡 ¿Traer búsqueda de <b>${origen}</b>: <span class="font-semibold underline">"${queryActiva}"</span>?`;
+                divCat.onclick = () => {
+                    document.getElementById('busqCatalogo').value = queryActiva;
+                    buscarCatalogo();
+                    divCat.classList.add('hidden');
+                };
+                divCat.classList.remove('hidden');
+            }
+        }
+    }
+}
+
+// Inicia el flujo de vinculación asistida en 3 clics
+function iniciarVinculacionDeCodigo(codigo) {
+    if (!codigo) return;
+    CODIGO_PENDIENTE_VINCULAR = codigo;
+    
+    // Configurar banner de vinculación pendiente en el árbol
+    const banner = document.getElementById('bannerVinculacionPendiente');
+    const label = document.getElementById('codigoVincularLabel');
+    if (banner && label) {
+        label.innerText = codigo;
+        banner.classList.remove('hidden');
+    }
+    
+    // Ocultar el tooltip para no molestar la vista
+    const tooltip = document.getElementById('repuestoTooltip');
+    if (tooltip) tooltip.classList.add('hidden');
+    
+    // Cambiar a la vista del árbol
+    setVista('repuestosMaquina');
+    
+    // Forzar redibujo para incluir el botón Directo
+    if (nodoSeleccionadoActual) {
+        actualizarPanelEditorNodo();
+    }
+}
+
+function cancelarVinculacionPendiente() {
+    CODIGO_PENDIENTE_VINCULAR = null;
+    const banner = document.getElementById('bannerVinculacionPendiente');
+    if (banner) banner.classList.add('hidden');
+    if (nodoSeleccionadoActual) {
+        actualizarPanelEditorNodo();
+    }
+}
+
+// Vincula el código pendiente directamente al nodo actual seleccionado
+async function vincularCodigoPendienteActual() {
+    if (!CODIGO_PENDIENTE_VINCULAR || !nodoSeleccionadoActual) return;
+    
+    const codigo = CODIGO_PENDIENTE_VINCULAR;
+    await vincularCodigoRapido(codigo);
+    
+    cancelarVinculacionPendiente();
+    alert(`✅ El repuesto ${codigo} ha sido vinculado con éxito a "${nodoSeleccionadoActual.label}".`);
+}
+
+// Busca coincidencias de un código en el árbol y retorna una estructura podada (solo rutas de coincidencia)
+function buscarCoincidenciasYPrunar(nodo, codigo) {
+    const targetSimp = simplifyKey(codigo);
+    const isLinked = nodo.linkedCodes && nodo.linkedCodes.some(c => simplifyKey(c) === targetSimp);
+    let childrenCoinciden = [];
+    
+    if (nodo.children && nodo.children.length > 0) {
+        nodo.children.forEach(child => {
+            const prunedChild = buscarCoincidenciasYPrunar(child, codigo);
+            if (prunedChild) {
+                childrenCoinciden.push(prunedChild);
+            }
+        });
+    }
+    
+    if (isLinked || childrenCoinciden.length > 0) {
+        return {
+            id: nodo.id,
+            label: nodo.label,
+            type: nodo.type,
+            isMatch: isLinked,
+            children: childrenCoinciden
+        };
+    }
+    return null;
+}
+
+// Dibuja en HTML recursivo un nodo podado para el tooltip
+function dibujarPrunedNodoHtml(nodo, nivel = 0) {
+    const paddingLeft = nivel * 12;
+    const hasChildren = nodo.children && nodo.children.length > 0;
+    
+    let icon = "⚙️";
+    if (nodo.type === "root") icon = "🏭";
+    else if (nodo.type === "linea") icon = "⚡";
+    else if (nodo.type === "maquina") icon = "📦";
+    else if (nodo.type === "equipo") icon = "🛠️";
+    else if (nodo.type === "sistema") icon = "🔧";
+    else if (nodo.type === "aplicacion") icon = "🏷️";
+    else if (nodo.type === "repuesto") icon = "🧩";
+    
+    const isMatchStyle = nodo.isMatch 
+        ? "bg-blue-50 text-blue-800 border-blue-200 font-bold px-1 rounded shadow-sm border" 
+        : "text-gray-600";
+        
+    let html = `
+        <div class="my-0.5" style="text-align: left;">
+            <span 
+                onclick="irANodoEnArbol('${nodo.id}')" 
+                class="hover:bg-blue-100 p-0.5 rounded cursor-pointer transition inline-flex items-center gap-1 max-w-full text-[10px] ${isMatchStyle}" 
+                style="margin-left: ${paddingLeft}px;" 
+                title="Haga clic para ir a este nodo en el árbol de máquinas"
+            >
+                <span>${icon}</span>
+                <span class="truncate max-w-[180px]">${nodo.label}</span>
+                ${nodo.isMatch ? ' <span class="text-[8px] bg-blue-100 text-blue-700 font-extrabold px-1 rounded border border-blue-200">VINCULADO</span>' : ''}
+            </span>
+        </div>
+    `;
+    
+    if (hasChildren) {
+        nodo.children.forEach(child => {
+            html += dibujarPrunedNodoHtml(child, nivel + 1);
+        });
+    }
+    return html;
+}
+
+// Navega a un nodo en el árbol desde el tooltip
+function irANodoEnArbol(id) {
+    if (!arbolMaquinas) return;
+    
+    // 1. Ocultar tooltip
+    const tooltip = document.getElementById('repuestoTooltip');
+    if (tooltip) tooltip.classList.add('hidden');
+    
+    // 2. Cambiar vista a la pestaña del árbol
+    setVista('repuestosMaquina');
+    
+    // 3. Expandir recursivamente todos los ancestros del nodo para hacerlo visible
+    expandirAncestrosDeNodo(arbolMaquinas, id);
+    
+    // 4. Seleccionar el nodo en el árbol
+    seleccionarNodoArbol(id);
+    
+    // 5. Scroll suave y animación de parpadeo (pulse)
+    setTimeout(() => {
+        const el = document.querySelector(`.bg-blue-100.border-blue-300`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('animate-pulse');
+            setTimeout(() => el.classList.remove('animate-pulse'), 2000);
+        }
+    }, 300);
+}
+
+// Expande recursivamente todos los ancestros de un nodo
+function expandirAncestrosDeNodo(parent, targetId) {
+    if (parent.id === targetId) return true;
+    if (parent.children && parent.children.length > 0) {
+        for (const child of parent.children) {
+            const found = expandirAncestrosDeNodo(child, targetId);
+            if (found) {
+                parent.expanded = true;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Motor de control para el hover del tooltip interactivo
+let tooltipHideTimeout = null;
+
+function inicializarTooltipRepuestos() {
+    const tooltip = document.getElementById('repuestoTooltip');
+    if (!tooltip) return;
+    
+    tooltip.addEventListener('mouseenter', () => {
+        if (tooltipHideTimeout) {
+            clearTimeout(tooltipHideTimeout);
+            tooltipHideTimeout = null;
+        }
+    });
+    
+    tooltip.addEventListener('mouseleave', () => {
+        ocultarTooltipConRetraso();
+    });
+    
+    document.addEventListener('mouseover', (e) => {
+        const target = e.target;
+        const row = target.closest('[data-repuesto-codigo]');
+        
+        if (row) {
+            const codigo = row.getAttribute('data-repuesto-codigo');
+            if (codigo) {
+                if (tooltipHideTimeout) {
+                    clearTimeout(tooltipHideTimeout);
+                    tooltipHideTimeout = null;
+                }
+                mostrarTooltipRepuesto(codigo, row, e);
+            }
+        } else {
+            if (!target.closest('#repuestoTooltip')) {
+                ocultarTooltipConRetraso();
+            }
+        }
+    });
+}
+
+function ocultarTooltipConRetraso() {
+    if (tooltipHideTimeout) return;
+    tooltipHideTimeout = setTimeout(() => {
+        const tooltip = document.getElementById('repuestoTooltip');
+        if (tooltip) {
+            tooltip.classList.add('hidden');
+        }
+        tooltipHideTimeout = null;
+    }, 300);
+}
+
+async function mostrarTooltipRepuesto(codigo, targetElement, mouseEvent) {
+    const tooltip = document.getElementById('repuestoTooltip');
+    if (!tooltip) return;
+    
+    let prunedTreeHtml = "";
+    if (arbolMaquinas) {
+        const pruned = buscarCoincidenciasYPrunar(arbolMaquinas, codigo);
+        if (pruned) {
+            prunedTreeHtml = dibujarPrunedNodoHtml(pruned, 0);
+        }
+    }
+    
+    tooltip.innerHTML = `
+        <div class="font-sans" style="text-align: left;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px; gap: 8px;">
+                <span style="font-weight:bold; color:#1e3a8a; font-size:11px;">Uso en Máquinas</span>
+                <span style="font-family:monospace; font-weight:bold; font-size:10px; color:#475569; background:#f1f5f9; padding:2px 6px; border:1px solid #cbd5e1; border-radius:4px;">${codigo}</span>
+            </div>
+            
+            <div class="custom-scrollbar" style="max-height: 180px; overflow-y:auto; margin-bottom: 8px; padding-right: 4px;">
+                ${prunedTreeHtml || `<p style="color:#94a3b8; text-align:center; padding:12px 0; font-size:10px; margin:0;">Sin vinculación en el árbol de máquinas.</p>`}
+            </div>
+            
+            <div style="border-top: 1px solid #e2e8f0; padding-top: 6px; display:flex;">
+                <button 
+                    onclick="iniciarVinculacionDeCodigo('${codigo}')" 
+                    style="width: 100%; border: none; outline:none; background:#f97316; color:#ffffff; font-weight:bold; border-radius:6px; font-size:9px; padding:5px; cursor:pointer; text-align:center; display:flex; items-center; justify-content:center; gap:4px; transition: background 0.2s;"
+                    onmouseover="this.style.background='#ea580c'"
+                    onmouseout="this.style.background='#f97316'"
+                >
+                    🔌 ${prunedTreeHtml ? 'Vincular a otra Máquina' : 'Vincular a una Máquina'}
+                </button>
+            </div>
+        </div>
+    `;
+    
+    tooltip.classList.remove('hidden');
+    
+    const tooltipWidth = tooltip.offsetWidth || 280;
+    const tooltipHeight = tooltip.offsetHeight || 150;
+    
+    let x = mouseEvent.pageX + 15;
+    let y = mouseEvent.pageY + 10;
+    
+    const maxX = window.scrollX + window.innerWidth - tooltipWidth - 20;
+    const maxY = window.scrollY + window.innerHeight - tooltipHeight - 20;
+    
+    if (x > maxX) x = mouseEvent.pageX - tooltipWidth - 15;
+    if (y > maxY) y = mouseEvent.pageY - tooltipHeight - 15;
+    if (x < 10) x = 10;
+    if (y < 10) y = 10;
+    
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+}
+
+// Genera un reporte PDF recursivo de la jerarquía completa del árbol de máquinas y repuestos
+function generarPdfArbolMaquinas() {
+    if (!arbolMaquinas) return alert("No hay datos del árbol para imprimir.");
+
+    let printDiv = document.createElement('div');
+    printDiv.id = 'cartPrintArea';
+    
+    let treeHtml = "";
+    
+    function renderNodoImpresion(nodo, nivel = 0) {
+        const paddingLeft = nivel * 20;
+        
+        let icon = "⚙️";
+        if (nodo.type === "root") icon = "🏭";
+        else if (nodo.type === "linea") icon = "⚡";
+        else if (nodo.type === "maquina") icon = "📦";
+        else if (nodo.type === "equipo") icon = "🛠️";
+        else if (nodo.type === "sistema") icon = "🔧";
+        else if (nodo.type === "aplicacion") icon = "🏷️";
+        else if (nodo.type === "repuesto") icon = "🧩";
+        
+        const linkedCodes = nodo.linkedCodes || [];
+        const resEstado = calcularEstadoNodo(nodo);
+        
+        let diagnosticoText = "";
+        if (nodo.type === "aplicacion" || nodo.type === "repuesto" || nodo.type === "sistema") {
+            if (linkedCodes.length === 0) {
+                diagnosticoText = `<span style="color:#b45309; background:#fffbeb; padding:2px 6px; border:1px solid #fef3c7; border-radius:4px; font-size:8px; font-weight:bold;">⚠️ Sin vincular</span>`;
+            } else if (resEstado.falta > 0) {
+                diagnosticoText = `<span style="color:#b91c1c; background:#fef2f2; padding:2px 6px; border:1px solid #fee2e2; border-radius:4px; font-size:8px; font-weight:extrabold;">🔴 Falta: ${resEstado.falta}</span>`;
+            } else {
+                diagnosticoText = `<span style="color:#047857; background:#ecfdf5; padding:2px 6px; border:1px solid #d1fae5; border-radius:4px; font-size:8px; font-weight:bold;">✅ OK</span>`;
+            }
+        } else {
+            let badges = [];
+            if (resEstado.falta > 0) badges.push(`<span style="color:#b91c1c; font-weight:bold; font-size:8px;">🔴 Falta: ${resEstado.falta}</span>`);
+            if (resEstado.sinVincular > 0) badges.push(`<span style="color:#b45309; font-size:8px;">⚠️ Sin vincular: ${resEstado.sinVincular}</span>`);
+            if (resEstado.falta === 0 && resEstado.sinVincular === 0) badges.push(`<span style="color:#047857; font-weight:bold; font-size:8px;">✅ OK</span>`);
+            diagnosticoText = badges.join("  ");
+        }
+        
+        let html = `
+            <div style="margin-left: ${paddingLeft}px; margin-top: 6px; margin-bottom: 6px; border-left: 1px dotted #cbd5e1; padding-left: 10px;">
+                <div style="font-size: 11px; display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:12px;">${icon}</span>
+                    <span style="font-weight: ${nivel <= 2 ? 'bold' : 'normal'}; color: ${nivel === 0 ? '#1e3a8a' : nivel === 1 ? '#0369a1' : '#334155'}; font-size: 11px;"><b>${nodo.label}</b></span>
+                    <span style="margin-left: 8px; display:inline-flex; align-items:center;">${diagnosticoText}</span>
+                </div>
+        `;
+        
+        if (linkedCodes.length > 0) {
+            const relacionados = TODOS_LOS_DATOS.filter(f => {
+                const exact = f.inv.codigo.toUpperCase().trim();
+                const simp = simplifyKey(f.inv.codigo);
+                return linkedCodes.some(c => exact === c.toUpperCase().trim() || simp === simplifyKey(c));
+            });
+            
+            if (relacionados.length > 0) {
+                html += `
+                <table style="width: 100%; max-width: 650px; border-collapse: collapse; font-size: 9px; margin-top: 4px; margin-bottom: 8px; margin-left: 18px; border: 1px solid #cbd5e1; background: #fafafa;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; text-align: left;">
+                            <th style="border: 1px solid #cbd5e1; padding: 3px 6px; font-weight:bold;">Código</th>
+                            <th style="border: 1px solid #cbd5e1; padding: 3px 6px; font-weight:bold;">PN</th>
+                            <th style="border: 1px solid #cbd5e1; padding: 3px 6px; font-weight:bold;">Nombre Útil / Descripción</th>
+                            <th style="border: 1px solid #cbd5e1; padding: 3px 6px; text-align:center; font-weight:bold;">Ubicación</th>
+                            <th style="border: 1px solid #cbd5e1; padding: 3px 6px; text-align:center; font-weight:bold;">Stock / Req</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${relacionados.map(f => {
+                            const cantReq = nodo.cantReq || 1;
+                            const stock = f.inv.cantidad || 0;
+                            const stockColor = stock < cantReq ? '#ef4444' : stock === cantReq ? '#d97706' : '#10b981';
+                            return `
+                            <tr>
+                                <td style="border: 1px solid #cbd5e1; padding: 3px 6px; font-family: monospace; font-weight:bold; color:#1e3a8a;">${f.inv.codigo}</td>
+                                <td style="border: 1px solid #cbd5e1; padding: 3px 6px; color:#475569;">${f.inv.noParte || '-'}</td>
+                                <td style="border: 1px solid #cbd5e1; padding: 3px 6px;"><b>${f.inv.nombreUtil || ''}</b> ${f.inv.nombreUtil ? `<span style="font-size:8px;color:#64748b;">(${f.inv.descripcion})</span>` : f.inv.descripcion}</td>
+                                <td style="border: 1px solid #cbd5e1; padding: 3px 6px; text-align:center; color:#475569;">${f.inv.ubicacion || '-'}</td>
+                                <td style="border: 1px solid #cbd5e1; padding: 3px 6px; text-align:center; font-weight:bold; color:${stockColor};">
+                                    ${stock} / ${cantReq} ${stock < cantReq ? '⚠️ Faltante' : '✓ OK'}
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+            }
+        }
+        
+        if (nodo.children && nodo.children.length > 0) {
+            nodo.children.forEach(child => {
+                html += renderNodoImpresion(child, nivel + 1);
+            });
+        }
+        
+        html += `</div>`;
+        return html;
+    }
+    
+    treeHtml = renderNodoImpresion(arbolMaquinas, 0);
+
+    printDiv.innerHTML = `
+        <div style="font-family: Arial, sans-serif; color: #000; padding: 10px;">
+            <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 16px; display:flex; justify-content:space-between; align-items:flex-end;">
+                <div>
+                    <h1 style="color: #1e3a8a; font-size: 18px; margin:0; text-transform:uppercase;">Estructura de Planta y Equipos</h1>
+                    <h2 style="font-size: 11px; margin: 4px 0 0 0; color:#555;">REPORTE COMPLETO DE MÁQUINAS Y REPUESTOS VINCULADOS</h2>
+                </div>
+                <div style="font-size:9px; text-align:right; color:#777;">
+                    <b>Fecha Reporte:</b> ${new Date().toLocaleString('es-GT')}<br>
+                    <b>Documento de Referencia Técnica</b>
+                </div>
+            </div>
+            
+            <div style="margin-top: 10px;">
+                ${treeHtml}
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(printDiv);
+    document.body.classList.add('printing-cart');
+    window.print();
+    document.body.classList.remove('printing-cart');
+    document.body.removeChild(printDiv);
+}
