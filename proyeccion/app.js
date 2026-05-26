@@ -3507,7 +3507,7 @@ function dibujarNodoRecursivo(nodo, nivel) {
             <div onclick="seleccionarNodoArbol('${nodo.id}')" class="flex items-center gap-1.5 py-1 pr-2 border rounded cursor-pointer transition duration-150 ${isSelectedClass} text-xs my-0.5" style="margin-left: ${paddingLeft}px;">
                 ${arrowHtml}
                 <span class="text-sm shrink-0 leading-none select-none">${icon}</span>
-                <span class="truncate block max-w-[280px] md:max-w-[400px]">${nodo.label}</span>
+                <span class="truncate block max-w-[320px] md:max-w-[550px] lg:max-w-[650px]">${nodo.label}</span>
                 ${linkedCountBadge}
             </div>
     `;
